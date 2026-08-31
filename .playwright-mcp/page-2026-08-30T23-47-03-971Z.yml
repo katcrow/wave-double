@@ -1,0 +1,679 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e3]:
+    - button [ref=f2e7]
+    - toolbar [ref=f2e17]:
+      - generic [ref=f2e21]:
+        - generic [ref=f2e22]:
+          - generic [ref=f2e23]:
+            - button "373220" [ref=f2e24]
+            - button "데이터 타입 전환" [ref=f2e26]
+          - button "심볼 비교" [ref=f2e30]
+        - button "1 날" [ref=f2e39]:
+          - generic [ref=f2e40]: 날
+        - button "캔들" [ref=f2e46]
+        - generic [ref=f2e56]:
+          - button "인디케이터, 메트릭 및 스트래티지" [ref=f2e58]:
+            - generic [ref=f2e63]: 지표
+          - button "지표 템플릿" [ref=f2e65]
+        - generic [ref=f2e72]:
+          - button "얼러트 만들기" [ref=f2e73]:
+            - generic [ref=f2e78]: 얼러트
+          - button "바 리플레이" [ref=f2e79]:
+            - generic [ref=f2e83]: 리플레이
+        - generic [ref=f2e87]:
+          - button [disabled] [ref=f2e88]
+          - button [disabled] [ref=f2e92]
+        - generic [ref=f2e97]:
+          - button "레이아웃 셋업" [ref=f2e98]
+          - generic [ref=f2e101]:
+            - button "귀하의 레이아웃에 있는 모든 심볼 차트 및 인터벌 저장" [ref=f2e102]:
+              - generic [ref=f2e104]:
+                - generic [ref=f2e105]: 저장
+                - generic: 저장
+            - button "레이아웃 관리" [ref=f2e107]
+        - generic [ref=f2e115]:
+          - button "퀵 서치" [ref=f2e116]
+          - button "설정" [ref=f2e121]
+          - button "전체화면모드" [ref=f2e127]
+          - button "스냅샷 찍기" [ref=f2e131]
+      - button "거래" [ref=f2e140]
+      - button "귀하의 아이디어를 트레이드 커뮤니티와 셰어하기" [ref=f2e148]:
+        - generic [ref=f2e149]: 퍼블리쉬
+    - toolbar [ref=f2e152]:
+      - generic [ref=f2e156]:
+        - generic [ref=f2e157]:
+          - generic [ref=f2e160]:
+            - button "크로스" [ref=f2e162]
+            - button "커서" [pressed] [ref=f2e168]
+          - generic [ref=f2e174]:
+            - button "추세선" [ref=f2e176]
+            - button "추세 도구" [ref=f2e182]
+          - generic [ref=f2e188]:
+            - button "피보나치 되돌림" [ref=f2e190]
+            - button "갠 및 피보나치 도구" [ref=f2e199]
+          - generic [ref=f2e205]:
+            - button "XABCD 패턴" [ref=f2e207]
+            - button "패턴" [ref=f2e213]
+          - generic [ref=f2e219]:
+            - button "매수 포지션" [ref=f2e221]
+            - button "예측 및 측정 도구" [ref=f2e225]
+          - generic [ref=f2e231]:
+            - button "브러시" [ref=f2e233]
+            - button "기하학적 도형" [ref=f2e239]
+          - generic [ref=f2e245]:
+            - button "텍스트" [ref=f2e247]
+            - button "주석 도구" [ref=f2e251]
+          - generic [ref=f2e256]:
+            - button "아이콘" [ref=f2e258]
+            - button "아이콘" [ref=f2e262]
+        - generic [ref=f2e266]:
+          - button "재기" [ref=f2e267]
+          - button "확대" [ref=f2e271]
+        - generic [ref=f2e278]:
+          - generic [ref=f2e281]:
+            - button "자석 모드는 가격 봉 근처에 배치된 드로잉을 가장 가까운 OHLC 값에 맞춰 스냅합니다." [ref=f2e283]
+            - button "마그넷" [ref=f2e289]
+          - button "계속 그리기" [ref=f2e293]
+          - generic [ref=f2e298]:
+            - button "Lock drawings and indicators" [ref=f2e300]
+            - button "잠금 옵션" [ref=f2e304]
+          - generic [ref=f2e309]:
+            - button "드로잉 툴 모두 숨기기" [ref=f2e311]
+            - button "감추기 옵션" [ref=f2e315]
+        - generic [ref=f2e321]:
+          - button "오브젝트 없애기" [ref=f2e323]
+          - button "옵션 없애기" [ref=f2e327]
+    - generic [ref=f2e333]:
+      - 'region "차트 #1" [ref=f2e336]':
+        - generic [ref=f2e340]:
+          - generic:
+            - generic:
+              - toolbar:
+                - generic:
+                  - generic [ref=f2e341]:
+                    - generic "종목바꾸기" [ref=f2e342]:
+                      - generic [ref=f2e343]: "3"
+                      - button "종목바꾸기" [ref=f2e347]: LG에너지솔루션보통주
+                    - generic "인터벌 바꾸기" [ref=f2e348]:
+                      - text: ·
+                      - button "인터벌 바꾸기" [ref=f2e349]: 1날
+                    - generic "KRX — 한국 증권 거래소" [ref=f2e350]:
+                      - text: ·
+                      - generic [ref=f2e351]: KRX
+                  - generic:
+                    - generic:
+                      - button "심볼에 깃발 표시"
+                      - button "더보기"
+                  - button "장 마감 · 지연 데이터입니다" [ref=f2e353]
+                - generic [ref=f2e361]:
+                  - generic [ref=f2e362]:
+                    - generic [ref=f2e363]: 시
+                    - generic [ref=f2e364]: 364,000
+                  - generic [ref=f2e365]:
+                    - generic [ref=f2e366]: 고
+                    - generic [ref=f2e367]: 373,500
+                  - generic [ref=f2e368]:
+                    - generic [ref=f2e369]: 저
+                    - generic [ref=f2e370]: 360,500
+                  - generic [ref=f2e371]:
+                    - generic [ref=f2e372]: 종
+                    - generic [ref=f2e373]: 370,000
+                  - generic [ref=f2e374]: −500 (−0.13%)
+              - generic [ref=f2e378]:
+                - generic [ref=f2e380]:
+                  - generic: 369,500
+                  - generic: 셀
+                - generic "스프레드" [ref=f2e382]: "500"
+                - generic [ref=f2e384]:
+                  - generic: 370,000
+                  - generic: 바이
+            - generic:
+              - button "인디케이터 범례 숨기기" [ref=f2e385]
+              - generic:
+                - toolbar:
+                  - generic:
+                    - generic "거래량 (Volume)" [ref=f2e390]: 볼륨
+                    - generic:
+                      - generic:
+                        - button "감추기"
+                        - button "설정"
+                        - button "없애기"
+                        - button "더보기"
+                  - generic "Volume" [ref=f2e395]: 242.98 K
+          - generic "KRX_DLY:373220, 1 날 에 대한 차트" [ref=f2e397]
+      - toolbar [ref=f2e411]:
+        - generic [ref=f2e413]:
+          - generic [ref=f2e414]:
+            - button "1 분 인터벌 의 1 일₩" [ref=f2e415]:
+              - generic [ref=f2e416]: 1D
+            - button "5 분 인터벌 의 5 일₩" [ref=f2e417]:
+              - generic [ref=f2e418]: 5D
+            - button "30 분 인터벌 의 1달₩" [ref=f2e419]:
+              - generic [ref=f2e420]: 1M
+            - button "1 시간 인터벌 의 3달₩" [ref=f2e421]:
+              - generic [ref=f2e422]: 3M
+            - button "2 시간 인터벌 의 6달₩" [ref=f2e423]:
+              - generic [ref=f2e424]: 6M
+            - button "1 날 인터벌 의 연도별₩" [ref=f2e425]:
+              - generic [ref=f2e426]: YTD
+            - button "1 날 인터벌 의 1 년₩" [ref=f2e427]:
+              - generic [ref=f2e428]: 1Y
+            - button "1 주 인터벌 의 모든 데이터₩" [ref=f2e429]:
+              - generic [ref=f2e430]: 전체
+          - button "가기" [ref=f2e432]
+        - generic [ref=f2e436]:
+          - button "타임존" [ref=f2e439]:
+            - generic [ref=f2e440]: 08:47:04 UTC+9
+          - button "배당에 따른 데이터 조정" [ref=f2e444]:
+            - generic [ref=f2e445]: ADJ
+    - generic [ref=f2e447]:
+      - toolbar [ref=f2e452]:
+        - button "왓치리스트, 상세 정보 및 뉴스" [pressed] [ref=f2e453]
+        - button "얼러트" [ref=f2e458]
+        - button "오브젝트 트리 및 데이터 윈도우" [ref=f2e463]
+        - button "스크리너" [ref=f2e468]
+        - button "Pine" [ref=f2e474]
+        - button "캘린더" [ref=f2e479]
+        - button "커뮤니티" [ref=f2e483]
+        - button "알림" [ref=f2e490]
+        - button "프로덕트" [ref=f2e494]
+        - button "헬프 센터" [ref=f2e499]
+      - generic [ref=f2e505]:
+        - generic [ref=f2e506]:
+          - generic [ref=f2e509]:
+            - button "왓치리스트" [ref=f2e511]
+            - generic [ref=f2e521]:
+              - button "심볼 넣기" [ref=f2e522]
+              - button "어드밴스트 뷰" [ref=f2e526]
+              - button "설정" [ref=f2e530]
+          - generic [ref=f2e537]:
+            - generic [ref=f2e539]:
+              - button [ref=f2e541]
+              - button "심볼" [ref=f2e546]
+              - button "현재가" [ref=f2e548]
+              - button "체인지" [ref=f2e550]
+              - button "변동%" [ref=f2e552]
+            - generic [ref=f2e557]:
+              - generic [ref=f2e562]:
+                - generic [ref=f2e564]:
+                  - generic [ref=f2e565]: K
+                  - generic [ref=f2e571]:
+                    - generic [ref=f2e572]: KOSPI
+                    - generic "장 마감" [ref=f2e573]
+                - generic [ref=f2e575]: 6,788.88
+                - generic [ref=f2e577]: −123.49
+                - generic [ref=f2e579]: −1.79%
+              - generic [ref=f2e583]:
+                - generic [ref=f2e585]:
+                  - generic [ref=f2e586]: K
+                  - generic [ref=f2e592]:
+                    - generic [ref=f2e593]: KOSPI200
+                    - generic "장 마감" [ref=f2e594]
+                - generic [ref=f2e596]: 1,065.70
+                - generic [ref=f2e598]: −22.91
+                - generic [ref=f2e600]: −2.10%
+              - generic [ref=f2e604]:
+                - generic [ref=f2e606]:
+                  - generic [ref=f2e607]: K
+                  - generic [ref=f2e613]:
+                    - generic [ref=f2e614]: KOSDAQ
+                    - generic "장 마감" [ref=f2e615]
+                - generic [ref=f2e617]: "838.41"
+                - generic [ref=f2e619]: "0.76"
+                - generic [ref=f2e621]: 0.09%
+              - generic [ref=f2e625]:
+                - generic [ref=f2e627]:
+                  - generic [ref=f2e628]: S
+                  - generic [ref=f2e634]:
+                    - generic [ref=f2e635]: SPX
+                    - generic "장 마감" [ref=f2e636]
+                - generic [ref=f2e638]: 7,711.75
+                - generic [ref=f2e640]: −19.23
+                - generic [ref=f2e642]: −0.25%
+              - generic [ref=f2e646]:
+                - generic [ref=f2e648]:
+                  - generic [ref=f2e649]: "N"
+                  - generic [ref=f2e655]:
+                    - generic [ref=f2e656]: NDQ
+                    - generic "장 마감" [ref=f2e657]
+                - generic [ref=f2e659]: 29,433.43
+                - generic [ref=f2e661]: −208.13
+                - generic [ref=f2e663]: −0.70%
+              - generic [ref=f2e667]:
+                - generic [ref=f2e669]:
+                  - generic [ref=f2e670]: "N"
+                  - generic [ref=f2e676]:
+                    - generic [ref=f2e677]: NI225
+                    - generic "장 마감" [ref=f2e678]
+                - generic [ref=f2e680]: 66,405.34
+                - generic [ref=f2e682]: "273.58"
+                - generic [ref=f2e684]: 0.41%
+              - generic [ref=f2e686]: 가상화페
+              - generic [ref=f2e696]:
+                - generic [ref=f2e698]:
+                  - generic [ref=f2e699]: B
+                  - generic [ref=f2e704]: BTCUSD.P
+                - generic [ref=f2e707]: 77,300.0
+                - generic [ref=f2e709]: −896.0
+                - generic [ref=f2e711]: −1.15%
+              - generic [ref=f2e715]:
+                - generic [ref=f2e717]:
+                  - generic [ref=f2e718]: B
+                  - generic [ref=f2e723]: BTCKRW
+                - generic [ref=f2e726]: 107,648,000
+                - generic [ref=f2e728]: −1,142,000
+                - generic [ref=f2e730]: −1.05%
+              - generic [ref=f2e734]:
+                - generic [ref=f2e736]:
+                  - generic [ref=f2e737]: B
+                  - generic [ref=f2e742]: BTCUSDT
+                - generic [ref=f2e745]: 77,289.40
+                - generic [ref=f2e747]: −940.60
+                - generic [ref=f2e749]: −1.20%
+              - generic [ref=f2e751]: 외환
+              - generic [ref=f2e761]:
+                - generic [ref=f2e763]:
+                  - generic [ref=f2e764]: U
+                  - generic [ref=f2e774]: USDKRW
+                - generic [ref=f2e777]: 1,378.09
+                - generic [ref=f2e779]: "2.42"
+                - generic [ref=f2e781]: 0.18%
+              - generic [ref=f2e785]:
+                - generic [ref=f2e787]:
+                  - generic [ref=f2e788]: E
+                  - generic [ref=f2e798]: EURUSD
+                - generic [ref=f2e802]:
+                  - text: "1.1587"
+                  - superscript [ref=f2e803]: "0"
+                - generic [ref=f2e804]: "0.00089"
+                - generic [ref=f2e806]: 0.08%
+              - generic [ref=f2e810]:
+                - generic [ref=f2e812]:
+                  - generic [ref=f2e813]: U
+                  - generic [ref=f2e823]: USDJPY
+                - generic [ref=f2e827]:
+                  - text: "160.15"
+                  - superscript [ref=f2e828]: "0"
+                - generic [ref=f2e829]: "0.071"
+                - generic [ref=f2e831]: 0.04%
+              - generic [ref=f2e833]: 국내주식
+              - generic [ref=f2e843]:
+                - generic [ref=f2e845]:
+                  - generic [ref=f2e846]: "0"
+                  - generic [ref=f2e852]:
+                    - generic [ref=f2e853]: "005930"
+                    - generic "20 분 지연 호가" [ref=f2e854]: 지
+                    - generic "장 마감" [ref=f2e855]
+                - generic [ref=f2e857]: 257,000
+                - generic [ref=f2e859]: −9,000
+                - generic [ref=f2e861]: −3.38%
+              - generic [ref=f2e865]:
+                - generic [ref=f2e867]:
+                  - generic [ref=f2e868]: "0"
+                  - generic [ref=f2e874]:
+                    - generic [ref=f2e875]: "035420"
+                    - generic "20 분 지연 호가" [ref=f2e876]: 지
+                    - generic "장 마감" [ref=f2e877]
+                - generic [ref=f2e879]: 220,500
+                - generic [ref=f2e881]: 4,000
+                - generic [ref=f2e883]: 1.85%
+              - generic [ref=f2e887]:
+                - generic [ref=f2e889]:
+                  - generic [ref=f2e890]: "0"
+                  - generic [ref=f2e896]:
+                    - generic [ref=f2e897]: "005380"
+                    - generic "20 분 지연 호가" [ref=f2e898]: 지
+                    - generic "장 마감" [ref=f2e899]
+                - generic [ref=f2e901]: 399,500
+                - generic [ref=f2e903]: 1,500
+                - generic [ref=f2e905]: 0.38%
+              - generic [ref=f2e909]:
+                - generic [ref=f2e911]:
+                  - generic [ref=f2e912]: "0"
+                  - generic [ref=f2e918]:
+                    - generic [ref=f2e919]: "068270"
+                    - generic "20 분 지연 호가" [ref=f2e920]: 지
+                    - generic "장 마감" [ref=f2e921]
+                - generic [ref=f2e923]: 190,700
+                - generic [ref=f2e925]: −600
+                - generic [ref=f2e927]: −0.31%
+              - generic [ref=f2e931]:
+                - generic [ref=f2e933]:
+                  - generic [ref=f2e934]: "0"
+                  - generic [ref=f2e940]:
+                    - generic [ref=f2e941]: "035720"
+                    - generic "20 분 지연 호가" [ref=f2e942]: 지
+                    - generic "장 마감" [ref=f2e943]
+                - generic [ref=f2e945]: 36,850
+                - generic [ref=f2e947]: "850"
+                - generic [ref=f2e949]: 2.36%
+              - generic [ref=f2e951]: 해외선물
+              - generic [ref=f2e961]:
+                - generic [ref=f2e963]:
+                  - generic [ref=f2e964]: "Y"
+                  - generic [ref=f2e970]:
+                    - generic [ref=f2e971]: YM1!
+                    - generic "10 분 지연 호가" [ref=f2e972]: 지
+                - generic [ref=f2e973]: 53,475
+                - generic [ref=f2e975]: −109
+                - generic [ref=f2e977]: −0.20%
+              - generic [ref=f2e981]:
+                - generic [ref=f2e983]:
+                  - generic [ref=f2e984]: "N"
+                  - generic [ref=f2e990]:
+                    - generic [ref=f2e991]: NQ1!
+                    - generic "10 분 지연 호가" [ref=f2e992]: 지
+                - generic [ref=f2e993]: 29,371.00
+                - generic [ref=f2e995]: −120.75
+                - generic [ref=f2e997]: −0.41%
+              - generic [ref=f2e1001]:
+                - generic [ref=f2e1003]:
+                  - generic [ref=f2e1004]: E
+                  - generic [ref=f2e1010]:
+                    - generic [ref=f2e1011]: ES1!
+                    - generic "10 분 지연 호가" [ref=f2e1012]: 지
+                - generic [ref=f2e1013]: 7,699.75
+                - generic [ref=f2e1015]: −22.25
+                - generic [ref=f2e1017]: −0.29%
+              - generic [ref=f2e1021]:
+                - generic [ref=f2e1023]:
+                  - generic [ref=f2e1024]: C
+                  - generic [ref=f2e1030]:
+                    - generic [ref=f2e1031]: CL1!
+                    - generic "10 분 지연 호가" [ref=f2e1032]: 지
+                - generic [ref=f2e1033]: "84.81"
+                - generic [ref=f2e1035]: "1.41"
+                - generic [ref=f2e1037]: 1.69%
+              - generic [ref=f2e1041]:
+                - generic [ref=f2e1043]:
+                  - generic [ref=f2e1044]: V
+                  - generic [ref=f2e1050]:
+                    - generic [ref=f2e1051]: VX1!
+                    - generic "15 분 지연 호가" [ref=f2e1052]: 지
+                - generic [ref=f2e1053]: "17.230"
+                - generic [ref=f2e1055]: "0.295"
+                - generic [ref=f2e1057]: 1.74%
+        - generic [ref=f2e1061]:
+          - generic [ref=f2e1063]:
+            - generic [ref=f2e1064]: "3"
+            - generic [ref=f2e1069]: "373220"
+            - generic [ref=f2e1070]:
+              - button "메트릭" [ref=f2e1071]
+              - generic "노트 넣기" [ref=f2e1075]
+              - generic "설정" [ref=f2e1080]
+          - generic [ref=f2e1086]:
+            - generic [ref=f2e1087]:
+              - generic [ref=f2e1089]:
+                - link "LG에너지솔루션보통주" [ref=f2e1090] [cursor=pointer]:
+                  - /url: https://kr.tradingview.com/symbols/KRX-373220/
+                - text: KRX
+              - generic [ref=f2e1097]:
+                - link "제조업" [ref=f2e1098] [cursor=pointer]:
+                  - /url: https://kr.tradingview.com/markets/stocks-korea/sectorandindustry-sector/producer-manufacturing/
+                - link "일렉트리컬 프로덕트" [ref=f2e1101] [cursor=pointer]:
+                  - /url: https://kr.tradingview.com/markets/stocks-korea/sectorandindustry-industry/electrical-products/
+            - generic [ref=f2e1102]:
+              - generic [ref=f2e1103]:
+                - generic [ref=f2e1104]: 370,000
+                - generic [ref=f2e1105]:
+                  - generic "20 분 지연 호가" [ref=f2e1106]: 지
+                  - generic [ref=f2e1107]: KRW
+              - generic [ref=f2e1108]:
+                - generic [ref=f2e1109]: −500
+                - generic [ref=f2e1110]: −0.13%
+            - generic [ref=f2e1112]:
+              - generic [ref=f2e1113]: 장 마감
+              - generic [ref=f2e1118]: 마지막 업데이트 8월 28일 18:08 GMT+9
+            - generic [ref=f2e1120]:
+              - generic [ref=f2e1121]:
+                - text: 뉴스
+                - generic "2026년 8월 31일 08:38 GMT+9" [ref=f2e1124]
+              - generic [ref=f2e1125]: 한국의 SK 온, 미국 기업 네오볼타 파워와 에너지 저장 배터리 계약 체결
+              - generic [ref=f2e1126]: 이벤트 더 보기
+            - generic [ref=f2e1131]:
+              - generic [ref=f2e1132]: 주요 통계
+              - generic [ref=f2e1134]:
+                - generic [ref=f2e1135]:
+                  - generic [ref=f2e1136]: 다음 실적 보고서
+                  - generic [ref=f2e1138]: 58일 후
+                - generic [ref=f2e1139]:
+                  - generic [ref=f2e1140]: 거래량
+                  - generic [ref=f2e1142]: ‪242.98 K‬
+                - generic [ref=f2e1143]:
+                  - generic [ref=f2e1144]: 평균 볼륨(30)
+                  - generic [ref=f2e1146]: ‪294.75 K‬
+                - generic [ref=f2e1147]:
+                  - generic [ref=f2e1148]: 시가총액
+                  - generic [ref=f2e1150]: ‪86.58 T‬
+              - button [ref=f2e1152]
+            - generic [ref=f2e1156]:
+              - generic [ref=f2e1159]:
+                - generic [ref=f2e1160]: 어닝
+                - 'generic "<div><strong>2달 에서 다음 수익 보고서로 이동</strong><br>날짜: 2026년 10월 28일,<br>끝나는 기간: 2026년 9월,<br>평가: 1,112.29</div>" [ref=f2e1161]': "58"
+              - generic [ref=f2e1163]:
+                - generic [ref=f2e1164]:
+                  - generic [ref=f2e1181]:
+                    - generic [ref=f2e1182]: Q3 '25
+                    - generic [ref=f2e1183]: Q4 '25
+                    - generic [ref=f2e1184]: Q1 '26
+                    - generic [ref=f2e1185]: Q2 '26
+                    - generic [ref=f2e1186]: Q3 '26
+                  - generic [ref=f2e1187]:
+                    - generic [ref=f2e1188]: ‪‪−4.50 K‬‬
+                    - generic [ref=f2e1189]: ‪‪−3.00 K‬‬
+                    - generic [ref=f2e1190]: ‪‪−1.50 K‬‬
+                    - generic [ref=f2e1191]: ‪0.00‬
+                    - generic [ref=f2e1192]: ‪‪1.50 K‬‬
+                - generic [ref=f2e1193]:
+                  - generic [ref=f2e1194]: 발표
+                  - generic [ref=f2e1196]: 평가
+            - button "자세한 정보" [ref=f2e1199]
+            - generic [ref=f2e1200]:
+              - generic [ref=f2e1201]: 배당
+              - generic [ref=f2e1203]: 373220는 지금까지 배당금을 지급한 적이 없으며, 현재 배당 계획도 없습니다.
+            - generic [ref=f2e1204]:
+              - generic [ref=f2e1206]:
+                - generic [ref=f2e1207]: 손익 계산서
+                - generic [ref=f2e1215]:
+                  - generic [ref=f2e1216]: 해단위
+                  - generic [ref=f2e1217]: 분기별
+              - generic [ref=f2e1218]:
+                - generic [ref=f2e1219]:
+                  - generic [ref=f2e1237]:
+                    - generic [ref=f2e1238]: "'21"
+                    - generic [ref=f2e1239]: "'22"
+                    - generic [ref=f2e1240]: "'23"
+                    - generic [ref=f2e1241]: "'24"
+                    - generic [ref=f2e1242]: "'25"
+                  - generic [ref=f2e1243]:
+                    - generic [ref=f2e1244]: ‪‪−12.00 T‬‬
+                    - generic [ref=f2e1245]: ‪0.00‬
+                    - generic [ref=f2e1246]: ‪‪12.00 T‬‬
+                    - generic [ref=f2e1247]: ‪‪24.00 T‬‬
+                    - generic [ref=f2e1248]: ‪‪36.00 T‬‬
+                - generic [ref=f2e1249]:
+                  - generic [ref=f2e1250]: 매출
+                  - generic [ref=f2e1252]: 순이익
+                  - generic [ref=f2e1254]: 순마진 %
+            - button "파이낸셜 더보기" [ref=f2e1258]
+            - generic [ref=f2e1259]:
+              - generic [ref=f2e1260]: 성과
+              - generic [ref=f2e1262]:
+                - generic [ref=f2e1263]:
+                  - generic [ref=f2e1264]: 4.08%
+                  - generic [ref=f2e1265]: 1W
+                - generic [ref=f2e1266]:
+                  - generic [ref=f2e1267]: 17.09%
+                  - generic [ref=f2e1268]: 1M
+                - generic [ref=f2e1269]:
+                  - generic [ref=f2e1270]: −16.76%
+                  - generic [ref=f2e1271]: 3M
+                - generic [ref=f2e1272]:
+                  - generic [ref=f2e1273]: −11.90%
+                  - generic [ref=f2e1274]: 6M
+                - generic [ref=f2e1275]:
+                  - generic [ref=f2e1276]: 0.41%
+                  - generic [ref=f2e1277]: YTD
+                - generic [ref=f2e1278]:
+                  - generic [ref=f2e1279]: −1.20%
+                  - generic [ref=f2e1280]: 1Y
+            - generic [ref=f2e1281]:
+              - generic [ref=f2e1282]: 시즌별
+              - table [ref=f2e1286]:
+                - row [ref=f2e1287]:
+                  - cell
+                  - cell [ref=f2e1288]
+                  - cell
+                - row [ref=f2e1292]:
+                  - cell
+                  - cell [ref=f2e1293]
+                  - cell
+            - button "더 많은 시즌" [ref=f2e1298]
+            - generic [ref=f2e1299]:
+              - generic [ref=f2e1300]: 테크니컬즈
+              - generic [ref=f2e1301]:
+                - generic [ref=f2e1302]:
+                  - generic [ref=f2e1303]: 뉴트럴
+                  - generic [ref=f2e1304]:
+                    - generic [ref=f2e1305]: 셀
+                    - generic [ref=f2e1306]: 바이
+                  - generic [ref=f2e1307]:
+                    - generic [ref=f2e1308]: 스트롱 셀
+                    - generic [ref=f2e1309]: 스트롱 바이
+                - generic [ref=f2e1321]:
+                  - generic [ref=f2e1322]: 스트롱 셀
+                  - generic [ref=f2e1323]: 셀
+                  - generic [ref=f2e1324]: 뉴트럴
+                  - generic [ref=f2e1325]: 바이
+                  - generic [ref=f2e1326]: 스트롱 바이
+            - button "테크니컬즈 더보기" [ref=f2e1329]
+            - generic [ref=f2e1330]:
+              - generic [ref=f2e1331]: 애널리스트 레이팅
+              - generic [ref=f2e1333]:
+                - generic [ref=f2e1334]:
+                  - generic [ref=f2e1335]: 뉴트럴
+                  - generic [ref=f2e1336]:
+                    - generic [ref=f2e1337]: 셀
+                    - generic [ref=f2e1338]: 바이
+                  - generic [ref=f2e1339]:
+                    - generic [ref=f2e1340]: 스트롱 셀
+                    - generic [ref=f2e1341]: 스트롱 바이
+                - generic [ref=f2e1353]:
+                  - generic [ref=f2e1354]: 스트롱 셀
+                  - generic [ref=f2e1355]: 셀
+                  - generic [ref=f2e1356]: 뉴트럴
+                  - generic [ref=f2e1357]: 바이
+                  - generic [ref=f2e1358]: 스트롱 바이
+              - generic [ref=f2e1359]:
+                - generic [ref=f2e1360]: 1 해 프라이스 타겟
+                - generic [ref=f2e1363]:
+                  - generic [ref=f2e1364]: 499,000
+                  - generic [ref=f2e1365]: (34.87%)
+            - button "예측 보기" [ref=f2e1369]
+            - generic [ref=f2e1370]:
+              - generic [ref=f2e1371]: 수익률이 가장 높은 채권
+              - generic [ref=f2e1372]:
+                - generic [ref=f2e1373]:
+                  - generic [ref=f2e1374]: 2036년 4월 2일
+                  - generic [ref=f2e1376]: 5.97%
+                - generic [ref=f2e1377]:
+                  - generic [ref=f2e1378]: 2035년 4월 2일
+                  - generic [ref=f2e1380]: 5.89%
+                - generic [ref=f2e1381]:
+                  - generic [ref=f2e1382]: 2034년 7월 2일
+                  - generic [ref=f2e1384]: 5.71%
+            - button "더 많은 채권" [ref=f2e1387]
+            - generic [ref=f2e1389]:
+              - text: 커뮤니티 게시물
+              - generic [ref=f2e1393]: 보기
+            - generic [ref=f2e1397]:
+              - generic [ref=f2e1398]: 프로화일
+              - generic [ref=f2e1399]:
+                - generic [ref=f2e1400]: 웹사이트
+                - link "lgensol.com" [ref=f2e1403] [cursor=pointer]:
+                  - /url: http://www.lgensol.com/
+              - generic [ref=f2e1408]:
+                - generic [ref=f2e1409]: 직원 (FY)
+                - generic [ref=f2e1411]: ‪12.92 K‬
+              - generic [ref=f2e1412]:
+                - generic [ref=f2e1413]: ISIN
+                - generic [ref=f2e1415]: KR7373220003
+              - generic [ref=f2e1422]:
+                - generic [ref=f2e1423]: CUSIP
+                - generic [ref=f2e1425]: —
+              - generic [ref=f2e1426]:
+                - generic [ref=f2e1427]: FIGI
+                - generic [ref=f2e1429]: BBG013YK8K98
+              - paragraph [ref=f2e1436]: LG Energy Solution Ltd. engages in providing energy solutions. It focuses on the research, development, manufacturing, and sales of battery-related products applied to electric vehicles, energy storage systems, information technology devices, power tools, and light electric vehicles. The company was founded on December 1, 2020 and is headquartered in Seoul, South Korea.
+              - button [ref=f2e1438]
+      - generic "탭 숨기기" [ref=f2e1445]
+    - generic "트레이딩 패널"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list

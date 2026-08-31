@@ -1,0 +1,353 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - button [ref=f1e7]
+    - toolbar [ref=f1e17]:
+      - generic [ref=f1e21]:
+        - generic [ref=f1e22]:
+          - generic [ref=f1e23]:
+            - button "000660" [ref=f1e24]
+            - button "데이터 타입 전환" [ref=f1e26]
+          - button "심볼 비교" [ref=f1e30]
+        - button "1 날" [ref=f1e39]:
+          - generic [ref=f1e40]: 날
+        - button "캔들" [ref=f1e46]
+        - generic [ref=f1e56]:
+          - button "인디케이터, 메트릭 및 스트래티지" [ref=f1e58]:
+            - generic [ref=f1e63]: 지표
+          - button "지표 템플릿" [ref=f1e65]
+        - generic [ref=f1e72]:
+          - button "얼러트 만들기" [ref=f1e73]:
+            - generic [ref=f1e78]: 얼러트
+          - button "바 리플레이" [ref=f1e79]:
+            - generic [ref=f1e83]: 리플레이
+        - generic [ref=f1e87]:
+          - button [disabled] [ref=f1e88]
+          - button [disabled] [ref=f1e92]
+        - generic [ref=f1e97]:
+          - button "레이아웃 셋업" [ref=f1e98]
+          - generic [ref=f1e101]:
+            - button "귀하의 레이아웃에 있는 모든 심볼 차트 및 인터벌 저장" [ref=f1e102]:
+              - generic [ref=f1e104]:
+                - generic [ref=f1e105]: 저장
+                - generic: 저장
+            - button "레이아웃 관리" [ref=f1e107]
+        - generic [ref=f1e115]:
+          - button "퀵 서치" [ref=f1e116]
+          - button "설정" [ref=f1e121]
+          - button "전체화면모드" [ref=f1e127]
+          - button "스냅샷 찍기" [ref=f1e131]
+      - button "거래" [ref=f1e140]
+      - button "귀하의 아이디어를 트레이드 커뮤니티와 셰어하기" [ref=f1e148]:
+        - generic [ref=f1e149]: 퍼블리쉬
+    - toolbar [ref=f1e152]:
+      - generic [ref=f1e156]:
+        - generic [ref=f1e157]:
+          - generic [ref=f1e160]:
+            - button "크로스" [ref=f1e162]
+            - button "커서" [pressed] [ref=f1e168]
+          - generic [ref=f1e174]:
+            - button "추세선" [ref=f1e176]
+            - button "추세 도구" [ref=f1e182]
+          - generic [ref=f1e188]:
+            - button "피보나치 되돌림" [ref=f1e190]
+            - button "갠 및 피보나치 도구" [ref=f1e199]
+          - generic [ref=f1e205]:
+            - button "XABCD 패턴" [ref=f1e207]
+            - button "패턴" [ref=f1e213]
+          - generic [ref=f1e219]:
+            - button "매수 포지션" [ref=f1e221]
+            - button "예측 및 측정 도구" [ref=f1e225]
+          - generic [ref=f1e231]:
+            - button "브러시" [ref=f1e233]
+            - button "기하학적 도형" [ref=f1e239]
+          - generic [ref=f1e245]:
+            - button "텍스트" [ref=f1e247]
+            - button "주석 도구" [ref=f1e251]
+          - generic [ref=f1e256]:
+            - button "아이콘" [ref=f1e258]
+            - button "아이콘" [ref=f1e262]
+        - generic [ref=f1e266]:
+          - button "재기" [ref=f1e267]
+          - button "확대" [ref=f1e271]
+        - generic [ref=f1e278]:
+          - generic [ref=f1e281]:
+            - button "자석 모드는 가격 봉 근처에 배치된 드로잉을 가장 가까운 OHLC 값에 맞춰 스냅합니다." [ref=f1e283]
+            - button "마그넷" [ref=f1e289]
+          - button "계속 그리기" [ref=f1e293]
+          - generic [ref=f1e298]:
+            - button "Lock drawings and indicators" [ref=f1e300]
+            - button "잠금 옵션" [ref=f1e304]
+          - generic [ref=f1e309]:
+            - button "드로잉 툴 모두 숨기기" [ref=f1e311]
+            - button "감추기 옵션" [ref=f1e315]
+        - generic [ref=f1e321]:
+          - button "오브젝트 없애기" [ref=f1e323]
+          - button "옵션 없애기" [ref=f1e327]
+    - generic [ref=f1e333]:
+      - 'region "차트 #1" [ref=f1e336]':
+        - generic [ref=f1e340]:
+          - generic:
+            - generic:
+              - toolbar:
+                - generic:
+                  - generic [ref=f1e341]:
+                    - generic "종목바꾸기" [ref=f1e342]:
+                      - generic [ref=f1e343]: "0"
+                      - button "종목바꾸기" [ref=f1e347]: 에스케이하이닉스보통주
+                    - generic "인터벌 바꾸기" [ref=f1e348]:
+                      - text: ·
+                      - button "인터벌 바꾸기" [ref=f1e349]: 1날
+                    - generic "KRX — 한국 증권 거래소" [ref=f1e350]:
+                      - text: ·
+                      - generic [ref=f1e351]: KRX
+                  - generic:
+                    - generic:
+                      - button "심볼에 깃발 표시"
+                      - button "더보기"
+                  - button "장 마감 · 지연 데이터입니다" [ref=f1e353]
+                - generic [ref=f1e361]:
+                  - generic [ref=f1e362]:
+                    - generic [ref=f1e363]: 시
+                    - generic [ref=f1e364]: 1,704,000
+                  - generic [ref=f1e365]:
+                    - generic [ref=f1e366]: 고
+                    - generic [ref=f1e367]: 1,725,000
+                  - generic [ref=f1e368]:
+                    - generic [ref=f1e369]: 저
+                    - generic [ref=f1e370]: 1,653,000
+                  - generic [ref=f1e371]:
+                    - generic [ref=f1e372]: 종
+                    - generic [ref=f1e373]: 1,653,000
+                  - generic [ref=f1e374]: −77,000 (−4.45%)
+              - generic [ref=f1e378]:
+                - generic [ref=f1e380]:
+                  - generic: 1,652,000
+                  - generic: 셀
+                - generic "스프레드" [ref=f1e382]: 1,000
+                - generic [ref=f1e384]:
+                  - generic: 1,653,000
+                  - generic: 바이
+            - generic:
+              - button "인디케이터 범례 숨기기" [ref=f1e385]
+              - generic:
+                - toolbar:
+                  - generic:
+                    - generic "거래량 (Volume)" [ref=f1e390]: 볼륨
+                    - generic:
+                      - generic:
+                        - button "감추기"
+                        - button "설정"
+                        - button "없애기"
+                        - button "더보기"
+                  - generic "Volume" [ref=f1e395]: 3.53 M
+          - generic "KRX_DLY:000660, 1 날 에 대한 차트" [ref=f1e397]
+      - toolbar [ref=f1e411]:
+        - generic [ref=f1e413]:
+          - generic [ref=f1e414]:
+            - button "1 분 인터벌 의 1 일₩" [ref=f1e415]:
+              - generic [ref=f1e416]: 1D
+            - button "5 분 인터벌 의 5 일₩" [ref=f1e417]:
+              - generic [ref=f1e418]: 5D
+            - button "30 분 인터벌 의 1달₩" [ref=f1e419]:
+              - generic [ref=f1e420]: 1M
+            - button "1 시간 인터벌 의 3달₩" [ref=f1e421]:
+              - generic [ref=f1e422]: 3M
+            - button "2 시간 인터벌 의 6달₩" [ref=f1e423]:
+              - generic [ref=f1e424]: 6M
+            - button "1 날 인터벌 의 연도별₩" [ref=f1e425]:
+              - generic [ref=f1e426]: YTD
+            - button "1 날 인터벌 의 1 년₩" [ref=f1e427]:
+              - generic [ref=f1e428]: 1Y
+            - button "1 주 인터벌 의 5 년₩" [ref=f1e429]:
+              - generic [ref=f1e430]: 5Y
+            - button "1달 인터벌 의 모든 데이터₩" [ref=f1e431]:
+              - generic [ref=f1e432]: 전체
+          - button "가기" [ref=f1e434]
+        - generic [ref=f1e438]:
+          - button "타임존" [ref=f1e441]:
+            - generic [ref=f1e442]: 08:46:45 UTC+9
+          - button "배당에 따른 데이터 조정" [ref=f1e446]:
+            - generic [ref=f1e447]: ADJ
+    - generic [ref=f1e449]:
+      - toolbar [ref=f1e454]:
+        - button "왓치리스트, 상세 정보 및 뉴스" [pressed] [ref=f1e455]
+        - button "얼러트" [ref=f1e460]
+        - button "오브젝트 트리 및 데이터 윈도우" [ref=f1e465]
+        - button "스크리너" [ref=f1e470]
+        - button "Pine" [ref=f1e476]
+        - button "캘린더" [ref=f1e481]
+        - button "커뮤니티" [ref=f1e485]
+        - button "알림" [ref=f1e492]
+        - button "프로덕트" [ref=f1e496]
+        - button "헬프 센터" [ref=f1e501]
+      - generic [ref=f1e507]:
+        - generic [ref=f1e508]:
+          - generic [ref=f1e511]:
+            - button "왓치리스트" [ref=f1e513]
+            - generic [ref=f1e523]:
+              - button "심볼 넣기" [ref=f1e524]
+              - button "어드밴스트 뷰" [ref=f1e528]
+              - button "설정" [ref=f1e532]
+          - generic [ref=f1e539]:
+            - generic [ref=f1e541]:
+              - button [ref=f1e543]
+              - button "심볼" [ref=f1e548]
+              - button "현재가" [ref=f1e550]
+              - button "체인지" [ref=f1e552]
+              - button "변동%" [ref=f1e554]
+            - generic [ref=f1e559]:
+              - generic [ref=f1e566]:
+                - generic [ref=f1e567]: K
+                - generic [ref=f1e571]: KOSPI
+              - generic [ref=f1e583]:
+                - generic [ref=f1e584]: K
+                - generic [ref=f1e588]: KOSPI200
+              - generic [ref=f1e600]:
+                - generic [ref=f1e601]: K
+                - generic [ref=f1e605]: KOSDAQ
+              - generic [ref=f1e617]:
+                - generic [ref=f1e618]: S
+                - generic [ref=f1e622]: SPX
+              - generic [ref=f1e634]:
+                - generic [ref=f1e635]: "N"
+                - generic [ref=f1e639]: NDQ
+              - generic [ref=f1e651]:
+                - generic [ref=f1e652]: "N"
+                - generic [ref=f1e656]: NI225
+              - generic [ref=f1e664]: 가상화페
+              - generic [ref=f1e676]:
+                - generic [ref=f1e677]: B
+                - generic [ref=f1e681]: BTCUSD.P
+              - generic [ref=f1e693]:
+                - generic [ref=f1e694]: B
+                - generic [ref=f1e698]: BTCKRW
+              - generic [ref=f1e710]:
+                - generic [ref=f1e711]: B
+                - generic [ref=f1e715]: BTCUSDT
+              - generic [ref=f1e723]: 외환
+              - generic [ref=f1e735]:
+                - generic [ref=f1e736]: U
+                - generic [ref=f1e740]: USDKRW
+              - generic [ref=f1e752]:
+                - generic [ref=f1e753]: E
+                - generic [ref=f1e757]: EURUSD
+              - generic [ref=f1e769]:
+                - generic [ref=f1e770]: U
+                - generic [ref=f1e774]: USDJPY
+              - generic [ref=f1e782]: 국내주식
+              - generic [ref=f1e794]:
+                - generic [ref=f1e795]: "0"
+                - generic [ref=f1e799]: "005930"
+              - generic [ref=f1e811]:
+                - generic [ref=f1e812]: "0"
+                - generic [ref=f1e816]: "035420"
+              - generic [ref=f1e828]:
+                - generic [ref=f1e829]: "0"
+                - generic [ref=f1e833]: "005380"
+              - generic [ref=f1e845]:
+                - generic [ref=f1e846]: "0"
+                - generic [ref=f1e850]: "068270"
+              - generic [ref=f1e862]:
+                - generic [ref=f1e863]: "0"
+                - generic [ref=f1e867]: "035720"
+              - generic [ref=f1e875]: 해외선물
+              - generic [ref=f1e887]:
+                - generic [ref=f1e888]: "Y"
+                - generic [ref=f1e892]: YM1!
+              - generic [ref=f1e904]:
+                - generic [ref=f1e905]: "N"
+                - generic [ref=f1e909]: NQ1!
+              - generic [ref=f1e921]:
+                - generic [ref=f1e922]: E
+                - generic [ref=f1e926]: ES1!
+              - generic [ref=f1e938]:
+                - generic [ref=f1e939]: C
+                - generic [ref=f1e943]: CL1!
+              - generic [ref=f1e955]:
+                - generic [ref=f1e956]: V
+                - generic [ref=f1e960]: VX1!
+        - generic [ref=f1e970]:
+          - generic [ref=f1e972]:
+            - generic [ref=f1e973]: "0"
+            - generic [ref=f1e978]: "000660"
+            - generic [ref=f1e979]:
+              - button "메트릭" [ref=f1e980]
+              - generic "노트 넣기" [ref=f1e984]
+              - generic "설정" [ref=f1e989]
+          - generic [ref=f1e996]:
+            - generic [ref=f1e998]:
+              - link "에스케이하이닉스보통주" [ref=f1e999] [cursor=pointer]:
+                - /url: https://kr.tradingview.com/symbols/KRX-000660/
+              - text: KRX
+            - generic [ref=f1e1005]: 전자 기술세미컨덕터
+      - generic "탭 숨기기" [ref=f1e1012]
+    - generic "트레이딩 패널"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list

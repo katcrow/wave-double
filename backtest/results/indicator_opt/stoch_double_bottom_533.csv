@@ -1,0 +1,2 @@
+k_period,d_period,threshold,tp_pct,sl_pct,n_trades,n_win,win_rate,profit_factor,avg_return,total_return,cum_return,max_drawdown,tickers_hit,avg_holding_bars,n_months,monthly_freq,exit_counts
+5,3,30.0,3.0,3.0,10852,5477,0.5046995945447844,0.954187450188236,-0.07023334869148548,-762.1723000000004,-99.99963178872335,-99.9997556508268,98,3.081736085514191,73,148.66,"{'sl': 5364, 'tp': 5471, 'end': 17}"

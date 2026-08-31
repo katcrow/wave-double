@@ -1,0 +1,458 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - button [ref=e7]
+    - toolbar [ref=e17]:
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - button "005930" [ref=e24]
+            - button "데이터 타입 전환" [ref=e26]
+          - button "심볼 비교" [ref=e30]
+        - button "1 날" [ref=e39]:
+          - generic [ref=e40]: 날
+        - button "캔들" [ref=e46]
+        - generic [ref=e56]:
+          - button "인디케이터, 메트릭 및 스트래티지" [ref=e58]:
+            - generic [ref=e63]: 지표
+          - button "지표 템플릿" [ref=e65]
+        - generic [ref=e72]:
+          - button "얼러트 만들기" [ref=e73]:
+            - generic [ref=e78]: 얼러트
+          - button "바 리플레이" [ref=e79]:
+            - generic [ref=e83]: 리플레이
+        - generic [ref=e87]:
+          - button [disabled] [ref=e88]
+          - button [disabled] [ref=e92]
+        - generic [ref=e97]:
+          - button "레이아웃 셋업" [ref=e98]
+          - generic [ref=e101]:
+            - button "귀하의 레이아웃에 있는 모든 심볼 차트 및 인터벌 저장" [ref=e102]:
+              - generic [ref=e104]:
+                - generic [ref=e105]: 저장
+                - generic: 저장
+            - button "레이아웃 관리" [ref=e107]
+        - generic [ref=e115]:
+          - button "퀵 서치" [ref=e116]
+          - button "설정" [ref=e121]
+          - button "전체화면모드" [ref=e127]
+          - button "스냅샷 찍기" [ref=e131]
+      - button "거래" [ref=e140]
+      - button "귀하의 아이디어를 트레이드 커뮤니티와 셰어하기" [ref=e148]:
+        - generic [ref=e149]: 퍼블리쉬
+    - toolbar [ref=e152]:
+      - generic [ref=e156]:
+        - generic [ref=e157]:
+          - generic [ref=e160]:
+            - button "크로스" [ref=e162]
+            - button "커서" [pressed] [ref=e168]
+          - generic [ref=e174]:
+            - button "추세선" [ref=e176]
+            - button "추세 도구" [ref=e182]
+          - generic [ref=e188]:
+            - button "피보나치 되돌림" [ref=e190]
+            - button "갠 및 피보나치 도구" [ref=e199]
+          - generic [ref=e205]:
+            - button "XABCD 패턴" [ref=e207]
+            - button "패턴" [ref=e213]
+          - generic [ref=e219]:
+            - button "매수 포지션" [ref=e221]
+            - button "예측 및 측정 도구" [ref=e225]
+          - generic [ref=e231]:
+            - button "브러시" [ref=e233]
+            - button "기하학적 도형" [ref=e239]
+          - generic [ref=e245]:
+            - button "텍스트" [ref=e247]
+            - button "주석 도구" [ref=e251]
+          - generic [ref=e256]:
+            - button "아이콘" [ref=e258]
+            - button "아이콘" [ref=e262]
+        - generic [ref=e266]:
+          - button "재기" [ref=e267]
+          - button "확대" [ref=e271]
+        - generic [ref=e278]:
+          - generic [ref=e281]:
+            - button "자석 모드는 가격 봉 근처에 배치된 드로잉을 가장 가까운 OHLC 값에 맞춰 스냅합니다." [ref=e283]
+            - button "마그넷" [ref=e289]
+          - button "계속 그리기" [ref=e293]
+          - generic [ref=e298]:
+            - button "Lock drawings and indicators" [ref=e300]
+            - button "잠금 옵션" [ref=e304]
+          - generic [ref=e309]:
+            - button "드로잉 툴 모두 숨기기" [ref=e311]
+            - button "감추기 옵션" [ref=e315]
+        - generic [ref=e321]:
+          - button "오브젝트 없애기" [ref=e323]
+          - button "옵션 없애기" [ref=e327]
+    - generic [ref=e333]:
+      - 'region "차트 #1" [ref=e336]':
+        - generic [ref=e340]:
+          - generic:
+            - generic:
+              - toolbar:
+                - generic:
+                  - generic [ref=e341]:
+                    - generic "종목바꾸기" [ref=e342]:
+                      - generic [ref=e343]: "0"
+                      - button "종목바꾸기" [ref=e347]: 삼성전자보통주
+                    - generic "인터벌 바꾸기" [ref=e348]:
+                      - text: ·
+                      - button "인터벌 바꾸기" [ref=e349]: 1날
+                    - generic "KRX — 한국 증권 거래소" [ref=e350]:
+                      - text: ·
+                      - generic [ref=e351]: KRX
+                  - generic:
+                    - generic:
+                      - button "심볼에 깃발 표시"
+                      - button "더보기"
+                  - button "장 마감 · 지연 데이터입니다" [ref=e353]
+                - generic [ref=e361]:
+                  - generic [ref=e362]:
+                    - generic [ref=e363]: 시
+                    - generic [ref=e364]: 262,500
+                  - generic [ref=e365]:
+                    - generic [ref=e366]: 고
+                    - generic [ref=e367]: 266,000
+                  - generic [ref=e368]:
+                    - generic [ref=e369]: 저
+                    - generic [ref=e370]: 256,000
+                  - generic [ref=e371]:
+                    - generic [ref=e372]: 종
+                    - generic [ref=e373]: 257,000
+                  - generic [ref=e374]: −9,000 (−3.38%)
+              - generic [ref=e378]:
+                - generic [ref=e380]:
+                  - generic: 256,500
+                  - generic: 셀
+                - generic "스프레드" [ref=e382]: "500"
+                - generic [ref=e384]:
+                  - generic: 257,000
+                  - generic: 바이
+            - generic:
+              - button "인디케이터 범례 숨기기" [ref=e385]
+              - generic:
+                - toolbar:
+                  - generic:
+                    - generic "거래량 (Volume)" [ref=e390]: 볼륨
+                    - generic:
+                      - generic:
+                        - button "감추기"
+                        - button "설정"
+                        - button "없애기"
+                        - button "더보기"
+                  - generic "Volume" [ref=e395]: 15.11 M
+          - generic "KRX_DLY:005930, 1 날 에 대한 차트" [ref=e397]
+      - toolbar [ref=e411]:
+        - generic [ref=e413]:
+          - generic [ref=e414]:
+            - button "1 분 인터벌 의 1 일₩" [ref=e415]:
+              - generic [ref=e416]: 1D
+            - button "5 분 인터벌 의 5 일₩" [ref=e417]:
+              - generic [ref=e418]: 5D
+            - button "30 분 인터벌 의 1달₩" [ref=e419]:
+              - generic [ref=e420]: 1M
+            - button "1 시간 인터벌 의 3달₩" [ref=e421]:
+              - generic [ref=e422]: 3M
+            - button "2 시간 인터벌 의 6달₩" [ref=e423]:
+              - generic [ref=e424]: 6M
+            - button "1 날 인터벌 의 연도별₩" [ref=e425]:
+              - generic [ref=e426]: YTD
+            - button "1 날 인터벌 의 1 년₩" [ref=e427]:
+              - generic [ref=e428]: 1Y
+            - button "1 주 인터벌 의 5 년₩" [ref=e429]:
+              - generic [ref=e430]: 5Y
+            - button "1달 인터벌 의 모든 데이터₩" [ref=e431]:
+              - generic [ref=e432]: 전체
+          - button "가기" [ref=e434]
+        - generic [ref=e438]:
+          - button "타임존" [ref=e441]:
+            - generic [ref=e442]: 08:46:09 UTC+9
+          - button "배당에 따른 데이터 조정" [ref=e446]:
+            - generic [ref=e447]: ADJ
+    - generic [ref=e449]:
+      - toolbar [ref=e454]:
+        - button "왓치리스트, 상세 정보 및 뉴스" [pressed] [ref=e455]
+        - button "얼러트" [ref=e460]
+        - button "오브젝트 트리 및 데이터 윈도우" [ref=e465]
+        - button "스크리너" [ref=e470]
+        - button "Pine" [ref=e476]
+        - button "캘린더" [ref=e481]
+        - button "커뮤니티" [ref=e485]
+        - button "알림" [ref=e492]
+        - button "프로덕트" [ref=e496]
+        - button "헬프 센터" [ref=e501]
+      - generic [ref=e507]:
+        - generic [ref=e508]:
+          - generic [ref=e511]:
+            - button "왓치리스트" [ref=e513]
+            - generic [ref=e523]:
+              - button "심볼 넣기" [ref=e524]
+              - button "어드밴스트 뷰" [ref=e528]
+              - button "설정" [ref=e532]
+          - generic [ref=e539]:
+            - generic [ref=e541]:
+              - button [ref=e543]
+              - button "심볼" [ref=e548]
+              - button "현재가" [ref=e550]
+              - button "체인지" [ref=e552]
+              - button "변동%" [ref=e554]
+            - generic [ref=e559]:
+              - generic [ref=e564]:
+                - generic [ref=e566]:
+                  - generic [ref=e567]: K
+                  - generic [ref=e572]:
+                    - generic [ref=e573]: KOSPI
+                    - generic "장 마감" [ref=e574]
+                - generic [ref=e576]: 6,788.88
+                - generic [ref=e578]: −123.49
+                - generic [ref=e580]: −1.79%
+              - generic [ref=e584]:
+                - generic [ref=e586]:
+                  - generic [ref=e587]: K
+                  - generic [ref=e592]:
+                    - generic [ref=e593]: KOSPI200
+                    - generic "장 마감" [ref=e594]
+                - generic [ref=e596]: 1,065.70
+                - generic [ref=e598]: −22.91
+                - generic [ref=e600]: −2.10%
+              - generic [ref=e604]:
+                - generic [ref=e606]:
+                  - generic [ref=e607]: K
+                  - generic [ref=e612]:
+                    - generic [ref=e613]: KOSDAQ
+                    - generic "장 마감" [ref=e614]
+                - generic [ref=e616]: "838.41"
+                - generic [ref=e618]: "0.76"
+                - generic [ref=e620]: 0.09%
+              - generic [ref=e624]:
+                - generic [ref=e626]:
+                  - generic [ref=e627]: S
+                  - generic [ref=e632]:
+                    - generic [ref=e633]: SPX
+                    - generic "장 마감" [ref=e634]
+                - generic [ref=e636]: 7,711.75
+                - generic [ref=e638]: −19.23
+                - generic [ref=e640]: −0.25%
+              - generic [ref=e644]:
+                - generic [ref=e646]:
+                  - generic [ref=e647]: "N"
+                  - generic [ref=e652]:
+                    - generic [ref=e653]: NDQ
+                    - generic "장 마감" [ref=e654]
+                - generic [ref=e656]: 29,433.43
+                - generic [ref=e658]: −208.13
+                - generic [ref=e660]: −0.70%
+              - generic [ref=e664]:
+                - generic [ref=e666]:
+                  - generic [ref=e667]: "N"
+                  - generic [ref=e672]:
+                    - generic [ref=e673]: NI225
+                    - generic "장 마감" [ref=e674]
+                - generic [ref=e676]: 66,405.34
+                - generic [ref=e678]: "273.58"
+                - generic [ref=e680]: 0.41%
+              - generic [ref=e682]: 가상화페
+              - generic [ref=e692]:
+                - generic [ref=e694]:
+                  - generic [ref=e695]: B
+                  - generic [ref=e699]: BTCUSD.P
+                - generic [ref=e702]: 77,290.0
+                - generic [ref=e704]: −906.0
+                - generic [ref=e706]: −1.16%
+              - generic [ref=e710]:
+                - generic [ref=e712]:
+                  - generic [ref=e713]: B
+                  - generic [ref=e717]: BTCKRW
+                - generic [ref=e720]: 107,636,000
+                - generic [ref=e722]: −1,154,000
+                - generic [ref=e724]: −1.06%
+              - generic [ref=e728]:
+                - generic [ref=e730]:
+                  - generic [ref=e731]: B
+                  - generic [ref=e735]: BTCUSDT
+                - generic [ref=e738]: 77,243.27
+                - generic [ref=e740]: −986.73
+                - generic [ref=e742]: −1.26%
+              - generic [ref=e744]: 외환
+              - generic [ref=e754]:
+                - generic [ref=e756]:
+                  - generic [ref=e757]: U
+                  - generic [ref=e761]: USDKRW
+                - generic [ref=e764]: 1,377.82
+                - generic [ref=e766]: "2.15"
+                - generic [ref=e768]: 0.16%
+              - generic [ref=e772]:
+                - generic [ref=e774]:
+                  - generic [ref=e775]: E
+                  - generic [ref=e779]: EURUSD
+                - generic [ref=e783]:
+                  - text: "1.1586"
+                  - superscript [ref=e784]: "8"
+                - generic [ref=e785]: "0.00087"
+                - generic [ref=e787]: 0.08%
+              - generic [ref=e791]:
+                - generic [ref=e793]:
+                  - generic [ref=e794]: U
+                  - generic [ref=e798]: USDJPY
+                - generic [ref=e802]:
+                  - text: "160.15"
+                  - superscript [ref=e803]: "2"
+                - generic [ref=e804]: "0.073"
+                - generic [ref=e806]: 0.05%
+              - generic [ref=e808]: 국내주식
+              - generic [ref=e818]:
+                - generic [ref=e820]:
+                  - generic [ref=e821]: "0"
+                  - generic [ref=e827]:
+                    - generic [ref=e828]: "005930"
+                    - generic "20 분 지연 호가" [ref=e829]: 지
+                    - generic "장 마감" [ref=e830]
+                - generic [ref=e832]: 257,000
+                - generic [ref=e834]: −9,000
+                - generic [ref=e836]: −3.38%
+              - generic [ref=e840]:
+                - generic [ref=e842]:
+                  - generic [ref=e843]: "0"
+                  - generic [ref=e848]:
+                    - generic [ref=e849]: "035420"
+                    - generic "20 분 지연 호가" [ref=e850]: 지
+                    - generic "장 마감" [ref=e851]
+                - generic [ref=e853]: 220,500
+                - generic [ref=e855]: 4,000
+                - generic [ref=e857]: 1.85%
+              - generic [ref=e861]:
+                - generic [ref=e863]:
+                  - generic [ref=e864]: "0"
+                  - generic [ref=e869]:
+                    - generic [ref=e870]: "005380"
+                    - generic "20 분 지연 호가" [ref=e871]: 지
+                    - generic "장 마감" [ref=e872]
+                - generic [ref=e874]: 399,500
+                - generic [ref=e876]: 1,500
+                - generic [ref=e878]: 0.38%
+              - generic [ref=e882]:
+                - generic [ref=e884]:
+                  - generic [ref=e885]: "0"
+                  - generic [ref=e890]:
+                    - generic [ref=e891]: "068270"
+                    - generic "20 분 지연 호가" [ref=e892]: 지
+                    - generic "장 마감" [ref=e893]
+                - generic [ref=e895]: 190,700
+                - generic [ref=e897]: −600
+                - generic [ref=e899]: −0.31%
+              - generic [ref=e903]:
+                - generic [ref=e905]:
+                  - generic [ref=e906]: "0"
+                  - generic [ref=e911]:
+                    - generic [ref=e912]: "035720"
+                    - generic "20 분 지연 호가" [ref=e913]: 지
+                    - generic "장 마감" [ref=e914]
+                - generic [ref=e916]: 36,850
+                - generic [ref=e918]: "850"
+                - generic [ref=e920]: 2.36%
+              - generic [ref=e922]: 해외선물
+              - generic [ref=e932]:
+                - generic [ref=e934]:
+                  - generic [ref=e935]: "Y"
+                  - generic [ref=e940]:
+                    - generic [ref=e941]: YM1!
+                    - generic "10 분 지연 호가" [ref=e942]: 지
+                - generic [ref=e943]: 53,474
+                - generic [ref=e945]: −110
+                - generic [ref=e947]: −0.21%
+              - generic [ref=e953]:
+                - generic [ref=e954]: "N"
+                - generic [ref=e958]: NQ1!
+              - generic [ref=e970]:
+                - generic [ref=e971]: E
+                - generic [ref=e975]: ES1!
+              - generic [ref=e987]:
+                - generic [ref=e988]: C
+                - generic [ref=e992]: CL1!
+              - generic [ref=e1004]:
+                - generic [ref=e1005]: V
+                - generic [ref=e1009]: VX1!
+        - generic [ref=e1019]:
+          - generic [ref=e1021]:
+            - generic [ref=e1022]: "0"
+            - generic [ref=e1027]: "005930"
+            - generic [ref=e1028]:
+              - button "메트릭" [ref=e1029]
+              - generic "노트 넣기" [ref=e1033]
+              - generic "설정" [ref=e1038]
+          - generic [ref=e1045]:
+            - generic [ref=e1047]:
+              - link "삼성전자보통주" [ref=e1048] [cursor=pointer]:
+                - /url: https://kr.tradingview.com/symbols/KRX-005930/
+              - text: KRX
+            - generic [ref=e1054]: 전자 기술세미컨덕터
+      - generic "탭 숨기기" [ref=e1061]
+    - generic "트레이딩 패널"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list
+              - generic:
+                - log:
+                  - list

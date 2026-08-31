@@ -1,0 +1,2 @@
+tp_pct,sl_pct,n_trades,n_win,win_rate,avg_return,total_return,cum_return,profit_factor,max_drawdown,avg_holding_bars,tickers_hit,n_months,monthly_freq,exit_counts
+3.0,3.0,147,101,0.6870748299319728,1.0224489795918366,150.29999999999998,321.5475750235304,2.053997194950911,-13.144412916516558,2.510204081632653,74,73,2.01,"{'tp': 101, 'sl': 46}"

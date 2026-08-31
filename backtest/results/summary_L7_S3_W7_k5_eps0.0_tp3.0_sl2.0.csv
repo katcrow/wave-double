@@ -1,0 +1,2 @@
+n_trades,n_win,n_loss,win_rate,avg_return,total_return,cum_return,profit_factor,avg_win,avg_loss,max_drawdown,avg_holding_bars,best_return,worst_return,exit_counts,tickers_hit
+12,5,7,0.4167,-0.0652,-0.7821,-3.8142,0.9805,7.8755,-5.7371,-17.8543,12.5,13.4384,-8.1136,"{'sl': 7, 'tp': 4, 'end': 1}",11

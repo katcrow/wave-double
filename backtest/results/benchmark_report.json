@@ -1,0 +1,17 @@
+{
+  "benchmark": {
+    "period": "2023-08-01 ~ 2026-08-26",
+    "equal_weight_index_return_pct": 86.54,
+    "bh_mean_ticker_pct": 114.62,
+    "bh_median_ticker_pct": 29.82,
+    "bh_min_ticker_pct": -73.83,
+    "bh_max_ticker_pct": 2233.44
+  },
+  "trade_vs_bh": {
+    "n_trades": 157,
+    "strategy_avg_pct": 2.37,
+    "bh_avg_pct": 2.44,
+    "alpha_avg_pct": -0.07,
+    "alpha_win_rate": 0.46
+  }
+}

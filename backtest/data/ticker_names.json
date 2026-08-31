@@ -1,0 +1,434 @@
+[
+  {
+    "code": "000060",
+    "name": "?"
+  },
+  {
+    "code": "000070",
+    "name": "Samyang Holdings Corporation"
+  },
+  {
+    "code": "000100",
+    "name": "Yuhan Corporation"
+  },
+  {
+    "code": "000150",
+    "name": "Doosan Corporation"
+  },
+  {
+    "code": "000270",
+    "name": "Kia Corporation"
+  },
+  {
+    "code": "000660",
+    "name": "SK hynix Inc."
+  },
+  {
+    "code": "000720",
+    "name": "Hyundai Engineering & Construction Co.,Ltd."
+  },
+  {
+    "code": "000810",
+    "name": "Samsung Fire & Marine Insurance Co., Ltd."
+  },
+  {
+    "code": "000990",
+    "name": "DB HiTek CO., LTD."
+  },
+  {
+    "code": "001040",
+    "name": "CJ Corporation"
+  },
+  {
+    "code": "001450",
+    "name": "Hyundai Marine & Fire Insurance Co., Ltd."
+  },
+  {
+    "code": "002380",
+    "name": "KCC Corporation"
+  },
+  {
+    "code": "002790",
+    "name": "AMOREPACIFIC Holdings Corp."
+  },
+  {
+    "code": "003090",
+    "name": "Daewoong Co., Ltd."
+  },
+  {
+    "code": "003410",
+    "name": "?"
+  },
+  {
+    "code": "003490",
+    "name": "Korean Airlines Co.,Ltd."
+  },
+  {
+    "code": "003550",
+    "name": "LG Corp."
+  },
+  {
+    "code": "004020",
+    "name": "Hyundai Steel Company"
+  },
+  {
+    "code": "004310",
+    "name": "Hyundai Pharmaceutical Co., Ltd."
+  },
+  {
+    "code": "004990",
+    "name": "LOTTE Corporation"
+  },
+  {
+    "code": "005380",
+    "name": "Hyundai Motor Company"
+  },
+  {
+    "code": "005490",
+    "name": "POSCO Holdings Inc."
+  },
+  {
+    "code": "005830",
+    "name": "DB Insurance Co., Ltd."
+  },
+  {
+    "code": "005930",
+    "name": "Samsung Electronics Co., Ltd."
+  },
+  {
+    "code": "005940",
+    "name": "NH Investment & Securities Co., Ltd."
+  },
+  {
+    "code": "006280",
+    "name": "GC Biopharma Corp."
+  },
+  {
+    "code": "006400",
+    "name": "Samsung SDI Co., Ltd."
+  },
+  {
+    "code": "006980",
+    "name": "Woosung Co., Ltd."
+  },
+  {
+    "code": "007070",
+    "name": "GS Retail Co., Ltd."
+  },
+  {
+    "code": "009150",
+    "name": "Samsung Electro-Mechanics Co., Ltd."
+  },
+  {
+    "code": "009160",
+    "name": "SIMPAC Co., Ltd."
+  },
+  {
+    "code": "009540",
+    "name": "HD Korea Shipbuilding & Offshore Engineering Co., Ltd."
+  },
+  {
+    "code": "009830",
+    "name": "Hanwha Solutions Corporation"
+  },
+  {
+    "code": "010130",
+    "name": "Korea Zinc Company, Ltd."
+  },
+  {
+    "code": "010140",
+    "name": "Samsung Heavy Industries Co., Ltd."
+  },
+  {
+    "code": "011070",
+    "name": "LG Innotek Co., Ltd."
+  },
+  {
+    "code": "011150",
+    "name": "CJ Seafood Corporation"
+  },
+  {
+    "code": "011200",
+    "name": "HMM Co.,Ltd"
+  },
+  {
+    "code": "011210",
+    "name": "Hyundai Wia Corporation"
+  },
+  {
+    "code": "011810",
+    "name": "STX Corporation"
+  },
+  {
+    "code": "012270",
+    "name": "?"
+  },
+  {
+    "code": "012330",
+    "name": "Hyundai Mobis Co.,Ltd"
+  },
+  {
+    "code": "012450",
+    "name": "Hanwha Aerospace Co., Ltd."
+  },
+  {
+    "code": "012510",
+    "name": "?"
+  },
+  {
+    "code": "015760",
+    "name": "Korea Electric Power Corporation"
+  },
+  {
+    "code": "016360",
+    "name": "Samsung Securities Co.,Ltd."
+  },
+  {
+    "code": "017670",
+    "name": "SK Telecom Co., Ltd."
+  },
+  {
+    "code": "017900",
+    "name": "AUK Corp."
+  },
+  {
+    "code": "018260",
+    "name": "Samsung SDS Co., Ltd."
+  },
+  {
+    "code": "018880",
+    "name": "Hanon Systems"
+  },
+  {
+    "code": "021050",
+    "name": "Seowon Co., Ltd."
+  },
+  {
+    "code": "023160",
+    "name": "023160.KS,0P0000C61W,991073"
+  },
+  {
+    "code": "023770",
+    "name": "023770.KS,0P0000AWQ4,14507"
+  },
+  {
+    "code": "024110",
+    "name": "Industrial Bank of Korea"
+  },
+  {
+    "code": "028050",
+    "name": "Samsung E&A Co., Ltd."
+  },
+  {
+    "code": "028100",
+    "name": "Dong-Ah Geological Engineering Company Ltd."
+  },
+  {
+    "code": "028260",
+    "name": "Samsung C&T Corporation"
+  },
+  {
+    "code": "030210",
+    "name": "Daol Investment & Securities Co., Ltd."
+  },
+  {
+    "code": "032640",
+    "name": "LG Uplus Corp."
+  },
+  {
+    "code": "032830",
+    "name": "Samsung Life Insurance Co., Ltd."
+  },
+  {
+    "code": "032980",
+    "name": "032980.KS,0P0000B8BD,608706"
+  },
+  {
+    "code": "033230",
+    "name": "033230.KS,0P0000AN4F,677971"
+  },
+  {
+    "code": "034020",
+    "name": "Doosan Enerbility Co., Ltd."
+  },
+  {
+    "code": "034730",
+    "name": "SK Inc."
+  },
+  {
+    "code": "035420",
+    "name": "NAVER Corporation"
+  },
+  {
+    "code": "035510",
+    "name": "SHINSEGAE Information & Communication Inc."
+  },
+  {
+    "code": "035720",
+    "name": "Kakao Corp."
+  },
+  {
+    "code": "036570",
+    "name": "NC Corporation"
+  },
+  {
+    "code": "039490",
+    "name": "Kiwoom Securities Co., Ltd."
+  },
+  {
+    "code": "042660",
+    "name": "Hanwha Ocean Co., Ltd."
+  },
+  {
+    "code": "042700",
+    "name": "HANMI Semiconductor Co., Ltd."
+  },
+  {
+    "code": "047040",
+    "name": "Daewoo Engineering & Construction Co., Ltd."
+  },
+  {
+    "code": "047810",
+    "name": "Korea Aerospace Industries, Ltd."
+  },
+  {
+    "code": "051600",
+    "name": "KEPCO Plant Service & Engineering Co.,Ltd."
+  },
+  {
+    "code": "051900",
+    "name": "LG H&H Co., Ltd."
+  },
+  {
+    "code": "051910",
+    "name": "LG Chem, Ltd."
+  },
+  {
+    "code": "055550",
+    "name": "Shinhan Financial Group Co., Ltd."
+  },
+  {
+    "code": "060980",
+    "name": "HL Holdings Corporation"
+  },
+  {
+    "code": "066570",
+    "name": "LG Electronics Inc."
+  },
+  {
+    "code": "068270",
+    "name": "Celltrion, Inc."
+  },
+  {
+    "code": "069500",
+    "name": "KODEX 200"
+  },
+  {
+    "code": "069620",
+    "name": "Daewoong Pharmaceutical Co., Ltd"
+  },
+  {
+    "code": "069960",
+    "name": "Hyundai Department Store Co. Ltd."
+  },
+  {
+    "code": "071050",
+    "name": "Korea Investment Holdings Co., Ltd."
+  },
+  {
+    "code": "078000",
+    "name": "Telcoware Co.,Ltd."
+  },
+  {
+    "code": "078930",
+    "name": "GS Holdings Corp."
+  },
+  {
+    "code": "086520",
+    "name": "086520.KS,0P0000AYIC,1314577"
+  },
+  {
+    "code": "086790",
+    "name": "Hana Financial Group Inc."
+  },
+  {
+    "code": "090430",
+    "name": "Amorepacific Corporation"
+  },
+  {
+    "code": "091810",
+    "name": "Trinity Airways Co., Ltd."
+  },
+  {
+    "code": "092730",
+    "name": "NeoPharm Co Ltd"
+  },
+  {
+    "code": "096770",
+    "name": "SK Innovation Co., Ltd."
+  },
+  {
+    "code": "097950",
+    "name": "CJ Cheiljedang Corporation"
+  },
+  {
+    "code": "099750",
+    "name": "ezCaretech Co Ltd"
+  },
+  {
+    "code": "103140",
+    "name": "Poongsan Corporation"
+  },
+  {
+    "code": "105560",
+    "name": "KB Financial Group Inc."
+  },
+  {
+    "code": "105630",
+    "name": "Hansae Co., Ltd."
+  },
+  {
+    "code": "161390",
+    "name": "Hankook Tire & Technology Co., Ltd."
+  },
+  {
+    "code": "180640",
+    "name": "Hanjin Kal"
+  },
+  {
+    "code": "192080",
+    "name": "DoubleUGames Co., Ltd."
+  },
+  {
+    "code": "207940",
+    "name": "Samsung Biologics Co.,Ltd."
+  },
+  {
+    "code": "241560",
+    "name": "Doosan Bobcat Inc."
+  },
+  {
+    "code": "247540",
+    "name": "Ecopro BM Co Ltd"
+  },
+  {
+    "code": "298040",
+    "name": "Hyosung Heavy Industries Corporation"
+  },
+  {
+    "code": "302440",
+    "name": "SK bioscience Co.,Ltd."
+  },
+  {
+    "code": "329180",
+    "name": "HD Hyundai Heavy Industries Co., Ltd."
+  },
+  {
+    "code": "373220",
+    "name": "LG Energy Solution, Ltd."
+  },
+  {
+    "code": "402340",
+    "name": "SK Square Co., Ltd."
+  }
+]

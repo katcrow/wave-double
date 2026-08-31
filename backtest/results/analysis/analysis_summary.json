@@ -1,0 +1,82 @@
+{
+  "n_trades": 36,
+  "alpha_avg": 1.223,
+  "alpha_pos": 0.528,
+  "strategy_avg": 3.477,
+  "bh_avg": 2.255,
+  "prior60_vs_alpha_corr": 0.325,
+  "exit_reason": {
+    "sl": 22,
+    "tp": 13,
+    "end": 1
+  },
+  "top_tickers_contrib": [
+    {
+      "ticker": "071050.KS",
+      "n": 1,
+      "contrib": 30.0457,
+      "avg": 30.0457
+    },
+    {
+      "ticker": "009160.KS",
+      "n": 1,
+      "contrib": 22.1249,
+      "avg": 22.1249
+    },
+    {
+      "ticker": "000270.KS",
+      "n": 1,
+      "contrib": 20.933,
+      "avg": 20.933
+    },
+    {
+      "ticker": "402340.KS",
+      "n": 1,
+      "contrib": 19.2402,
+      "avg": 19.2402
+    },
+    {
+      "ticker": "005930.KS",
+      "n": 2,
+      "contrib": 18.9469,
+      "avg": 9.47345
+    },
+    {
+      "ticker": "009540.KS",
+      "n": 1,
+      "contrib": 18.1343,
+      "avg": 18.1343
+    },
+    {
+      "ticker": "009150.KS",
+      "n": 1,
+      "contrib": 17.8264,
+      "avg": 17.8264
+    },
+    {
+      "ticker": "069960.KS",
+      "n": 2,
+      "contrib": 15.5581,
+      "avg": 7.77905
+    },
+    {
+      "ticker": "207940.KS",
+      "n": 2,
+      "contrib": 14.6795,
+      "avg": 7.33975
+    },
+    {
+      "ticker": "028260.KS",
+      "n": 2,
+      "contrib": 11.5986,
+      "avg": 5.7993
+    }
+  ],
+  "charts": [
+    "1_scatter_alpha.png",
+    "2_hist_return.png",
+    "3_exit_reason.png",
+    "4_ticker_contribution.png",
+    "5_prior_return_vs_alpha.png"
+  ]
+}

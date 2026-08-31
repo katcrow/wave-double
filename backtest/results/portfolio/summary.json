@@ -1,0 +1,12 @@
+{
+  "initial_capital": 100000000.0,
+  "position_pct": 0.25,
+  "final_equity": 134643318,
+  "total_return_pct": 34.64,
+  "cagr_pct": 5.18,
+  "max_drawdown_pct": -9.85,
+  "n_entries": 36,
+  "n_skips": 0,
+  "max_positions": 3,
+  "avg_cash_ratio": 0.921
+}

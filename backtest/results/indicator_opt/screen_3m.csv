@@ -1,0 +1,2 @@
+ticker,latest_date,union_signals,latest_signal,RSI+CCI,RSI+IBS,RSI+ADX,last_close,fwd_ge_tp,fwd_le_sl
+006980.KS,2026-08-26,1,2026-06-12,0,1,0,15300.0,False,True

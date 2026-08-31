@@ -1,0 +1,2 @@
+indicator,label,best_params,tp_pct,sl_pct,n_combo,best_n_trades,best_win_rate,best_avg_return,best_cum_return,best_profit_factor,best_max_drawdown,best_avg_holding_bars,best_tickers_hit
+div_stoch3,스토캐스틱 3바닥 다이버전스,"{'k_period': np.int64(5), 'd_period': np.int64(3), 'div_window': np.int64(20), 'min_gap': np.int64(5)}",3.0,3.0,48,50,0.66,0.86,50.387443633009376,1.8159392789373814,-12.090813733385165,3.52,36
