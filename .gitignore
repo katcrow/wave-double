@@ -2,4 +2,21 @@
 .bmad-loop/cache/
 .bmad-loop/policy.toml
 _bmad/render/
+
+# secrets — 트래킹 금지
 .env.local
+
+# node / JS 산출물
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+test-results/
+playwright-report/
+.blob-report/
+
+# python / uv 산출물
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]

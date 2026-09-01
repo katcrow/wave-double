@@ -1,0 +1,17 @@
+[project]
+name = "wave-double"
+version = "0.1.0"
+description = "매수후보 추천 대시보드 — 모노레포 Python 루트"
+# 참고: 스파인 Stack은 Python 3.12.14를 고정하나, Windows uv 0.11.28의
+# 관리 인덱스에 3.12.14 다운로드가 없어 워크스페이스는 가장 가까운 3.12.x(3.12.13)로 해석한다.
+# (편차 보고 — requires-python을 본래 "==3.12.14"에서 ">=3.12,<3.13"으로 완화)
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pandas==3.0.5",
+    "numpy==2.5.2",
+    "httpx==0.28.1",
+    "pyarrow==25.0.1",
+]
+
+[tool.uv.workspace]
+members = ["backtest", "apps/batch", "packages/domain"]

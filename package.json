@@ -1,0 +1,22 @@
+{
+  "name": "wave-double",
+  "private": true,
+  "version": "0.1.0",
+  "description": "매수후보 추천 대시보드 — JS 워크스페이스 루트",
+  "workspaces": [
+    "apps/web",
+    "packages/read-model"
+  ],
+  "engines": {
+    "node": ">=24.20.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build -w apps/web",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@playwright/test": "1.62.1"
+  }
+}

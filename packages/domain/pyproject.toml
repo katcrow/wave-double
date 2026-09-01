@@ -1,0 +1,6 @@
+[project]
+name = "domain"
+version = "0.1.0"
+description = "Pure domain rules — no I/O, no external imports"
+requires-python = ">=3.12,<3.13"
+dependencies = []
