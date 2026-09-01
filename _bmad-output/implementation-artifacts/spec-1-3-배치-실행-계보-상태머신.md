@@ -2,17 +2,31 @@
 title: '배치 실행 계보 상태머신'
 type: 'feature'
 created: '2026-09-01'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 baseline_revision: '2f2ab869c07b81106b8de6c2e1ef512cf772a270'
 baseline_commit: '2f2ab869c07b81106b8de6c2e1ef512cf772a270'
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - _bmad-output/implementation-artifacts/epic-1-context.md
   - _bmad-output/specs/spec-wave-double/data-model.md
   - _bmad-output/planning-artifacts/architecture/architecture-wave-double-2026-08-31/ARCHITECTURE-SPINE.md
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      Supabase/PostgreSQL 환경이 제공되면 run-lineage migration과 SQL fixture를 실제 DB에서 실행한다.
+    evidence: |-
+      현재 환경에 psql 또는 Supabase CLI가 없어 migration/RPC fixture의 실제 실행을 수행할 수 없었다.
+    location: >-
+      tests/sql/test_run_lineage.sql
+    severity: medium
+  - summary: >-
+      run-lineage 테이블의 RLS와 RPC 실행 권한을 인증·수동 트리거 스토리에서 확정한다.
+    evidence: |-
+      이번 스토리는 lease/fence 상태머신과 publication 계약을 구현했으며, 운영자 인증·브라우저 접근 경계는 Story 1.10 범위로 남아 있다.
+    location: >-
+      infra/supabase/migrations/202609011600_create_run_lineage.sql
+    severity: medium
 ---
 
 <intent-contract>
@@ -106,3 +120,41 @@ deferred: []
 - Unit and SQL fixtures cover key creation, transitions, RPC arguments, partial state, and publication guards.
   [`test_run_state.py:1`](../../tests/domain/test_run_state.py#L1)
   [`test_run_lineage.sql:1`](../../tests/sql/test_run_lineage.sql#L1)
+
+## Review Triage Log
+
+### 2026-09-01 — Review pass
+
+- intent_gap: 0
+- bad_spec: 0
+- patch: 5: (high 1, medium 2, low 2)
+- defer: 2: (high 0, medium 2, low 0)
+- dismissed:
+  - 실제 PostgreSQL 동시성 테스트가 CI에 연결되지 않았다는 지적 — 환경상 DB 실행기는 없지만 SQL fixture를 추가했고 실행 불가 사실을 deferred에 기록했다.
+  - adapter의 미사용 dataclass와 publication 교체 정책 지적 — 현재 acceptance criteria의 관찰 가능한 결과를 위반하지 않는 구현 세부 및 후속 read-model 정책이다.
+- addressed_findings:
+  - `[medium]` `[patch]` reaper salvage가 active pointer를 지워 publication을 막던 결함을 수정했다.
+  - `[high]` `[patch]` published attempt의 stage 재기록을 차단해 published 상태 회귀를 막았다.
+  - `[medium]` `[patch]` domain/SQL intraday key를 00/30분 경계로 일치시켰다.
+  - `[medium]` `[patch]` adapter의 오류·reap payload·입력 검증 및 관련 테스트를 보강했다.
+  - `[low]` `[patch]` stage verifier registry 계약과 테스트를 명세 시그니처에 맞췄다.
+
+## Auto Run Result
+
+Status: done
+
+**구현 요약:** lease/fence와 attempt lineage를 갖는 `logical_runs`/`runs` migration 및 start, stage-write, heartbeat, reaper, publish RPC를 추가했다. 순수 domain 상태 규칙·stage registry와 batch RPC adapter, stale/partial/concurrent 경로 fixture 및 단위 테스트를 구현했다.
+
+**변경 파일:**
+
+- `infra/supabase/migrations/202609011600_create_run_lineage.sql` -- 실행 계보 스키마와 RPC.
+- `packages/domain/domain/run_state.py`, `packages/domain/domain/stage_registry.py` -- 순수 상태·키·검증 계약.
+- `apps/batch/run_state.py` -- RPC adapter와 구조화 오류.
+- `tests/domain/test_run_state.py`, `tests/batch/test_run_state.py`, `tests/sql/test_run_lineage.sql` -- 상태머신·adapter·SQL fixture 검증.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` -- Story 1.3을 done으로 동기화.
+
+**리뷰 결과:** patch 5건을 적용했고, 실제 DB 실행 환경과 인증/RLS 권한 경계 2건을 deferred 처리했다. follow-up review recommendation은 true (high 1, medium 2, low 2; score 8)이다.
+
+**검증:** `uv run --with pytest pytest tests/domain/test_run_state.py tests/batch/test_run_state.py -q` → 17 passed; `uv run --with pandas --with numpy --with pyarrow --with pytest pytest backtest -q` → 16 passed; `npm run build -w apps/web` → 성공; `git diff --check` → 성공. UI 변경이 없어 Playwright E2E는 실행하지 않았다. psql/Supabase CLI 부재로 SQL fixture는 정적 검토만 수행했다.
+
+**잔여 위험:** 실제 Supabase migration/RPC 실행과 인증·RLS 정책은 후속 운영 환경/Story 1.10에서 검증해야 한다.
