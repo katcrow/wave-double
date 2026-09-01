@@ -124,6 +124,24 @@ class RunStateGateway:
             },
         )
 
+    def write_candidates(
+        self,
+        run_id: UUID,
+        fence_token: int,
+        lease_token: UUID,
+        candidates: list[dict[str, Any]],
+        metadata: dict[str, Any],
+    ) -> Any:
+        if fence_token <= 0:
+            raise ValueError("fence_token must be positive")
+        if not isinstance(candidates, list) or not isinstance(metadata, dict):
+            raise TypeError("candidates and metadata must be mappings")
+        return self._call("write_candidates", {
+            "p_run_id": str(run_id), "p_fence_token": fence_token,
+            "p_lease_token": str(lease_token), "p_candidates": candidates,
+            "p_metadata": metadata,
+        })
+
     def heartbeat(self, run_id: UUID, fence_token: int, lease_token: UUID, *, lease_seconds: int = 300) -> Any:
         if fence_token <= 0:
             raise ValueError("fence_token must be positive")
