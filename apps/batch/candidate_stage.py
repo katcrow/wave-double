@@ -67,27 +67,32 @@ def run_candidate_stage(
     request_params = params if params is not None else {"t1859InBlock": {"query_index": query_index or ""}}
     try:
         response = ls_client.request("t1859", request_params)
-    except Exception as exc:
-        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "LS_REQUEST_ERROR", "message": str(exc)})
+    except Exception:
+        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "LS_REQUEST_ERROR", "message": "LS request failed"})
         return CandidateStageResult("failed", "LS_REQUEST_ERROR", 0)
     if not response.ok:
         result = {"result_code": response.result_code, "message": response.message}
         gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result=result, unprocessed_count=response.unprocessed_count)
         return CandidateStageResult("failed", response.result_code, 0)
-    if response.unprocessed_count > 0:
-        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.PARTIAL, result={"result_code": "UNPROCESSED_ITEMS", "unprocessed_count": response.unprocessed_count}, unprocessed_count=response.unprocessed_count)
-        return CandidateStageResult("partial", "UNPROCESSED_ITEMS", 0)
     try:
         selection = select_candidates(_response_records(response))
-    except Exception as exc:
-        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "INVALID_RESPONSE", "message": str(exc)})
+    except Exception:
+        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "INVALID_RESPONSE", "message": "LS response could not be normalized"})
         return CandidateStageResult("failed", "INVALID_RESPONSE", 0)
+    # 상한 밖 종목은 runs.truncated_count로만 보존한다. candidates에는 상위 150건만 남긴다.
     rows = [
-        {"candidate_id": str(uuid4()), **candidate.as_dict(), "truncated": truncated}
-        for truncated, candidates in ((False, selection.candidates), (True, selection.truncated_candidates))
-        for candidate in candidates
+        {"candidate_id": str(uuid4()), **candidate.as_dict(), "truncated": False}
+        for candidate in selection.candidates
     ]
-    gateway.write_candidates(attempt.run_id, attempt.fence_token, attempt.lease_token, rows, selection.metadata)
+    try:
+        gateway.write_candidates(attempt.run_id, attempt.fence_token, attempt.lease_token, rows, selection.metadata)
+    except Exception:
+        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "CANDIDATE_PERSIST_FAILED", "message": "candidate persistence failed"})
+        return CandidateStageResult("failed", "CANDIDATE_PERSIST_FAILED", 0)
+    if response.unprocessed_count > 0:
+        result = {"result_code": "UNPROCESSED_ITEMS", **selection.metadata}
+        gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.PARTIAL, result=result, unprocessed_count=response.unprocessed_count)
+        return CandidateStageResult("partial", "UNPROCESSED_ITEMS", len(selection.candidates), selection)
     result = {"result_code": response.result_code, **selection.metadata}
     gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.SUCCESS, result=result, unprocessed_count=response.unprocessed_count)
     return CandidateStageResult("success", response.result_code, len(selection.candidates), selection)

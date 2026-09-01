@@ -161,10 +161,10 @@ class RunStateGateway:
         params = {} if now is None else {"p_now": now.isoformat()}
         return self._call("reap_expired_attempts", params)
 
-    def publish(self, run_id: UUID, fence_token: int) -> Any:
+    def publish(self, run_id: UUID, fence_token: int, lease_token: UUID) -> Any:
         if fence_token <= 0:
             raise ValueError("fence_token must be positive")
         return self._call(
             "publish_attempt",
-            {"p_run_id": str(run_id), "p_fence_token": fence_token},
+            {"p_run_id": str(run_id), "p_fence_token": fence_token, "p_lease_token": str(lease_token)},
         )

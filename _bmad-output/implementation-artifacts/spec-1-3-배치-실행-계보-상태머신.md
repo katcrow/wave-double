@@ -123,6 +123,19 @@ deferred:
 
 ## Review Triage Log
 
+### Review Findings — 2026-09-01 hardening pass
+
+- [x] [Review][Patch] publication에 lease 소유권 추가 및 legacy PUBLIC 실행 차단 [`apps/batch/run_state.py`](../../../apps/batch/run_state.py), [`202609012100_harden_run_and_candidate_contracts.sql`](../../../infra/supabase/migrations/202609012100_harden_run_and_candidate_contracts.sql)
+- [x] [Review][Patch] logical run key의 날짜와 거래일 불일치 거부 [202609012100_harden_run_and_candidate_contracts.sql]
+- [x] [Review][Patch] stage별 구조화 결과 및 publication provenance weight guard 영속화 [202609012100_harden_run_and_candidate_contracts.sql]
+- [x] [Review][Patch] 모든 SECURITY DEFINER run RPC의 PUBLIC 실행권한 제거 [202609012100_harden_run_and_candidate_contracts.sql]
+- [x] [Review][Defer] `logical_runs`/`runs` RLS 정책 확정 — deferred, Story 1.8/1.10의 approved view/RPC와 함께 적용해야 함 (2026-09-01 실제 Supabase SQL fixture와 RPC 권한 검증은 통과)
+
+#### Dismissed
+
+- `ready_to_publish` 재aper 미처리 — 새 start가 해당 attempt를 supersede하므로 영구 교착은 발생하지 않는다.
+- pointer가 타 logical run을 참조할 수 있다는 주장 — public RPC가 pointer를 단일 logical key에서만 갱신하며, 이번 권한 경계 보완으로 외부 호출 경로도 차단했다.
+
 ### 2026-09-01 — Review pass
 
 - intent_gap: 0

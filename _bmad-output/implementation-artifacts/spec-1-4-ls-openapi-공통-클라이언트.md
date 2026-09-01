@@ -78,6 +78,17 @@ HTTP client 자체와 rate policy를 분리해 clock/sleeper를 주입하면 실
 
 ## Review Triage Log
 
+### Review Findings — 2026-09-01 hardening pass
+
+- [x] [Review][Patch] token bucket의 미래 슬롯을 원자적으로 예약해 동일 TR burst 방지 [`apps/batch/ls_client.py`](../../../apps/batch/ls_client.py)
+- [x] [Review][Patch] 교차 TR HTTP 호출을 실측 전까지 직렬화하고 요청 timeout을 남은 budget으로 제한 [apps/batch/ls_client.py]
+- [x] [Review][Patch] transport 예외 세부 메시지 비노출 및 TR별 bucket 회귀 테스트 보강 [apps/batch/ls_client.py, tests/batch/test_ls_client.py]
+
+#### Dismissed
+
+- HTTP 200 업무 응답 payload의 TR별 성공 코드 해석 — 공통 TR-agnostic transport 계약 밖이며, 각 TR adapter가 해석할 책임이다.
+- continuation 자동 순회 — 범용 client에 TR별 continuation schema를 넣는 것은 특정 TR 분기로 이어져 이번 계약과 맞지 않는다.
+
 ### 2026-09-01 — Review pass
 - intent_gap: 0
 - bad_spec: 0

@@ -59,8 +59,19 @@ def test_buckets_are_independent_per_tr():
     result_codes = []
     client = make_client(lambda request: (result_codes.append(request.headers["tr_cd"]) or httpx.Response(200, json={})), clock=clock)
     client.request("a", {})
-    client.request("a", {})
-    assert clock.value == 1.0
+    client.request("b", {})
+    assert result_codes == ["a", "b"]
+    assert clock.value == 0.0
+
+
+def test_same_tr_reservations_do_not_share_a_future_slot():
+    clock = FakeClock()
+    sent_at = []
+    client = make_client(lambda request: (sent_at.append(clock.value) or httpx.Response(200, json={})), clock=clock)
+    client.request("same", {})
+    client.request("same", {})
+    client.request("same", {})
+    assert sent_at == [0.0, 1.0, 2.0]
 
 
 def test_concurrent_same_tr_calls_are_refill_limited():

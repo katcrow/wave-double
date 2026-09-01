@@ -79,6 +79,16 @@ baseline_commit: 'a4a235bbd0de4537d12bc8ecb7951757ba8bd9ac'
 
 ## Review Triage Log
 
+### Review Findings — 2026-09-01 hardening pass
+
+- [x] [Review][Patch] 상위 150건만 candidates에 저장하고 절단분은 metadata로 보존 [`apps/batch/candidate_stage.py`](../../../apps/batch/candidate_stage.py)
+- [x] [Review][Patch] 후보 write metadata/상한 검증, stage result 영속화, contribution publication guard 추가 [202609012100_harden_run_and_candidate_contracts.sql]
+- [x] [Review][Patch] partial 응답의 유효 후보를 보존하고 query index 전달을 회귀 테스트로 고정 [apps/batch/candidate_stage.py, tests/batch/test_candidate_stage.py]
+
+#### Dismissed
+
+- write_candidates 응답 유실 후 같은 attempt 재호출의 candidate UUID 충돌 — 현재 orchestrator는 재실행 시 새 fence attempt를 발급하며, 동일 attempt 재호출 경로는 없다.
+
 ### 2026-09-01 — Review pass
 - intent_gap: 0
 - bad_spec: 0

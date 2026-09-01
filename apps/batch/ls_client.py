@@ -84,7 +84,11 @@ class _TokenBucket:
         if self.tokens >= 1.0:
             self.tokens -= 1.0
             return 0.0
-        return (1.0 - self.tokens) / self.refill_rate
+        wait = (1.0 - self.tokens) / self.refill_rate
+        # 잠든 뒤 쓸 토큰을 지금 예약해야 뒤따른 caller가 같은 슬롯을 쓰지 않는다.
+        self.tokens = 0.0
+        self.last_refill = now + wait
+        return wait
 
 
 def _now_seconds(clock: Callable[[], float | datetime]) -> float:
@@ -122,6 +126,8 @@ class LsClient:
         self._mac_address = mac_address if mac_address is not None else self.config.mac_address
         self._limiters: dict[str, _TokenBucket] = {}
         self._limiters_lock = Lock()
+        # LS 계정의 TR 간 한도 공유 여부가 실측되기 전에는 HTTP 경계를 직렬화한다.
+        self._request_lock = Lock()
 
     def close(self) -> None:
         self._http.close()
@@ -139,6 +145,11 @@ class LsClient:
         if not isinstance(params, dict):
             raise TypeError("params must be a dictionary")
 
+        with self._request_lock:
+            return self._request_serial(tr_code, params, path=path)
+
+    def _request_serial(self, tr_code: str, params: dict[str, Any], *, path: str | None) -> LsResponse:
+
         started = _now_seconds(self._clock)
         attempts = 0
         while True:
@@ -146,14 +157,18 @@ class LsClient:
                 return self._budget_result()
 
             try:
+                remaining_budget = self.config.budget_seconds - (_now_seconds(self._clock) - started)
+                if remaining_budget <= 0:
+                    return self._budget_result()
                 response = self._http.post(
                     self._url(path),
                     headers=self._headers(tr_code),
                     json=params,
+                    timeout=remaining_budget,
                 )
             except httpx.HTTPError as exc:
                 if attempts >= self.config.max_retries:
-                    return self._retry_exhausted(str(exc))
+                    return self._retry_exhausted("LS transport request failed")
                 delay = self._default_backoff()
                 if not self._wait_within_budget(delay, started):
                     return self._budget_result()

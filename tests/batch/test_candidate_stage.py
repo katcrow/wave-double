@@ -20,9 +20,11 @@ class FakeRpc:
 class FakeLs:
     def __init__(self, response):
         self.response = response
+        self.params = None
 
     def request(self, tr_code, params):
         assert tr_code == "t1859"
+        self.params = params
         return self.response
 
 
@@ -60,12 +62,15 @@ def test_truncated_candidates_are_written_with_marker():
     result = run_candidate_stage(RunStateGateway(rpc), FakeLs(LsResponse(data=records)), LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE), Trigger.SCHEDULE)
     rows = rpc.calls[2][1]["p_candidates"]
     assert result.candidate_count == 150
-    assert len(rows) == 151
-    assert sum(row["truncated"] for row in rows) == 1
+    assert len(rows) == 150
+    assert all(row["truncated"] is False for row in rows)
+    assert rpc.calls[2][1]["p_metadata"]["truncated_count"] == 1
 
 
 def test_parses_t1859_response_and_sends_query_index():
     rpc = FakeRpc(attempt_payload())
     response = LsResponse(data={"t1859OutBlock1": [{"shcode": "000001", "hname": "A", "price": 100, "volume": 5}]})
-    run_candidate_stage(RunStateGateway(rpc), FakeLs(response), LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE), Trigger.SCHEDULE, query_index="neo0001")
+    ls = FakeLs(response)
+    run_candidate_stage(RunStateGateway(rpc), ls, LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE), Trigger.SCHEDULE, query_index="neo0001")
     assert rpc.calls[0][1]["p_batch_kind"] == "close"
+    assert ls.params == {"t1859InBlock": {"query_index": "neo0001"}}

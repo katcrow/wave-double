@@ -81,7 +81,7 @@ def test_gateway_rejects_non_positive_fence_and_non_mapping_result_before_rpc():
     client = FakeRpc()
     gateway = RunStateGateway(client)
     with pytest.raises(ValueError, match="positive"):
-        gateway.publish(uuid4(), 0)
+        gateway.publish(uuid4(), 0, uuid4())
     with pytest.raises(TypeError, match="dictionary"):
         gateway.write_stage(uuid4(), "candidates", 1, uuid4(), "pending", "running", result=[])
     assert client.calls == []
@@ -92,30 +92,30 @@ def test_gateway_reuses_same_rpc_contract_for_heartbeat_and_publish():
     gateway = RunStateGateway(client)
     run_id, lease = uuid4(), uuid4()
     gateway.heartbeat(run_id, 2, lease)
-    gateway.publish(run_id, 2)
+    gateway.publish(run_id, 2, lease)
     assert [call[0] for call in client.calls] == ["heartbeat_attempt", "publish_attempt"]
     assert client.calls[0][1] == {"p_run_id": str(run_id), "p_fence_token": 2, "p_lease_token": str(lease), "p_lease_seconds": 300}
-    assert client.calls[1][1] == {"p_run_id": str(run_id), "p_fence_token": 2}
+    assert client.calls[1][1] == {"p_run_id": str(run_id), "p_fence_token": 2, "p_lease_token": str(lease)}
 
 
 def test_gateway_preserves_structured_fence_and_lease_errors():
     gateway = RunStateGateway(ErrorRpc())
     with pytest.raises(RunStateError, match="lease expired") as raised:
-        gateway.publish(uuid4(), 1)
+        gateway.publish(uuid4(), 1, uuid4())
     assert raised.value.code == "STALE_FENCE_OR_LEASE"
     assert raised.value.retryable is False
 
 
 def test_gateway_preserves_retryable_from_object_error():
     with pytest.raises(RunStateError) as raised:
-        RunStateGateway(ObjectErrorRpc()).publish(uuid4(), 1)
+        RunStateGateway(ObjectErrorRpc()).publish(uuid4(), 1, uuid4())
     assert raised.value.code == "RATE_LIMIT_EXHAUSTED"
     assert raised.value.retryable is True
 
 
 def test_gateway_reads_error_from_dict_response():
     with pytest.raises(RunStateError, match="stale expected status") as raised:
-        RunStateGateway(DictErrorRpc()).publish(uuid4(), 1)
+        RunStateGateway(DictErrorRpc()).publish(uuid4(), 1, uuid4())
     assert raised.value.code == "EXPECTED_STATUS_MISMATCH"
 
 
