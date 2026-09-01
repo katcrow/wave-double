@@ -42,7 +42,7 @@ development_status:
   1-4-ls-openapi-공통-클라이언트: done
   1-5-후보-모집단-자동-갱신: done
   1-6-후보-모집단-대체-경로-폴백: done
-  1-7-스케줄-자동-배치-실행: backlog
+  1-7-스케줄-자동-배치-실행: done
   1-8-대시보드-스냅샷-조회-api: backlog
   1-9-오늘의-후보-화면-뼈대-배치-이력-화면: backlog
   1-10-인증-수동-트리거: backlog
