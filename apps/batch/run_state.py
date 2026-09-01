@@ -1,7 +1,7 @@
 """Supabase RPC와 배치 오케스트레이터 사이의 run-state adapter."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -46,7 +46,7 @@ class RunStateGateway:
             response = self._client.rpc(function, params)
             if hasattr(response, "execute"):
                 response = response.execute()
-            error = getattr(response, "error", None)
+            error = response.get("error") if isinstance(response, dict) else getattr(response, "error", None)
             if error:
                 self._raise_error(error)
             return getattr(response, "data", response)
@@ -66,6 +66,7 @@ class RunStateGateway:
         raise RunStateError(
             str(getattr(error, "code", "RPC_ERROR")),
             str(getattr(error, "message", error)),
+            retryable=bool(getattr(error, "retryable", False)),
         )
 
     def start_attempt(
@@ -100,9 +101,15 @@ class RunStateGateway:
         result: dict[str, Any] | None = None,
         unprocessed_count: int = 0,
     ) -> Any:
+        if fence_token <= 0:
+            raise ValueError("fence_token must be positive")
+        if unprocessed_count < 0:
+            raise ValueError("unprocessed_count must be non-negative")
+        if result is not None and not isinstance(result, dict):
+            raise TypeError("result must be a dictionary")
         validate_stage(stage)
-        expected = expected_status.value if isinstance(expected_status, StageStatus) else expected_status
-        target = status.value if isinstance(status, StageStatus) else status
+        expected = StageStatus(expected_status).value
+        target = StageStatus(status).value
         return self._call(
             "write_stage",
             {
@@ -118,6 +125,8 @@ class RunStateGateway:
         )
 
     def heartbeat(self, run_id: UUID, fence_token: int, lease_token: UUID, *, lease_seconds: int = 300) -> Any:
+        if fence_token <= 0:
+            raise ValueError("fence_token must be positive")
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
         return self._call(
@@ -131,9 +140,12 @@ class RunStateGateway:
         )
 
     def reap(self, *, now: datetime | None = None) -> Any:
-        return self._call("reap_expired_attempts", {"p_now": now.isoformat() if now else None})
+        params = {} if now is None else {"p_now": now.isoformat()}
+        return self._call("reap_expired_attempts", params)
 
     def publish(self, run_id: UUID, fence_token: int) -> Any:
+        if fence_token <= 0:
+            raise ValueError("fence_token must be positive")
         return self._call(
             "publish_attempt",
             {"p_run_id": str(run_id), "p_fence_token": fence_token},

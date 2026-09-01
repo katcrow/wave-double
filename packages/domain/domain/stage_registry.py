@@ -1,32 +1,23 @@
 """Stage 검증기 확장 지점."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable
+from uuid import UUID
 
-from .run_state import Stage, StageStatus, validate_stage
-
-
-class StageVerifier(Protocol):
-    def verify(self, result: Mapping[str, object] | None = None) -> bool: ...
+from .run_state import Stage, validate_stage
 
 
-@dataclass(frozen=True)
-class CandidatesStageVerifier:
-    """후속 후보 저장 구현 전까지 stage 결과의 기본 구조만 검증한다."""
+StageVerifier = Callable[[UUID, str], bool]
 
-    def verify(self, result: Mapping[str, object] | None = None) -> bool:
-        if result is None:
-            return True
-        return result.get("status", StageStatus.SUCCESS) in {
-            StageStatus.SUCCESS,
-            StageStatus.SUCCESS.value,
-        }
+
+def verify_candidates(run_id: UUID, stage: str) -> bool:
+    """Epic 1의 candidates stage 기본 verifier."""
+    return bool(run_id) and stage == Stage.CANDIDATES.value
 
 
 class StageRegistry:
     def __init__(self, verifiers: Mapping[str | Stage, StageVerifier] | None = None) -> None:
-        self._verifiers: dict[Stage, StageVerifier] = {Stage.CANDIDATES: CandidatesStageVerifier()}
+        self._verifiers: dict[Stage, StageVerifier] = {Stage.CANDIDATES: verify_candidates}
         for stage, verifier in (verifiers or {}).items():
             self.register(stage, verifier)
 
@@ -39,8 +30,9 @@ class StageRegistry:
         except KeyError as exc:
             raise KeyError(f"no verifier registered for stage: {stage}") from exc
 
-    def verify(self, stage: str | Stage, result: Mapping[str, object] | None = None) -> bool:
-        return self.verifier_for(stage).verify(result)
+    def verify(self, run_id: UUID, stage: str | Stage) -> bool:
+        normalized = validate_stage(stage)
+        return self.verifier_for(normalized)(run_id, normalized.value)
 
 
 default_registry = StageRegistry()

@@ -22,6 +22,8 @@ def test_invalid_logical_key_slot_is_rejected():
     with pytest.raises(ValueError):
         LogicalRunKey(date(2026, 9, 1), BatchKind.INTRADAY, time(14, 15))
     with pytest.raises(ValueError):
+        LogicalRunKey.parse("intraday:2026-09-01:14:15")
+    with pytest.raises(ValueError):
         LogicalRunKey.parse("close:2026-09-01:14:30")
 
 
@@ -43,3 +45,30 @@ def test_stage_transitions_are_forward_only_and_terminal_writes_are_idempotent()
 def test_only_successful_candidates_can_publish_in_epic_one():
     assert can_publish({"candidates": "success"})
     assert not can_publish({"candidates": "partial"})
+
+
+def test_stage_registry_uses_run_id_and_stage_callable_contract():
+    from uuid import uuid4
+
+    from domain.stage_registry import StageRegistry
+
+    run_id = uuid4()
+    calls = []
+
+    def verifier(received_run_id, received_stage):
+        calls.append((received_run_id, received_stage))
+        return True
+
+    registry = StageRegistry({"tags": verifier})
+    assert registry.verify(run_id, "tags") is True
+    assert calls == [(run_id, "tags")]
+
+
+def test_default_candidates_verifier_receives_uuid_and_stage_name():
+    from uuid import uuid4
+
+    from domain.stage_registry import default_registry
+
+    assert default_registry.verify(uuid4(), "candidates") is True
+    with pytest.raises(KeyError, match="tags"):
+        default_registry.verify(uuid4(), "tags")

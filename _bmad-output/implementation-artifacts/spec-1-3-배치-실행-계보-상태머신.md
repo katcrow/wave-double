@@ -2,7 +2,7 @@
 title: '배치 실행 계보 상태머신'
 type: 'feature'
 created: '2026-09-01'
-status: 'done'
+status: 'in-review'
 review_loop_iteration: 0
 baseline_revision: '2f2ab869c07b81106b8de6c2e1ef512cf772a270'
 baseline_commit: '2f2ab869c07b81106b8de6c2e1ef512cf772a270'

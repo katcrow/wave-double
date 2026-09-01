@@ -12,7 +12,7 @@ create table if not exists public.logical_runs (
   latest_partial_run_id uuid,
   published_at timestamptz,
   constraint logical_run_key_shape check (
-    (batch_kind = 'intraday' and logical_run_key ~ '^intraday:[0-9]{4}-[0-9]{2}-[0-9]{2}:([01][0-9]|2[0-3]):[0-5][0-9]$')
+    (batch_kind = 'intraday' and logical_run_key ~ '^intraday:[0-9]{4}-[0-9]{2}-[0-9]{2}:([01][0-9]|2[0-3]):(00|30)$')
     or (batch_kind in ('premarket', 'close') and logical_run_key ~ ('^' || batch_kind || ':[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
   ),
   constraint canonical_close_only check (batch_kind = 'close' or canonical_success_run_id is null)
@@ -85,6 +85,10 @@ begin
   if p_batch_kind not in ('premarket','intraday','close') or p_trigger not in ('schedule','manual') then
     raise exception using message = 'invalid batch kind or trigger';
   end if;
+  if (p_batch_kind = 'intraday' and p_logical_run_key !~ '^intraday:[0-9]{4}-[0-9]{2}-[0-9]{2}:([01][0-9]|2[0-3]):(00|30)$')
+     or (p_batch_kind in ('premarket','close') and p_logical_run_key !~ ('^' || p_batch_kind || ':[0-9]{4}-[0-9]{2}-[0-9]{2}$')) then
+    raise exception using message = 'invalid logical run key';
+  end if;
   insert into logical_runs(logical_run_key, trading_day, batch_kind)
     values (p_logical_run_key, p_trading_day, p_batch_kind)
     on conflict (logical_run_key) do nothing;
@@ -122,7 +126,7 @@ begin
   end if;
   select * into r from runs where run_id = p_run_id for update;
   if not found then raise exception using message = 'RUN_NOT_FOUND'; end if;
-  if r.fence_token <> p_fence_token or r.lease_token <> p_lease_token or r.lease_expires_at <= now()
+  if r.status = 'published' or r.fence_token <> p_fence_token or r.lease_token <> p_lease_token or r.lease_expires_at <= now()
      or (r.status <> 'running' and not (r.stage_status->>p_stage = p_expected_status and p_expected_status = p_status and p_status in ('success','failed','partial'))) then
     raise exception using message = 'STALE_FENCE_OR_LEASE';
   end if;
@@ -167,7 +171,9 @@ begin
     next_status := case when logical_row.active_attempt_run_id is distinct from r.run_id then 'failed'
       when r.stage_status->>'candidates' = 'success' then 'ready_to_publish' else 'failed' end;
     update runs set status = next_status, finished_at = p_now where run_id = r.run_id and status = 'running';
-    update logical_runs set active_attempt_run_id = null where logical_run_key = r.logical_run_key and active_attempt_run_id = r.run_id;
+    if next_status = 'failed' then
+      update logical_runs set active_attempt_run_id = null where logical_run_key = r.logical_run_key and active_attempt_run_id = r.run_id;
+    end if;
     changed := changed + 1;
   end loop;
   return changed;
