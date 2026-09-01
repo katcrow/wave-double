@@ -71,7 +71,7 @@ stage 이름은 이 data-model의 5개 키(`candidates`/`tags`/`supply_3day`/`ma
 
 ### `daily_ohlcv` — 시그널 계산용 장기 일봉 캐시 (FR-3a, AD-5)
 
-- `ticker`(종목코드), `trading_day`(거래일), `open`/`high`/`low`/`close`/`volume`, `adjusted`(수정주가 적용 여부), `adjustment_version` — corporate-action 조정 갱신 시 영향 구간 재구축 추적용(AD-5), `pricechk`(LS `t8410`/`t8451` 수정주가 반영 필드 원본 저장) — **SUSPENDED 1차 감지의 진실 원천(Story 3.8)**: 이 필드가 조정을 보고한 거래일은 갭 크기와 무관하게 가격 조정 이벤트로 취급한다
+- `ticker`(종목코드), `trading_day`(거래일), `open`/`high`/`low`/`close`/`volume`, `adjusted`(수정주가 적용 여부), `adjustment_version` — corporate-action 조정 갱신 시 영향 구간 재구축 추적용(AD-5), `pricechk`(LS `t8410`/`t8451` 수정주가 반영 필드 원본 저장) — **SUSPENDED 1차 감지의 진실 원천(Story 3.5)**: 이 필드가 조정을 보고한 거래일은 갭 크기와 무관하게 가격 조정 이벤트로 취급한다
 - PK `(ticker, trading_day)`
 - 최소 **120거래일** 보유(전략 B 주봉 %K(20-3) 요구). `t8410` `qrycnt≤500`이므로 신규 편입 종목도 단일 콜로 초기 적재
 - 정상 운영 시 배치당 **1일 증분**만 갱신. 신규 편입 종목만 전체 이력 조회
@@ -93,8 +93,8 @@ stage 이름은 이 data-model의 5개 키(`candidates`/`tags`/`supply_3day`/`ma
 - ⚠️ **투자자별 순매수 4컬럼(`foreign_net`/`institution_net`/`individual_net`/`program_net`)은 `numeric NULLABLE`.** NULL과 실젯값(0 포함)을 **서로 대체하지 않는다**(AD Consistency — `미수집·미확정·실제 0` 구분). 실제 0은 `0`, 미확정/미수집은 NULL로 저장한다.
   - `investor_net_status` (`confirmed | pending | missing`, NOT NULL) — 투자자별 순매수 컬럼의 상태를 한 행에서 단일하게 선언
     - `confirmed`: 종가 확정 배치의 실측값(실제 0 포함). 이 상태에서만 FR-7 힌트를 `좋은 수급`/`미충족`으로 판정한다
-    - `pending`: **장중 미확정** — t1702/t1637 투자자별 필드가 전부 0(장중 정상)이거나 재시도 후에도 채워지지 않은 상태. 순매수 4컬럼은 NULL. FR-7 힌트는 `판정 불가`. Story 4.5의 "미확정" 저장 상태
-    - `missing`: 미수집 — 조회 실패로 행이 채워지지 않은 상태. FR-7 힌트는 `판정 불가`. Story 4.7의 "미수집" 표시와 대응
+    - `pending`: **장중 미확정** — t1702/t1637 투자자별 필드가 전부 0(장중 정상)이거나 재시도 후에도 채워지지 않은 상태. 순매수 4컬럼은 NULL. FR-7 힌트는 `판정 불가`. Story 4.4의 "미확정" 저장 상태
+    - `missing`: 미수집 — 조회 실패로 행이 채워지지 않은 상태. FR-7 힌트는 `판정 불가`. Story 4.6의 "미수집" 표시와 대응
   - 가격(`close`/`volume`/`change_pct`)은 장중에도 실시간으로 확보되므로 이 상태와 무관하게 채워진다(api-map 장중 실측)
   - `investor_net_status`는 행 단위(전체 4컬럼 공통)로 선언한다. 부분 수집 최악의 경우 4컬럼이 불완전하므로, **4컬럼 중 어느 하나라도 확정값이 없으면 `confirmed`가 될 수 없다**(전부 확정일 때만 `confirmed`)
 - 원천: `t1702` 1콜(종가·등락율·거래량·외인·기관·개인) + `t1637` 1콜(프로그램)
@@ -123,7 +123,7 @@ stage 이름은 이 data-model의 5개 키(`candidates`/`tags`/`supply_3day`/`ma
   - `status` — `TP | SL | TIMEOUT | OPEN` (+ 예외 `SUSPENDED | DELISTED`, NFR-9)
   - `exit_date`(도달일), `exit_price`(청산가), `return_pct`(손익률) — **왕복 0.1% 비용 차감 후** (TP=+2.9%, SL=−3.1%, TIMEOUT=실제 종가 손익)
   - `cutoff_n` — 판정에 쓴 N값(초기 30)을 행에 함께 저장. N 변경 시 과거 outcome을 재계산하지 않는다
-  - `holding_days`(보유거래일수) — TIMEOUT 판정과 분포 분석용. **실거래 경과일수 정의(2026-09-01 결정, Story 3.6):** 진입 다음 거래일부터 현재까지 **유효 일봉이 존재한(실거래) 거래일 수**. 휴장일·거래정지 기간(일봉 부재)은 **제외**된다. TIMEOUT 발동 조건은 `holding_days >= cutoff_n`이며, 같은 원천을 쓰므로 거래정지/휴장이 낀 outcome도 판정과 분포가 정합한다(NFR-9)
+  - `holding_days`(보유거래일수) — TIMEOUT 판정과 분포 분석용. **실거래 경과일수 정의(2026-09-01 결정, Story 3.7):** 진입 다음 거래일부터 현재까지 **유효 일봉이 존재한(실거래) 거래일 수**. 휴장일·거래정지 기간(일봉 부재)은 **제외**된다. TIMEOUT 발동 조건은 `holding_days >= cutoff_n`이며, 같은 원천을 쓰므로 거래정지/휴장이 낀 outcome도 판정과 분포가 정합한다(NFR-9)
   - 판정 규칙(백테스트 동일): 진입 **다음 거래일부터** 판정, 동일봉 TP·SL 동시 도달 시 **SL 우선**
   - **terminal 상태(`TP`/`SL`/`TIMEOUT`)는 불변.** `SUSPENDED` 복귀/종결과 수치 수정은 expected version을 가진 `outcome_correction` event만 허용 — 원행 UPDATE 금지
   - Terminal 확정 후에는 이후 배치의 API 조회 대상에서 제외 → 추적 대상 수 P가 유계

@@ -175,7 +175,7 @@ flowchart TB
 - **Binds:** CAP-1~7, SM-1/2
 - **Prevents:** 후보 없음, 실패, 정상 0, 미수집, stale 결과를 구분하지 못하는 것
 - **Rule:** 모든 구조화 로그와 stage result는 `run_id`, `stage`, `batch_kind`, `trading_day`, `attempt_no`, `duration_ms`, `result_code`를 가진다. secret·authorization header·민감 payload는 로그 금지다. 첫 출판 전 실패는 `NO_SNAPSHOT`, lease 만료는 `ORPHANED_ATTEMPT`, 절단은 `truncated_count`로 노출한다.
-- **알림 계약(2026-09-01 결정):** V1 운영 조회는 **기본 pull-only**다 — 일상 상태(배치 실패·부분성공·stale·폴백·표본 부족)는 Neo가 대시보드 `/runs`·Data trust bar에서 확인한다(AD-13/FR-6a). 능동 통지(push)는 **P1급 또는 사람의 수신 확인이 필요한 클래스만** GitHub-native Issue로 발사한다: SM-1의 P1(종가 확정 배치 연속 2거래일 실패), 가격 보정 이상(SUSPENDED) 감지(Story 3.8), 상장폐지(DELISTED) 감지(Story 3.9), 백업 실패(AD-17). GitHub이 이미 운영 플랫폼이므로 제3자(무료/유료) 신규 의존을 추가하지 않는다(NFR-1). SUSPENDED/DELISTED Issue는 "필요 조치" 상태로 남고 correction event로 해소 시 close된다. 이 항목은 재검토 조건이 오기 전까지 임의로 push 채널(이메일·Slack 등)을 늘리지 않는다(Deferred 보완).
+- **알림 계약(2026-09-01 결정):** V1 운영 조회는 **기본 pull-only**다 — 일상 상태(배치 실패·부분성공·stale·폴백·표본 부족)는 Neo가 대시보드 `/runs`·Data trust bar에서 확인한다(AD-13/FR-6a). 능동 통지(push)는 **P1급 또는 사람의 수신 확인이 필요한 클래스만** GitHub-native Issue로 발사한다: SM-1의 P1(종가 확정 배치 연속 2거래일 실패), 가격 보정 이상(SUSPENDED) 감지(Story 3.5), 상장폐지(DELISTED) 감지(Story 3.9), 백업 실패(AD-17). GitHub이 이미 운영 플랫폼이므로 제3자(무료/유료) 신규 의존을 추가하지 않는다(NFR-1). SUSPENDED/DELISTED Issue는 "필요 조치" 상태로 남고 correction event로 해소 시 close된다. 이 항목은 재검토 조건이 오기 전까지 임의로 push 채널(이메일·Slack 등)을 늘리지 않는다(Deferred 보완).
 
 ### AD-11 — 개발과 운영의 데이터 경계를 분리한다
 

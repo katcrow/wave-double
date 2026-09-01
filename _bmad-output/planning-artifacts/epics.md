@@ -551,7 +551,7 @@ So that 무료 Supabase 플랜에 PITR이 없어도 실전 데이터를 잃지 �
 
 Neo가 후보 모집단 중 전략 A/B/C 시그널이 발생한 종목만 다중 태그와 함께 확인하고, 장중 시그널 유지/소멸을 구분해 본다.
 
-**의존성 노트(중요):** Story 2.6(오늘의 후보 카드 UI)은 Epic 4 Story 4.1(`supply_3day` 스키마의 `investor_net_status`)에 대한 순방향 의존성을 가진다(Story 2.6 선행조건 노트 참조). Sprint Planning 시 Epic 4 Story 4.1을 이 에픽의 2.5-2.7 배치 이전 또는 동시 배치로 앞당길 것을 권장한다.
+**의존성 노트:** Story 2.7(오늘의 후보 카드 UI)의 "부분결측" AC는 Story 2.6(`supply_3day` 스키마의 `investor_net_status`)이 정의하는 확정 상태 구분을 전제로 한다. 두 스토리는 같은 에픽 안에 있으므로, Story 2.6을 Story 2.7 이전에 배치한다(Story 2.7 선행조건 노트 참조).
 
 **FRs covered:** FR3, FR3a, FR3b
 
@@ -609,7 +609,7 @@ So that 벽시계 예산을 지키면서도 시그널 계산이 항상 최신 �
 
 **Given** 추적 중인 종목의 증분 갱신 중 LS 응답의 `pricechk`(수정주가 조정 마커) 또는 전일 종가 대비 ±30% 초과 갭이 관측되는 경우
 **When** 이 stage가 완료되면
-**Then** 해당 조정 신호(ticker, trading_day, pricechk 여부, 갭%)가 stage 결과에 typed 값으로 노출되어(예: stage 결과의 `adjustment_flags` 목록), Story 3.8의 판정 로직이 `daily_ohlcv`를 재조회하지 않고도 이 신호를 소비할 수 있다 — Story 3.8의 2단 감지(pricechk 1차, 갭 2차) 로직 자체는 이 stage가 아니라 Story 3.8이 소유하지만, 감지에 필요한 원시 신호는 이 stage가 최초로 관측하고 노출한다.
+**Then** 해당 조정 신호(ticker, trading_day, pricechk 여부, 갭%)가 stage 결과에 typed 값으로 노출되어(예: stage 결과의 `adjustment_flags` 목록), Story 3.5의 판정 로직이 `daily_ohlcv`를 재조회하지 않고도 이 신호를 소비할 수 있다 — Story 3.5의 2단 감지(pricechk 1차, 갭 2차) 로직 자체는 이 stage가 아니라 Story 3.5가 소유하지만, 감지에 필요한 원시 신호는 이 stage가 최초로 관측하고 노출한다.
 
 ### Story 2.3: 운영·백테스트 공유 전략 API 진입점
 
@@ -708,13 +708,33 @@ So that 태깅된 후보만 대시보드에 노출될 수 있는 데이터가 �
 **When** tagging stage 결과를 stage-write RPC로 기록하면
 **Then** 전체를 `success`로 기록하지 않고 `partial`로 기록하며, 에러가 발생한 종목 수가 `unprocessed_count`로 함께 저장된다 — 정상 계산된 종목의 태깅 결과는 그대로 저장되어 조용히 누락되지 않는다.
 
-### Story 2.6: 오늘의 후보 카드 UI
+### Story 2.6: `supply_3day` 스키마
+
+As a Neo,
+I want 후보별 3일치 가격·수급 데이터가 저장될 스키마가 마련되기를,
+So that 수집 stage와 화면이 이 위에서 동작할 수 있다.
+
+**Acceptance Criteria:**
+
+**Given** migration을 적용하면
+**Then** `supply_3day`(candidate_id FK, attempt_run_id FK, trading_day, slot `D-2|D-1|D0`, close, volume, change_pct, foreign_net, institution_net, individual_net, program_net, **investor_net_status `confirmed|pending|missing` (NOT NULL)**, collected_at, UNIQUE(candidate_id, trading_day, attempt_run_id)) 테이블이 생성된다(data-model.md).
+**And** `close`/`volume`/`change_pct`는 장중에도 실시간으로 채워지는 반면, **투자자별 순매수 4컬럼(`foreign_net`/`institution_net`/`individual_net`/`program_net`)은 `numeric NULLABLE`**이며, `investor_net_status`가 이 컬럼들의 상태를 행 단위로 선언한다 — `confirmed`(종가 확정 실측값, 실제 0 포함) / `pending`(장중 미확정 — t1702/t1637 투자자별 필드가 전부 0인 상태, 순매수는 NULL) / `missing`(미수집 — 순매수는 NULL). **NULL과 실젯값(0 포함)을 서로 대체하지 않는다**(일관성 규칙 — `미수집·미확정·실제 0` 구분). 4컬럼 중 어느 하나라도 확정값이 없으면 `confirmed`가 될 수 없다.
+
+**Given** 후보가 태깅된 경우
+**When** 이 테이블을 참조하면
+**Then** candidate_id FK로 Epic 1의 `candidates`, Epic 2의 `candidate_tags`와 연결된다.
+
+**Given** 저장 정리 정책을 확인하는 경우
+**When** NFR-4를 검토하면
+**Then** D0의 장중 이력 스냅샷만 정리 대상(90일 잠정)이고 D-2/D-1 행은 정리 대상이 아님이 문서화된다.
+
+### Story 2.7: 오늘의 후보 카드 UI
 
 As a Neo,
 I want 대시보드에서 태깅된 후보만 전략 태그와 함께 확인할 수 있기를,
 So that 왜 이 종목이 노출됐는지 5분 안에 판단할 수 있다.
 
-**선행조건 노트:** 아래 "부분결측" AC는 Epic 4 Story 4.1이 정의하는 `investor_net_status`(`confirmed`/`pending`/`missing`) 상태 구분을 전제로 한다. Epic 4보다 먼저 이 스토리를 구현하는 경우, 해당 AC는 Story 4.1이 완료될 때까지 스텁(항상 결측 없음으로 표시) 상태로 두거나 이 스토리의 구현을 Story 4.1 이후로 순서를 조정한다.
+**선행조건 노트:** 아래 "부분결측" AC는 Story 2.6(`supply_3day`)이 정의하는 `investor_net_status`(`confirmed`/`pending`/`missing`) 상태 구분을 전제로 한다. 이 스토리(2.7)는 같은 에픽 내의 선행 스토리 2.6 이후에 구현하므로, 해당 AC는 Story 2.6이 완료된 뒤 자연히 충족된다. 만약 2.6을 먼저 구현하지 않고 이 스토리를 진행하는 경우, 해당 AC는 Story 2.6이 완료될 때까지 스텁(항상 결측 없음으로 표시) 상태로 둔다.
 
 **Acceptance Criteria:**
 
@@ -736,13 +756,13 @@ So that 왜 이 종목이 노출됐는지 5분 안에 판단할 수 있다.
 
 **Given** 태깅된 후보의 수급 데이터 중 일부가 결측인 경우(부분결측)
 **When** Candidate summary card를 렌더링하면
-**Then** 카드에 `수급 일부 미수집` 같은 단서가 표시되어 사용자가 근거 패널(Story 4.7)을 열기 전에 상태를 인지할 수 있다. 이 상태는 카드를 목록에서 제외하지 않으며, "태깅된 후보 없음"(빈 상태)이나 "배치 실패"(우선 표시)와는 구분된다.
+**Then** 카드에 `수급 일부 미수집` 같은 단서가 표시되어 사용자가 근거 패널(Story 4.6)을 열기 전에 상태를 인지할 수 있다. 이 상태는 카드를 목록에서 제외하지 않으며, "태깅된 후보 없음"(빈 상태)이나 "배치 실패"(우선 표시)와는 구분된다.
 
 **Given** 태깅된 후보가 없는 경우
 **When** `/`를 열면
 **Then** Epic 1의 "오늘 태깅된 후보가 없습니다." 빈 상태가 그대로 표시된다(배치 실패 시 실패 상태 우선).
 
-### Story 2.7: 장중 시그널 유지·소멸 표시
+### Story 2.8: 장중 시그널 유지·소멸 표시
 
 As a Neo,
 I want 오전에 태깅되었던 종목이 장중에 사라지면 그 이유를 구분해서 볼 수 있기를,
@@ -772,9 +792,9 @@ So that 시그널 소멸과 배치 실패, 모집단 이탈을 혼동하지 않�
 
 종가 확정 배치가 태깅된 후보의 진입가·TP/SL/TIMEOUT/OPEN 판정을 append-only로 자동 적재하기 시작해, 실전 검증 데이터(SM-3: 90거래일 시점 종결 outcome ≥ 50건)가 최대한 빨리 쌓이기 시작한다.
 
-**배포 순서 노트(중요):** Story 3.8(가격 조정 이상 감지 & SUSPENDED 전이)의 감지 로직은 Story 3.5(TP/SL 판정)보다 먼저 또는 최소한 동시에 배포되어야 한다. NFR-9가 경고하는 "분할 미보정 시 진입가 대비 저가 비교로 즉시 SL 오판정"은 3.5가 3.8 없이 단독 배포될 때 그대로 재현되는 위험이다. Story 3.5는 이 위험을 스스로 차단하는 가드 AC를 포함한다(아래 참조).
+**배포 순서 노트(중요):** Story 3.5(가격 조정 이상 감지 & SUSPENDED 전이)의 감지 로직은 Story 3.6(TP/SL 판정)보다 먼저 또는 최소한 동시에 배포되어야 한다. 두 스토리는 번호 순서(3.5 → 3.6)대로 배치된다. NFR-9가 경고하는 "분할 미보정 시 진입가 대비 저가 비교로 즉시 SL 오판정"은 3.6이 3.5 없이 단독 배포될 때 그대로 재현되는 위험이다. Story 3.6은 이 위험을 스스로 차단하는 가드 AC를 포함한다(아래 참조).
 
-**스프린트 계획 노트:** 이 에픽은 10개 스토리로 Epic 1과 유사한 규모이며 하나의 스프린트 단위로 보기엔 크다. Sprint Planning 단계에서 최소 2개 서브 배치(예: 이벤트/관찰 스키마 3.1-3.4 → 판정 로직 3.5-3.10, 단 3.8은 위 배포 순서 노트에 따라 3.5와 같은 배치 또는 그 이전 배치에 포함)로 나눠 진행할 것을 권장한다.
+**스프린트 계획 노트:** 이 에픽은 10개 스토리로 Epic 1과 유사한 규모이며 하나의 스프린트 단위로 보기엔 크다. Sprint Planning 단계에서 최소 2개 서브 배치(예: 이벤트/관찰 스키마 3.1-3.4 → 판정 로직 3.5-3.10)로 나눠 진행할 것을 권장한다. 단, 위 배포 순서 노트에 따라 Story 3.5(가격 조정 이상 감지)는 Story 3.6(TP/SL 판정)와 같은 배치 또는 그 이전 배치에 포함한다.
 
 **FRs covered:** FR8
 
@@ -820,7 +840,7 @@ So that 재시도나 중복 실행이 중복 진입을 만들지 않는다.
 **Given** OPEN 이벤트가 발행되는 경우
 **When** entry 필드를 기록하면
 **Then** 진입일=해당 거래일, 진입가=해당 거래일 정규장 종가로 기록된다(장중 확정치가 아닌 종가 확정 배치의 최종 종가)
-**And** 이 종가는 Epic 2 Story 2.2가 증분 갱신한 `daily_ohlcv`의 해당 거래일 `close` 값(수정주가 adjusted 기준, NFR-9)을 출처로 하며, Epic 4의 `supply_3day`(3일치 근거 UI 전용 테이블)를 출처로 하지 않는다(두 테이블은 서로 다른 attempt/목적을 가지므로 outcome 진입가 계산에는 `daily_ohlcv`만 사용). corporate-action 영향 구간 재구축(Story 2.2)에 의해 adjusted close가 갱신되었더라도 entry_price는 **OPEN 이벤트가 처음 append된 시점의 close 값으로 고정**되며, 이후 adjusted close 재계산은 영향받지 않는다(이미 발행된 outcome의 entry_price 불변 — Story 3.7 correction event만 예외).
+**And** 이 종가는 Epic 2 Story 2.2가 증분 갱신한 `daily_ohlcv`의 해당 거래일 `close` 값(수정주가 adjusted 기준, NFR-9)을 출처로 하며, Epic 4의 `supply_3day`(3일치 근거 UI 전용 테이블)를 출처로 하지 않는다(두 테이블은 서로 다른 attempt/목적을 가지므로 outcome 진입가 계산에는 `daily_ohlcv`만 사용). corporate-action 영향 구간 재구축(Story 2.2)에 의해 adjusted close가 갱신되었더라도 entry_price는 **OPEN 이벤트가 처음 append된 시점의 close 값으로 고정**되며, 이후 adjusted close 재계산은 영향받지 않는다(이미 발행된 outcome의 entry_price 불변 — Story 3.8 correction event만 예외).
 
 **Given** 이미 해당 (ticker,strategy)에 OPEN 상태인 outcome이 존재하는 경우
 **When** 같은 종목이 다음 거래일에 다시 태깅되면
@@ -873,13 +893,42 @@ So that TP/SL/TIMEOUT 판정의 근거 데이터가 확보된다.
 
 **Given** 관찰 대상 조회 시
 **When** 추적 대상 목록을 산출하면
-**Then** terminal 상태(TP/SL/TIMEOUT)로 확정된 outcome은 이후 배치의 API 조회 대상에서 제외된다(Story 3.6에서 완성).
+**Then** terminal 상태(TP/SL/TIMEOUT)로 확정된 outcome은 이후 배치의 API 조회 대상에서 제외된다(Story 3.7에서 완성).
 
 **Given** 거래정지 기간(SUSPENDED)인 종목이 있는 경우
 **When** 관찰을 수집하면
-**Then** Story 3.8이 구현되기 전까지는 이 케이스를 별도 처리하지 않되, 이후 스토리에서 자동판정 제외 대상으로 확장될 지점임을 인지한다.
+**Then** Story 3.5가 구현되기 전까지는 이 케이스를 별도 처리하지 않되, 이후 스토리에서 자동판정 제외 대상으로 확장될 지점임을 인지한다.
 
-### Story 3.5: TP/SL 판정 & 비용 반영 손익률
+### Story 3.5: 가격 조정 이상 감지 & SUSPENDED 전이
+
+As a Neo,
+I want 액면분할·병합 등 가격 조정 이벤트가 발생한 종목을 자동으로 SUSPENDED 처리하기를,
+So that 분할 미보정으로 인한 조용한 오판정(즉시 SL 오판정 등)을 방지한다.
+
+**Acceptance Criteria:**
+
+**Given** 추적 중 종목의 Story 2.2 일봉 갱신에서 조정 이벤트가 발생하는 경우
+**When** 판정 로직이 이를 감지하면
+**Then** **2단 감지(2026-09-01 결정)를 따른다:** ① 1차 신호 — LS `t8410`/`t8451`의 `pricechk`(수정주가 반영 필드)가 해당 거래일에 조정을 보고하면 **갭 크기와 무관하게** `SUSPENDED`로 전이한다(유상증자·주식배당·액면분할 등 갭이 30% 미만인 조정도 놓치지 않음, `pricechk`는 데이터 원천의 조정 진실 원천). ② 2차 안전망 — `pricechk` 마커가 없어도 전일 종가 대비 **±30% 초과 갭**이 관측되면 `SUSPENDED`로 전이한다(미반영 조정·급변 포착). 임계값(±30%)은 설정값으로 한 곳에서 관리·조정 가능하다.
+**And** 어느 경로든 자동 TP/SL 판정을 수행하지 않고 Story 3.8의 correction event로 `SUSPENDED` 플래그와 함께 전이시키며 **능동 알림을 발생시킨다(AD-10 알림 계약 — GitHub Issue로 "필요 조치" 항목 생성, Neo가 원인을 확인해 해소할 때까지 open 유지).**
+
+**Given** SUSPENDED 상태인 경우
+**When** 컷오프(30거래일) 계산을 수행하면
+**Then** 거래정지 기간은 컷오프 계산에서 제외된다 — **산식(Story 3.7의 실거래 경과일수 정의)에 따라 `traded_days_since_entry`는 실거래가 있는 날만 세므로, SUSPENDED로 거래정지·멈춘 기간은 카운트에 포함되지 않는다.**
+
+**Given** 원인이 확인되어 정상 가격으로 복귀한 경우
+**When** 운영자가 이를 확인하면
+**Then** Story 3.8의 correction event로 SUSPENDED에서 정상 판정 흐름으로 복귀하며, 앞서 발행된 SUSPENDED GitHub Issue가 close된다(수신 확인·해소 이력이 남는다).
+
+**Given** SUSPENDED 상태로 남아있는 outcome이 있는 경우
+**When** Epic 5의 승률·PF 계산을 확인하면
+**Then** SUSPENDED는 분모(종결 건수)에서 제외된다(Epic 5에서 소비되는 계약).
+
+**Given** SUSPENDED 상태의 GitHub Issue가 일정 기간(예: 14일) 이상 open으로 남아있는 경우
+**When** 정기 점검(예: 백업 워크플로와 유사한 주기 job 또는 배치 실행 시 체크)이 이를 감지하면
+**Then** 해당 Issue에 경과 일수를 알리는 에스컬레이션 코멘트가 추가되어 무기한 방치되지 않는다(NFR-7의 "outcome 추적 대상은 유계" 원칙과 정합 — SUSPENDED 자체는 분모에서 제외되어 산식에는 영향 없지만, 미해결 상태가 운영자 눈에 계속 보이도록 보장).
+
+### Story 3.6: TP/SL 판정 & 비용 반영 손익률
 
 As a Neo,
 I want 일자별 관찰치를 기준으로 TP/SL이 백테스트와 동일한 규칙으로 판정되기를,
@@ -887,9 +936,9 @@ So that 실전 outcome이 백테스트 기대치와 같은 기준으로 비교 �
 
 **Acceptance Criteria:**
 
-**Given** 해당 종목에 대해 아직 Story 3.8의 가격조정 이상 감지가 수행되지 않았거나(예: Story 3.8이 배포되기 전) 이미 `SUSPENDED`로 판정된 경우
+**Given** 해당 종목에 대해 아직 Story 3.5의 가격조정 이상 감지가 수행되지 않았거나(예: Story 3.5가 배포되기 전) 이미 `SUSPENDED`로 판정된 경우
 **When** TP/SL/TIMEOUT 판정을 시도하면
-**Then** 판정은 보류되며 자동 확정되지 않는다 — Story 3.8이 아직 배포되지 않은 기간에는 이 가드가 유일한 방어선이므로, 두 스토리를 반드시 함께(또는 3.8을 먼저) 배포해야 한다.
+**Then** 판정은 보류되며 자동 확정되지 않는다 — Story 3.5가 아직 배포되지 않은 기간에는 이 가드가 유일한 방어선이므로, 두 스토리를 반드시 함께(또는 3.5를 먼저) 배포해야 한다.
 
 **Given** OPEN 상태 outcome의 진입일이 있는 경우
 **When** 판정을 시작하면
@@ -913,9 +962,9 @@ So that 실전 outcome이 백테스트 기대치와 같은 기준으로 비교 �
 
 **Given** terminal 상태(TP/SL)가 확정된 경우
 **When** 이후 배치가 같은 outcome을 다시 판정하려 하면
-**Then** 이미 terminal이므로 재판정하지 않는다(불변, Story 3.7의 correction event만 예외).
+**Then** 이미 terminal이므로 재판정하지 않는다(불변, Story 3.8의 correction event만 예외).
 
-### Story 3.6: TIMEOUT 컷오프 확정 & 추적 대상 유계화
+### Story 3.7: TIMEOUT 컷오프 확정 & 추적 대상 유계화
 
 As a Neo,
 I want 30거래일 내 TP/SL 미도달 종목이 TIMEOUT으로 자동 확정되기를,
@@ -942,13 +991,13 @@ So that 추적 대상 수가 무한히 늘어나지 않고 유계로 관리된�
   - `traded_days_since_entry` = 진입일 다음 거래일부터 현재까지 **실거래(해당일에 유효한 일봉이 존재)가 발생한 거래일 수**.
   - TIMEOUT 발동 조건: `traded_days_since_entry >= cutoff_n`(초기 30).
   - **휴장일과 거래정지 기간(일봉이 없는 기간) 모두 카운트에서 제외**한다. 거래정지가 끼면 달력으로는 더 늦은 날에 30번째 실거래일이 도래하므로 TIMEOUT도 그만큼 지연된다.
-  - 이 정의는 `holding_days`(실제 보유거래일수)와 **동일 원천**을 쓴다 — 거래정지·휴장일은 두 곳 모두에서 빠지므로 TIMEOUT 판정과 분포 분석이 정합한다(Story 3.8과 연계).
+  - 이 정의는 `holding_days`(실제 보유거래일수)와 **동일 원천**을 쓴다 — 거래정지·휴장일은 두 곳 모두에서 빠지므로 TIMEOUT 판정과 분포 분석이 정합한다(Story 3.5와 연계).
 
 **Given** `holding_days`를 조회하는 경우
 **When** outcome을 확인하면
 **Then** 실제 보유거래일수가 기록되어 TIMEOUT 판정과 분포 분석에 사용 가능하다. **`holding_days`는 위 `traded_days_since_entry`와 같은 실거래 경과일수 정의를 따른다(휴장일·거래정지일 제외).**
 
-### Story 3.7: Outcome correction 이벤트 메커니즘
+### Story 3.8: Outcome correction 이벤트 메커니즘
 
 As a Neo,
 I want SUSPENDED 복귀나 수치 수정이 원행 UPDATE가 아니라 버전 관리된 이벤트로만 이뤄지기를,
@@ -972,35 +1021,6 @@ So that terminal 상태의 불변성이 깨지지 않고 모든 수정 이력이
 **When** `outcome_events`를 조회하면
 **Then** 모든 correction이 사유와 함께 시간순으로 남아있다.
 
-### Story 3.8: 가격 조정 이상 감지 & SUSPENDED 전이
-
-As a Neo,
-I want 액면분할·병합 등 가격 조정 이벤트가 발생한 종목을 자동으로 SUSPENDED 처리하기를,
-So that 분할 미보정으로 인한 조용한 오판정(즉시 SL 오판정 등)을 방지한다.
-
-**Acceptance Criteria:**
-
-**Given** 추적 중 종목의 Story 2.2 일봉 갱신에서 조정 이벤트가 발생하는 경우
-**When** 판정 로직이 이를 감지하면
-**Then** **2단 감지(2026-09-01 결정)를 따른다:** ① 1차 신호 — LS `t8410`/`t8451`의 `pricechk`(수정주가 반영 필드)가 해당 거래일에 조정을 보고하면 **갭 크기와 무관하게** `SUSPENDED`로 전이한다(유상증자·주식배당·액면분할 등 갭이 30% 미만인 조정도 놓치지 않음, `pricechk`는 데이터 원천의 조정 진실 원천). ② 2차 안전망 — `pricechk` 마커가 없어도 전일 종가 대비 **±30% 초과 갭**이 관측되면 `SUSPENDED`로 전이한다(미반영 조정·급변 포착). 임계값(±30%)은 설정값으로 한 곳에서 관리·조정 가능하다.
-**And** 어느 경로든 자동 TP/SL 판정을 수행하지 않고 Story 3.7의 correction event로 `SUSPENDED` 플래그와 함께 전이시키며 **능동 알림을 발생시킨다(AD-10 알림 계약 — GitHub Issue로 "필요 조치" 항목 생성, Neo가 원인을 확인해 해소할 때까지 open 유지).**
-
-**Given** SUSPENDED 상태인 경우
-**When** 컷오프(30거래일) 계산을 수행하면
-**Then** 거래정지 기간은 컷오프 계산에서 제외된다 — **산식(Story 3.6의 실거래 경과일수 정의)에 따라 `traded_days_since_entry`는 실거래가 있는 날만 세므로, SUSPENDED로 거래정지·멈춘 기간은 카운트에 포함되지 않는다.**
-
-**Given** 원인이 확인되어 정상 가격으로 복귀한 경우
-**When** 운영자가 이를 확인하면
-**Then** Story 3.7의 correction event로 SUSPENDED에서 정상 판정 흐름으로 복귀하며, 앞서 발행된 SUSPENDED GitHub Issue가 close된다(수신 확인·해소 이력이 남는다).
-
-**Given** SUSPENDED 상태로 남아있는 outcome이 있는 경우
-**When** Epic 5의 승률·PF 계산을 확인하면
-**Then** SUSPENDED는 분모(종결 건수)에서 제외된다(Epic 5에서 소비되는 계약).
-
-**Given** SUSPENDED 상태의 GitHub Issue가 일정 기간(예: 14일) 이상 open으로 남아있는 경우
-**When** 정기 점검(예: 백업 워크플로와 유사한 주기 job 또는 배치 실행 시 체크)이 이를 감지하면
-**Then** 해당 Issue에 경과 일수를 알리는 에스컬레이션 코멘트가 추가되어 무기한 방치되지 않는다(NFR-7의 "outcome 추적 대상은 유계" 원칙과 정합 — SUSPENDED 자체는 분모에서 제외되어 산식에는 영향 없지만, 미해결 상태가 운영자 눈에 계속 보이도록 보장).
-
 ### Story 3.9: 상장폐지 DELISTED 종결
 
 As a Neo,
@@ -1011,11 +1031,11 @@ So that 더 이상 존재하지 않는 종목을 계속 추적 시도하지 않�
 
 **Given** 추적 중 종목이 상장폐지되는 경우
 **When** 관찰 수집 stage(Story 3.4)가 종목 상태를 조회하면
-**Then** LS 종목 상태 조회 TR(예: 일봉 조회 응답의 상장폐지/거래정지 상태 코드 — 정확한 필드는 구현 시점에 LS OpenAPI 문서로 재확인 필요)이 상장폐지를 보고하는 것을 감지 트리거로 사용한다(Story 3.8의 pricechk/갭 2단 감지와 유사하게 명시적 감지 소스를 가짐).
+**Then** LS 종목 상태 조회 TR(예: 일봉 조회 응답의 상장폐지/거래정지 상태 코드 — 정확한 필드는 구현 시점에 LS OpenAPI 문서로 재확인 필요)이 상장폐지를 보고하는 것을 감지 트리거로 사용한다(Story 3.5의 pricechk/갭 2단 감지와 유사하게 명시적 감지 소스를 가짐).
 
 **Given** 상장폐지 감지 트리거가 발동하는 경우
 **When** 이를 감지하면
-**Then** Story 3.7의 correction event로 `DELISTED` 상태로 종결되고 추적이 중단되며, **능동 알림을 발생시킨다(AD-10 알림 계약 — GitHub Issue로 "필요 조치" 항목 생성, 수신 확인까지 open).**
+**Then** Story 3.8의 correction event로 `DELISTED` 상태로 종결되고 추적이 중단되며, **능동 알림을 발생시킨다(AD-10 알림 계약 — GitHub Issue로 "필요 조치" 항목 생성, 수신 확인까지 open).**
 
 **Given** DELISTED로 종결된 경우
 **When** 이후 배치가 추적 대상을 산출하면
@@ -1063,31 +1083,11 @@ So that 장애 발생 시 projection을 event로부터 안전하게 복구할 �
 
 Neo가 태깅된 각 후보의 2일전/1일전/당일 가격·수급, 시장 전체 수급 맥락, '좋은 수급' 힌트를 확인해 5분 안에 매수 판단을 내린다.
 
-**스프린트 계획 노트:** 이 에픽은 수집(4.1-4.6)·화면(4.7-4.11) 2개 영역, 11개 스토리로 하나의 스프린트 단위로 보기엔 크다. Sprint Planning 단계에서 최소 2개 서브 배치(수집 로직 → UI/필터)로 나눠 진행할 것을 권장한다. 단, Story 4.1(`supply_3day` 스키마)은 Epic 2 Story 2.6이 이를 전제(선행조건 노트 참조)로 하므로, Epic 2의 태깅 UI 배치보다 먼저 또는 그와 동시에 배치되어야 한다.
+**스프린트 계획 노트:** 이 에픽은 수집(4.1-4.5)·화면(4.6-4.10) 2개 영역, 10개 스토리로 하나의 스프린트 단위로 보기엔 크다. Sprint Planning 단계에서 최소 2개 서브 배치(수집 로직 → UI/필터)로 나눠 진행할 것을 권장한다. 참고로 일부 수급 스키마(원래 Epic 4 Story 4.1 `supply_3day`)는 Epic 2 Story 2.6으로 이동되어 오늘의 후보 카드 UI(2.7)의 선행조건으로 이미 배치되어 있으며, 이 에픽의 수집 스토리들은 그 스키마를 전제로 한다.
 
 **FRs covered:** FR4, FR5, FR7
 
-### Story 4.1: `supply_3day` 스키마
-
-As a Neo,
-I want 후보별 3일치 가격·수급 데이터가 저장될 스키마가 마련되기를,
-So that 수집 stage와 화면이 이 위에서 동작할 수 있다.
-
-**Acceptance Criteria:**
-
-**Given** migration을 적용하면
-**Then** `supply_3day`(candidate_id FK, attempt_run_id FK, trading_day, slot `D-2|D-1|D0`, close, volume, change_pct, foreign_net, institution_net, individual_net, program_net, **investor_net_status `confirmed|pending|missing` (NOT NULL)**, collected_at, UNIQUE(candidate_id, trading_day, attempt_run_id)) 테이블이 생성된다(data-model.md).
-**And** `close`/`volume`/`change_pct`는 장중에도 실시간으로 채워지는 반면, **투자자별 순매수 4컬럼(`foreign_net`/`institution_net`/`individual_net`/`program_net`)은 `numeric NULLABLE`**이며, `investor_net_status`가 이 컬럼들의 상태를 행 단위로 선언한다 — `confirmed`(종가 확정 실측값, 실제 0 포함) / `pending`(장중 미확정 — t1702/t1637 투자자별 필드가 전부 0인 상태, 순매수는 NULL) / `missing`(미수집 — 순매수는 NULL). **NULL과 실젯값(0 포함)을 서로 대체하지 않는다**(일관성 규칙 — `미수집·미확정·실제 0` 구분). 4컬럼 중 어느 하나라도 확정값이 없으면 `confirmed`가 될 수 없다.
-
-**Given** 후보가 태깅된 경우
-**When** 이 테이블을 참조하면
-**Then** candidate_id FK로 Epic 1의 `candidates`, Epic 2의 `candidate_tags`와 연결된다.
-
-**Given** 저장 정리 정책을 확인하는 경우
-**When** NFR-4를 검토하면
-**Then** D0의 장중 이력 스냅샷만 정리 대상(90일 잠정)이고 D-2/D-1 행은 정리 대상이 아님이 문서화된다.
-
-### Story 4.2: t1702 종목별 가격·수급 수집
+### Story 4.1: t1702 종목별 가격·수급 수집
 
 As a Neo,
 I want 각 태깅된 후보의 2일전/1일전/당일 종가·등락율·거래량·외인·기관·개인 순매수가 자동 수집되기를,
@@ -1111,7 +1111,7 @@ So that 후보 근거 패널에 표시할 데이터가 확보된다.
 **When** Epic 1 Story 1.3의 stage-write RPC를 호출하면
 **Then** `stage_status.supply_3day`가 `success`로 기록되고, 이 stage가 `publish_attempt`의 필수 stage 목록에 포함되며 Story 1.8의 `get_dashboard_snapshot()`이 이 시점부터 `supply_3day` section을 반영한다.
 
-### Story 4.3: t1637 프로그램 순매수 수집 병합
+### Story 4.2: t1637 프로그램 순매수 수집 병합
 
 As a Neo,
 I want 프로그램 순매수 데이터가 t1702 결과와 병합되기를,
@@ -1131,7 +1131,7 @@ So that 후보별 3일치 데이터의 7개 항목이 완성된다.
 **When** `supply_3day` 행을 조회하면
 **Then** 종가·거래량·등락율·외인·기관·개인·프로그램 7개 항목이 모두 채워져 있다.
 
-### Story 4.4: D0 당일 행 attempt별 누적 저장
+### Story 4.3: D0 당일 행 attempt별 누적 저장
 
 As a Neo,
 I want 당일 행이 배치마다 덮어써지지 않고 attempt별로 누적되기를,
@@ -1151,7 +1151,7 @@ So that 장중 수급 흐름의 이력을 볼 수 있다.
 **When** 정리 주기(잠정 90일)가 도래하면
 **Then** D0 장중 이력 스냅샷만 정리되고, D-2/D-1 행이나 종가 확정 시점의 D0 행은 보존 판단 기준에 따라 별도 처리됨이 문서화된다.
 
-### Story 4.5: 빈 수급 적재 방지 가드
+### Story 4.4: 빈 수급 적재 방지 가드
 
 As a Neo,
 I want 투자자별 필드가 전부 0인 응답을 실제 순매수 0으로 오인해 저장하지 않기를,
@@ -1165,7 +1165,7 @@ So that 장중 미확정 값이 조용히 오염되어 힌트(FR-7)를 틀어지
 
 **Given** 재시도 후에도 값이 채워지지 않는 경우(장중 정상 상황)
 **When** 배치가 이를 최종 처리하면
-**Then** 투자자별 순매수 4컬럼을 **NULL**로 두고 `investor_net_status = 'pending'`으로 저장되어 화면에서 "미확정"으로 렌더링되며, 확정된 0(실제 거래 없음, `confirmed` + 값 0)과 구분된다(Story 4.1 스키마, data-model.md).
+**Then** 투자자별 순매수 4컬럼을 **NULL**로 두고 `investor_net_status = 'pending'`으로 저장되어 화면에서 "미확정"으로 렌더링되며, 확정된 0(실제 거래 없음, `confirmed` + 값 0)과 구분된다(Story 2.6 스키마, data-model.md).
 
 **Given** 조회 자체가 실패해 행이 수집되지 않은 경우
 **When** 배치가 이를 처리하면
@@ -1179,7 +1179,7 @@ So that 장중 미확정 값이 조용히 오염되어 힌트(FR-7)를 틀어지
 **When** 15:36 기준 실측 근거를 확인하면
 **Then** 재시도 로직이 충분한 여유(16:00 KST 실행, 24분 여유)를 갖고 동작함을 확인한다.
 
-### Story 4.6: `market_supply` 스키마 & t1601 수집
+### Story 4.5: `market_supply` 스키마 & t1601 수집
 
 As a Neo,
 I want 코스피/코스닥 시장 전체 수급이 자동 수집되기를,
@@ -1206,7 +1206,7 @@ So that 종목별 수급이 비어 있는 장중에도 시장 맥락을 참고�
 **When** Epic 1 Story 1.3의 stage-write RPC를 호출하면
 **Then** `stage_status.market_supply`가 `success`로 기록되고, 이 stage가 `publish_attempt`의 필수 stage 목록에 포함되며 Story 1.8의 `get_dashboard_snapshot()`이 이 시점부터 `market_supply` section을 반영한다.
 
-### Story 4.7: 후보 근거 패널(Evidence panel) UI
+### Story 4.6: 후보 근거 패널(Evidence panel) UI
 
 As a Neo,
 I want 후보 카드를 열면 3일치 데이터를 근거로 확인할 수 있기를,
@@ -1224,7 +1224,7 @@ So that 수급 흐름을 판단 근거로 삼을 수 있다.
 
 **Given** 장중 당일 종목별 수급이 미확정인 경우
 **When** 패널을 렌더링하면
-**Then** `investor_net_status = 'pending'`에 따라 "미확정"으로 렌더링되며 0으로 보이지 않는다(Story 4.1 스키마).
+**Then** `investor_net_status = 'pending'`에 따라 "미확정"으로 렌더링되며 0으로 보이지 않는다(Story 2.6 스키마).
 
 **Given** 결측 데이터가 있는 경우
 **When** 패널을 렌더링하면
@@ -1238,7 +1238,7 @@ So that 수급 흐름을 판단 근거로 삼을 수 있다.
 **When** Evidence panel을 렌더링하면
 **Then** 패널 상단(원천/생성시각 라인 아래)에 **부분결측 배지**가 표시되어 "D-2/D-1/D0 중 N행이 미수집" 등 어느 슬롯이 비었는지 알리고, 정상 슬롯과 결측 슬롯(`missing`)이 시각적으로 구분된다. 이 상태는 "태깅된 후보가 없음" 빈 상태(Story 1.9/2.6)와 "완전한 후보" 사이의 **제3의 상태**로, Epic 1 Story 1.9의 "배치 실패 시 실패 상태가 우선 표시된다" 규칙을 그대로 따라 **배치 실패가 더 광범위하면 부분결측보다 실패가 우선**된다.
 
-### Story 4.8: 근거 패널 반응형 전환
+### Story 4.7: 근거 패널 반응형 전환
 
 As a Neo,
 I want 좁은 화면에서도 3일치 데이터를 읽기 편하게 확인할 수 있기를,
@@ -1262,7 +1262,7 @@ So that 모바일에서도 최소한의 확인이 가능하다.
 **When** 접근성을 확인하면
 **Then** 행/열 헤더가 제공되고 숫자 단위와 기준일이 숨겨지지 않는다.
 
-### Story 4.9: 시장 전체 수급 패널 UI
+### Story 4.8: 시장 전체 수급 패널 UI
 
 As a Neo,
 I want 코스피/코스닥 시장 전체 수급을 한눈에 볼 수 있기를,
@@ -1286,7 +1286,7 @@ So that 종목별 수급이 비어있는 장중에도 시장 맥락을 참고할
 **When** 패널 상단을 확인하면
 **Then** "장중 참고" 라벨이 고정 표시되어 시장 수급이 참고 정보임을 명시한다.
 
-### Story 4.10: '좋은 수급' 힌트 계산 view
+### Story 4.9: '좋은 수급' 힌트 계산 view
 
 As a Neo,
 I want 힌트가 UI가 아니라 버전 관리된 SQL view에서 계산되기를,
@@ -1304,7 +1304,7 @@ So that Python과 UI가 힌트를 다르게 계산하는 불일치가 생기지 
 
 **Given** 데이터가 없어 판정할 수 없는 경우(장중 미확정 `pending`, 미수집 `missing`)
 **When** 판정하면
-**Then** "판정 불가"로 표시되며 "미충족"으로 잘못 표시되지 않는다. view는 순매수 컬럼의 NULL을 "판정 불가"로, `confirmed`+실제 0을 "미충족"으로 구분해야 한다(일관성 규칙, Story 4.1 참조).
+**Then** "판정 불가"로 표시되며 "미충족"으로 잘못 표시되지 않는다. view는 순매수 컬럼의 NULL을 "판정 불가"로, `confirmed`+실제 0을 "미충족"으로 구분해야 한다(일관성 규칙, Story 2.6 참조).
 
 **Given** 장중 시점인 경우
 **When** 힌트를 조회하면
@@ -1318,7 +1318,7 @@ So that Python과 UI가 힌트를 다르게 계산하는 불일치가 생기지 
 **When** migration gate 테스트를 실행하면
 **Then** 두 결과가 동등함이 검증된다(AD-8).
 
-### Story 4.11: 힌트 배지 통합 & 필터
+### Story 4.10: 힌트 배지 통합 & 필터
 
 As a Neo,
 I want 후보 카드에서 수급 힌트를 바로 확인하고 조건별로 후보를 걸러볼 수 있기를,
@@ -1326,14 +1326,14 @@ So that 여러 후보 중 우선순위를 빠르게 정할 수 있다.
 
 **Acceptance Criteria:**
 
-**Given** Story 4.10의 힌트 view 결과가 있는 경우
+**Given** Story 4.9의 힌트 view 결과가 있는 경우
 **When** Candidate summary card를 렌더링하면
 **Then** 수급 힌트(좋은 수급/미충족/판정 불가)가 카드에 표시된다(UX-DR4 연계).
 
 **Given** 전략/수급힌트/시그널상태/원천 필터를 적용하는 경우
 **When** 사용자가 필터를 선택하면
 **Then** 후보 목록이 해당 조건으로 걸러진다.
-**And** 수급 데이터에 부분결측이 있는 후보를 명시적으로 제외/포함할 수 있는 "수급 결측 포함/제외" 필터 옵션이 제공되어, 데이터 정합성이 필요한 분석(예: `좋은 수급` 비율 확인)에서 부분결측 후보를 제외할 수 있다(Story 2.6/4.7의 부분결측 상태와 연동).
+**And** 수급 데이터에 부분결측이 있는 후보를 명시적으로 제외/포함할 수 있는 "수급 결측 포함/제외" 필터 옵션이 제공되어, 데이터 정합성이 필요한 분석(예: `좋은 수급` 비율 확인)에서 부분결측 후보를 제외할 수 있다(Story 2.7/4.7의 부분결측 상태와 연동).
 
 **Given** 필터 결과가 0건인 경우
 **When** 화면을 렌더링하면
