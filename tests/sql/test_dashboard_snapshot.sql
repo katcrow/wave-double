@@ -1,0 +1,137 @@
+-- Supabase SQL fixture for Story 1.8.
+-- 실행 전 202609020000_create_dashboard_snapshot.sql까지의 모든 migration을 적용한다.
+-- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
+begin;
+
+-- 시나리오 1: 첫 발행 이전 -- no_snapshot=true, result_code='NO_SNAPSHOT', complete_snapshot=null.
+do $$
+declare snapshot jsonb;
+begin
+  snapshot := public.get_dashboard_snapshot();
+  if (snapshot->>'no_snapshot')::boolean is not true then raise exception 'expected no_snapshot=true on empty db'; end if;
+  if snapshot->>'result_code' <> 'NO_SNAPSHOT' then raise exception 'expected result_code=NO_SNAPSHOT on empty db'; end if;
+  if snapshot->'complete_snapshot' <> 'null'::jsonb then raise exception 'expected complete_snapshot=null on empty db'; end if;
+  if snapshot->'latest_attempt' <> 'null'::jsonb then raise exception 'expected latest_attempt=null on empty db'; end if;
+  if snapshot->'available_partial_sections' <> '[]'::jsonb then
+    raise exception 'expected no available partial sections on empty db';
+  end if;
+  if snapshot->'missing_sections' <> '["candidates", "tags", "supply_3day", "market_supply", "outcome_tracking"]'::jsonb then
+    raise exception 'expected all five sections missing on empty db (candidates included)';
+  end if;
+end $$;
+
+-- 시나리오 2: 정상 발행 존재 -- complete_snapshot에 candidates section만 포함, available_partial_sections=['candidates'].
+-- premarket을 사용한다: close는 canonical_success_run_id 고정으로 재발행이 replay되어 시나리오 3의 "새 attempt"를 만들 수 없다.
+do $$
+declare
+  key text := 'premarket:2099-02-01'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_id uuid := gen_random_uuid();
+  snapshot jsonb;
+begin
+  started := public.start_attempt(key, date '2099-02-01', 'premarket', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(jsonb_build_object(
+      'candidate_id', candidate_id, 'ticker', '005930', 'name', 'Samsung', 'trading_value', 100,
+      'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', 'h1', 'original_count', 1, 'excluded_count', 0, 'truncated_count', 0, 'candidate_count', 1));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.publish_attempt(attempt_id, fence, lease);
+  -- 트랜잭션 내내 now()가 고정되므로, 시나리오 간 started_at 동률로 latest_attempt 정렬이 우연에 기대지 않도록 명시 설정한다.
+  update public.runs set started_at = timestamptz '2099-02-01 00:00:00+00' where run_id = attempt_id;
+
+  snapshot := public.get_dashboard_snapshot();
+  if (snapshot->>'no_snapshot')::boolean is not false then raise exception 'expected no_snapshot=false after publish'; end if;
+  if snapshot->'complete_snapshot'->>'run_id' <> attempt_id::text then raise exception 'complete_snapshot did not point at published run'; end if;
+  if (snapshot->'complete_snapshot'->'sections'->'candidates'->>'candidate_count')::integer <> 1 then
+    raise exception 'expected candidate_count=1 in complete_snapshot';
+  end if;
+  if snapshot->'available_partial_sections' <> '["candidates"]'::jsonb then raise exception 'expected available_partial_sections=[candidates]'; end if;
+  if snapshot->'missing_sections' <> '["tags", "supply_3day", "market_supply", "outcome_tracking"]'::jsonb then
+    raise exception 'expected four missing sections after publish';
+  end if;
+end $$;
+
+-- 시나리오 3: 최신 attempt가 실패 -- latest_attempt는 새 attempt를 반영하되 complete_snapshot은 이전 published run 유지(stale).
+do $$
+declare
+  key text := 'premarket:2099-02-01'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  prior_complete_run_id uuid;
+  snapshot jsonb;
+begin
+  select (get_dashboard_snapshot()->'complete_snapshot'->>'run_id')::uuid into prior_complete_run_id;
+
+  started := public.start_attempt(key, date '2099-02-01', 'premarket', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'failed');
+  update public.runs set started_at = timestamptz '2099-02-01 00:00:01+00' where run_id = attempt_id;
+
+  snapshot := public.get_dashboard_snapshot();
+  if (snapshot->'latest_attempt'->>'run_id')::uuid <> attempt_id then raise exception 'latest_attempt did not track new failed attempt'; end if;
+  if snapshot->'latest_attempt'->>'status' <> 'failed' then raise exception 'expected latest_attempt.status=failed'; end if;
+  if (snapshot->'complete_snapshot'->>'run_id')::uuid <> prior_complete_run_id then
+    raise exception 'complete_snapshot should remain stale on the prior published run';
+  end if;
+end $$;
+
+-- 시나리오 4: partial attempt 존재 -- latest_partial_run_id가 latest_attempt와 같은 logical_run_key 기준으로 별도 반환되고 current_complete_run_id는 그대로.
+do $$
+declare
+  key text := 'intraday:2099-02-02:10:00'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  snapshot jsonb;
+begin
+  started := public.start_attempt(key, date '2099-02-02', 'intraday', 'schedule', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'partial', '{}'::jsonb, 3);
+  update public.runs set started_at = timestamptz '2099-02-02 00:00:00+00' where run_id = attempt_id;
+
+  snapshot := public.get_dashboard_snapshot();
+  if (snapshot->'latest_attempt'->>'run_id')::uuid <> attempt_id then raise exception 'latest_attempt did not track the newest (intraday partial) attempt'; end if;
+  if (snapshot->>'latest_partial_run_id')::uuid <> attempt_id then raise exception 'expected latest_partial_run_id to reflect the partial attempt'; end if;
+  if snapshot->'complete_snapshot' is null or snapshot->'complete_snapshot' = 'null'::jsonb then
+    raise exception 'complete_snapshot should not disappear due to an unrelated partial attempt';
+  end if;
+  if (snapshot->>'unprocessed_items')::integer <> 3 then raise exception 'expected unprocessed_items to reflect latest_attempt.unprocessed_count'; end if;
+end $$;
+
+-- 시나리오 5: 브라우저(anon) 조회 -- candidates 원본 행은 RLS로 차단되고, get_dashboard_snapshot()만
+-- security definer로 그 잠긴 테이블을 집계해 candidate_count를 안전하게 노출한다(AD-7, 리뷰 발견 patch).
+set local role anon;
+
+do $$
+declare direct_row_count integer;
+begin
+  select count(*) into direct_row_count from public.candidates;
+  if direct_row_count <> 0 then raise exception 'anon should not be able to read candidates rows directly via RLS'; end if;
+end $$;
+
+do $$
+declare snapshot jsonb;
+begin
+  snapshot := public.get_dashboard_snapshot();
+  if snapshot is null then raise exception 'anon should be able to call get_dashboard_snapshot via RLS-allowed SELECT'; end if;
+  if snapshot->'complete_snapshot'->>'logical_run_key' <> 'premarket:2099-02-01' then
+    raise exception 'anon-visible complete_snapshot should still point at the published premarket run';
+  end if;
+  if (snapshot->'complete_snapshot'->'sections'->'candidates'->>'candidate_count')::integer <> 1 then
+    raise exception 'security definer aggregation should still report candidate_count=1 for anon despite RLS lockout on candidates';
+  end if;
+end $$;
+
+do $$
+declare caught boolean := false;
+begin
+  begin
+    perform public.write_candidates(gen_random_uuid(), 1, gen_random_uuid(), '[]'::jsonb,
+      jsonb_build_object('original_count', 0, 'excluded_count', 0, 'truncated_count', 0, 'candidate_count', 0));
+  exception when others then caught := true;
+  end;
+  if not caught then raise exception 'anon should not have execute privilege on write_candidates'; end if;
+end $$;
+
+reset role;
+
+rollback;
