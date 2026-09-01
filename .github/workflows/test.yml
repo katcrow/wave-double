@@ -31,6 +31,9 @@ jobs:
       - name: Backtest tests (Python)
         run: uv run --with pandas --with numpy --with pyarrow --with pytest pytest backtest -q
 
+      - name: Calendar tests (Python)
+        run: uv run --with pytest pytest tests/domain/test_calendar.py tests/batch/test_calendar.py -q
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

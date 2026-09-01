@@ -15,3 +15,6 @@ dependencies = [
 
 [tool.uv.workspace]
 members = ["backtest", "apps/batch", "packages/domain"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "packages/domain"]
