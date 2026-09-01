@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 
 import pytest
 
@@ -6,6 +6,7 @@ from domain.calendar import (
     CalendarStatus,
     TradingCalendarEntry,
     decide_from_daily_bar,
+    floor_to_half_hour,
     intraday_slots,
 )
 
@@ -41,3 +42,15 @@ def test_invalid_open_session_range_is_rejected():
     entry = TradingCalendarEntry(date(2026, 9, 1), True, time(15), time(9))
     with pytest.raises(ValueError, match="invalid session range"):
         intraday_slots(entry)
+
+
+def test_floor_to_half_hour_snaps_down_to_the_boundary():
+    assert floor_to_half_hour(datetime(2026, 9, 1, 9, 7, 33, 500)) == datetime(2026, 9, 1, 9, 0)
+    assert floor_to_half_hour(datetime(2026, 9, 1, 9, 29, 59, 999999)) == datetime(2026, 9, 1, 9, 0)
+    assert floor_to_half_hour(datetime(2026, 9, 1, 9, 30, 0)) == datetime(2026, 9, 1, 9, 30)
+    assert floor_to_half_hour(datetime(2026, 9, 1, 9, 59, 59)) == datetime(2026, 9, 1, 9, 30)
+
+
+def test_floor_to_half_hour_is_idempotent_at_exact_boundaries():
+    assert floor_to_half_hour(datetime(2026, 9, 1, 0, 0)) == datetime(2026, 9, 1, 0, 0)
+    assert floor_to_half_hour(datetime(2026, 9, 1, 23, 30)) == datetime(2026, 9, 1, 23, 30)

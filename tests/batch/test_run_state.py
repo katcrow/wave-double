@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from apps.batch.run_state import RunStateError, RunStateGateway
+from apps.batch.run_state import RunStateError, RunStateGateway, parse_attempt
 from domain.run_state import BatchKind, LogicalRunKey, StageStatus, Trigger
 
 
@@ -131,3 +131,52 @@ def test_gateway_reaper_sends_observation_time_when_supplied():
     client = FakeRpc()
     RunStateGateway(client).reap(now=datetime(2026, 9, 1, tzinfo=timezone.utc))
     assert client.calls == [("reap_expired_attempts", {"p_now": "2026-09-01T00:00:00+00:00"})]
+
+
+def test_gateway_skip_sends_fence_lease_and_skip_reason():
+    client = FakeRpc()
+    gateway = RunStateGateway(client)
+    run_id, lease = uuid4(), uuid4()
+    gateway.skip(run_id, 3, lease, "holiday")
+    assert client.calls == [(
+        "skip_attempt",
+        {"p_run_id": str(run_id), "p_fence_token": 3, "p_lease_token": str(lease), "p_skip_reason": "holiday"},
+    )]
+
+
+def test_gateway_skip_rejects_non_positive_fence_and_empty_reason_before_rpc():
+    client = FakeRpc()
+    gateway = RunStateGateway(client)
+    with pytest.raises(ValueError, match="positive"):
+        gateway.skip(uuid4(), 0, uuid4(), "holiday")
+    with pytest.raises(ValueError, match="non-empty"):
+        gateway.skip(uuid4(), 1, uuid4(), "   ")
+    assert client.calls == []
+
+
+def test_parse_attempt_extracts_typed_fields_from_dict_payload():
+    from datetime import datetime, timezone
+
+    run_id, lease = uuid4(), uuid4()
+    lease_expires = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    payload = {
+        "run_id": str(run_id),
+        "logical_run_key": "close:2026-09-01",
+        "attempt_no": 1,
+        "fence_token": 2,
+        "lease_token": str(lease),
+        "lease_expires_at": lease_expires,
+    }
+    attempt = parse_attempt(payload)
+    assert attempt.run_id == run_id
+    assert attempt.logical_run_key == "close:2026-09-01"
+    assert attempt.attempt_no == 1
+    assert attempt.fence_token == 2
+    assert attempt.lease_token == lease
+    assert attempt.lease_expires_at == lease_expires
+
+
+def test_parse_attempt_rejects_incomplete_payload():
+    with pytest.raises(RunStateError, match="incomplete data") as raised:
+        parse_attempt({"run_id": str(uuid4())})
+    assert raised.value.code == "INVALID_ATTEMPT"

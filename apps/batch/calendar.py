@@ -4,7 +4,13 @@ from collections.abc import Callable
 from datetime import date
 from typing import Protocol
 
-from domain.calendar import CalendarDecision, decide_from_daily_bar, unavailable_decision
+from domain.calendar import (
+    CalendarDecision,
+    CalendarStatus,
+    TradingCalendarEntry,
+    decide_from_daily_bar,
+    unavailable_decision,
+)
 
 
 class DailyBarProvider(Protocol):
@@ -13,6 +19,23 @@ class DailyBarProvider(Protocol):
 
 class CalendarRepository(Protocol):
     def upsert(self, decision: CalendarDecision) -> None: ...
+    def get(self, trading_day: date) -> TradingCalendarEntry | None: ...
+
+
+def resolve_for_schedule(
+    trading_day: date,
+    provider: DailyBarProvider,
+    repository: CalendarRepository,
+) -> CalendarDecision:
+    """캐시를 먼저 조회하고, 캐시 미스일 때만 ``resolve_and_cache``(provider 1콜)를 호출한다."""
+    try:
+        cached = repository.get(trading_day)
+    except Exception:
+        cached = None
+    if cached is not None:
+        status = CalendarStatus.OPEN if cached.is_open else CalendarStatus.CLOSED
+        return CalendarDecision(status, cached)
+    return resolve_and_cache(trading_day, provider, repository)
 
 
 def resolve_and_cache(

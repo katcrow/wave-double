@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Protocol
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from domain.candidate_selection import CandidateSelection, merge_candidate_sources
 from domain.run_state import LogicalRunKey, Stage, StageStatus, Trigger
 
 from .ls_client import LsResponse
-from .run_state import Attempt, RunStateGateway, RunStateError
+from .run_state import RunStateGateway, parse_attempt
 
 PRIMARY_TR = "t1859"
 FALLBACK_TR = "t1856"
@@ -28,19 +28,6 @@ class CandidateStageResult:
     candidate_count: int
     selection: CandidateSelection | None = None
     fallback_used: bool = False
-
-
-def _attempt(value: Any) -> Attempt:
-    if isinstance(value, list):
-        value = value[0] if value else {}
-    if hasattr(value, "data"):
-        value = value.data
-    if not isinstance(value, dict):
-        raise RunStateError("INVALID_ATTEMPT", "start_attempt returned invalid data")
-    try:
-        return Attempt(UUID(str(value["run_id"])), str(value["logical_run_key"]), int(value["attempt_no"]), int(value["fence_token"]), UUID(str(value["lease_token"])), value["lease_expires_at"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise RunStateError("INVALID_ATTEMPT", "start_attempt returned incomplete data") from exc
 
 
 def _response_records(response: LsResponse) -> Any:
@@ -72,7 +59,7 @@ def run_candidate_stage(
     started = gateway.start_attempt(key, trigger, lease_seconds=lease_seconds)
     if isinstance(started, dict) and started.get("replayed"):
         return CandidateStageResult("success", "REPLAYED", 0)
-    attempt = _attempt(started)
+    attempt = parse_attempt(started)
     gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.PENDING, StageStatus.RUNNING)
     request_params = params if params is not None else {"t1859InBlock": {"query_index": query_index or ""}}
 

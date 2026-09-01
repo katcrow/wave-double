@@ -37,6 +37,30 @@ class RpcResult:
     data: Any
 
 
+def parse_attempt(value: Any) -> Attempt:
+    """``start_attempt`` RPC 응답을 ``Attempt``로 파싱한다.
+
+    candidate_stage와 scheduler가 동일한 파싱 규칙을 공유한다.
+    """
+    if isinstance(value, list):
+        value = value[0] if value else {}
+    if hasattr(value, "data"):
+        value = value.data
+    if not isinstance(value, dict):
+        raise RunStateError("INVALID_ATTEMPT", "start_attempt returned invalid data")
+    try:
+        return Attempt(
+            UUID(str(value["run_id"])),
+            str(value["logical_run_key"]),
+            int(value["attempt_no"]),
+            int(value["fence_token"]),
+            UUID(str(value["lease_token"])),
+            value["lease_expires_at"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RunStateError("INVALID_ATTEMPT", "start_attempt returned incomplete data") from exc
+
+
 class RunStateGateway:
     def __init__(self, client: RpcClient) -> None:
         self._client = client
@@ -169,4 +193,19 @@ class RunStateGateway:
         return self._call(
             "publish_attempt",
             {"p_run_id": str(run_id), "p_fence_token": fence_token, "p_lease_token": str(lease_token)},
+        )
+
+    def skip(self, run_id: UUID, fence_token: int, lease_token: UUID, skip_reason: str) -> Any:
+        if fence_token <= 0:
+            raise ValueError("fence_token must be positive")
+        if not skip_reason or not skip_reason.strip():
+            raise ValueError("skip_reason must be non-empty")
+        return self._call(
+            "skip_attempt",
+            {
+                "p_run_id": str(run_id),
+                "p_fence_token": fence_token,
+                "p_lease_token": str(lease_token),
+                "p_skip_reason": skip_reason,
+            },
         )
