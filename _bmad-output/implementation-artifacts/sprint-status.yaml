@@ -39,7 +39,7 @@ development_status:
   1-1-프로젝트-스캐폴딩-개발-환경-고정: done
   1-2-거래-캘린더-확보: done
   1-3-배치-실행-계보-상태머신: done
-  1-4-ls-openapi-공통-클라이언트: backlog
+  1-4-ls-openapi-공통-클라이언트: done
   1-5-후보-모집단-자동-갱신: backlog
   1-6-후보-모집단-대체-경로-폴백: backlog
   1-7-스케줄-자동-배치-실행: backlog
