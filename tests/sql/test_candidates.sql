@@ -6,7 +6,7 @@ begin
   started := public.start_attempt(key, date '2099-02-01', 'close', 'manual', 300);
   run_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
   perform public.write_stage(run_id, 'candidates', fence, lease, 'pending', 'running');
-  perform public.write_candidates(run_id, fence, lease, jsonb_build_array(jsonb_build_object('candidate_id', candidate, 'ticker', '005930', 'name', '삼성전자', 'trading_value', 100)), jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 1, 'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_candidates(run_id, fence, lease, jsonb_build_array(jsonb_build_object('candidate_id', candidate, 'ticker', '005930', 'name', '삼성전자', 'trading_value', 100, 'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))), jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 1, 'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
   if (select count(*) from public.candidate_source_contrib where attempt_run_id = run_id) <> 1 then raise exception 'contribution missing'; end if;
   if (select count(*) from public.candidates where attempt_run_id = run_id and truncated) <> 0 then raise exception 'truncated candidates must not be persisted'; end if;
   if (select sum(contribution_weight) from public.candidate_source_contrib where attempt_run_id = run_id) <> 1 then raise exception 'weight mismatch'; end if;

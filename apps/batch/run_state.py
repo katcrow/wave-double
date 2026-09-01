@@ -100,6 +100,7 @@ class RunStateGateway:
         *,
         result: dict[str, Any] | None = None,
         unprocessed_count: int = 0,
+        fallback_used: bool = False,
     ) -> Any:
         if fence_token <= 0:
             raise ValueError("fence_token must be positive")
@@ -121,6 +122,7 @@ class RunStateGateway:
                 "p_status": target,
                 "p_result": result or {},
                 "p_unprocessed_count": unprocessed_count,
+                "p_fallback_used": fallback_used,
             },
         )
 
