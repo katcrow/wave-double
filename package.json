@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run build -w apps/web",
     "test": "npm run test -w apps/web",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:smoke": "playwright test --config=playwright.smoke.config.ts"
   },
   "devDependencies": {
     "typescript": "5.9.3",
