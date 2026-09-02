@@ -2,9 +2,9 @@
 title: '오늘의 후보 카드 UI'
 type: 'feature'
 created: '2026-09-03'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 baseline_revision: 'f00bb2365282e2efa40c92e2ee931733ad0010f5'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-2-context.md'
@@ -136,3 +136,29 @@ deferred:
   - `[low]` `[patch]` SQL이 이미 `order by t.strategy`로 정렬한 배열을 `buildCandidateCardViewModels`가 클라이언트에서 다시 `.sort()`하는 중복 연산이 있었다(blind-hunter) — SQL을 단일 출처로 유지하고 클라이언트 측 재정렬을 제거했다.
   - `[low]` `[patch]` `CandidateCard`가 종목명을 순수 `span`으로 렌더링해 카드 그리드에 스크린리더가 탐색할 시맨틱 헤딩 구조가 없었다(blind-hunter) — 종목명 요소를 `h2`로 바꾸고 기존 시각 스타일은 CSS로 유지했다.
   - `[low]` `[patch]` 스펙 Verification 절이 "e2e/home.spec.ts 보강된 카드/빈 상태 케이스 통과"라고 적어 실제로는 추가되지 않은 자동화를 한 것처럼 과장했다(intent-alignment + edge-case-hunter) — Verification 절 문구를 실제 수행 범위(기존 리다이렉트 테스트만 그대로 통과, 카드/빈 상태 검증은 Manual checks로 수행)에 맞게 정정했다.
+
+## Auto Run Result
+
+- **구현 요약:** Story 2.7 "오늘의 후보 카드 UI"를 구현했다. `get_today_candidate_cards(p_run_id)` RPC(신규)로 태그된(active) 후보만 전략 A/B/C 태그·D0 수급 부분결측 여부와 함께 조회하고, `/`에서 결과가 있으면 카드 그리드로, 없으면 Epic 1의 기존 빈 상태를 그대로 렌더링한다. 전략 태그 클릭은 신규 `/strategies/[strategy]` 자리표시자 페이지로 이동하는 보조 액션이며, 다중 태그는 고정 임계값(`MAX_VISIBLE_TAGS=2`) 기반 `+N` 접힘으로 표시한다.
+- **변경 파일:**
+  - `infra/supabase/migrations/202609022100_create_get_today_candidate_cards.sql` — 신규: `get_today_candidate_cards(p_run_id)` RPC(초기 버전, 이후 202609022200에서 패치).
+  - `infra/supabase/migrations/202609022200_fix_get_today_candidate_cards_d0_dedupe.sql` — 신규: 리뷰에서 발견된 D0 중복 후보 노출 버그를 `left join lateral`(trading_day 최신 1행)로 수정.
+  - `apps/web/lib/dashboard-types.ts` — `TodayCandidateCardRow` 타입 추가.
+  - `apps/web/lib/candidate-cards.ts`(신규) — `buildCandidateCardViewModels()` 순수 함수, `MAX_VISIBLE_TAGS` 상수.
+  - `apps/web/lib/candidate-cards.test.ts`(신규) — I/O 매트릭스 유닛 테스트 8건.
+  - `apps/web/lib/strategy-labels.ts`(신규) — `STRATEGY_LABEL`/`getStrategyLabel()` 단일 출처(리뷰 patch로 중복 제거하며 추가).
+  - `apps/web/components/dashboard/StrategyTagList.tsx`, `CandidateCard.tsx`(신규) — 태그 배지 목록, 카드 컴포넌트.
+  - `apps/web/app/page.tsx` — RPC 호출 + 카드/빈 상태 조건부 렌더, RPC 실패 로깅·참고 카운트 텍스트 분리.
+  - `apps/web/app/strategies/[strategy]/page.tsx`(신규) — 자리표시자 페이지, own-property 안전 조회.
+  - `apps/web/app/globals.css` — 카드 그리드/태그 배지 스타일.
+  - `e2e/home.spec.ts` — 자동화 범위 설명 주석만 추가(기존 테스트 불변).
+- **리뷰 결과:** 4개 레이어(blind-hunter/edge-case-hunter/verification-gap/intent-alignment) 병렬 실행 · patch 7건 전부 수정(high 1, medium 2, low 4) · defer 1건 기록(low, 인증 e2e 픽스처 부재는 이 스토리 이전부터의 저장소 전반 제약) · dismissed 6건(근거는 Review Triage Log 참조) · bad_spec·intent_gap 없음.
+- **추적 리뷰 권장:** patch 중 high 1건 포함 → **권장함**(high 존재 규칙 적용).
+- **수행한 검증:**
+  - `node --test lib/*.test.ts`(apps/web) — 55/55 통과(신규 `candidate-cards.test.ts` 8건 포함).
+  - `npx tsc --noEmit`(apps/web) — clean.
+  - `npx playwright test e2e/home.spec.ts`(repo root) — 기존 2건 통과(신규 케이스 없음, Manual checks로 대체).
+  - `git diff --check` — whitespace 오류 없음(CRLF 안내 경고만).
+  - 라이브 Supabase(qqhjeumlecaudsiqhhdu) 검증: 두 마이그레이션(202609022100/202609022200) 적용 확인. 3태그+D0 pending 후보 → `supply_partial_missing:true`, 1태그+D0 없음 후보 → `false`, 미태깅 후보 제외를 합성 데이터로 확인 후 정리(잔여 0건). 패치 후 동일 후보에 D0 2건(다른 trading_day/investor_net_status)을 시딩해 카드 배열에 정확히 1건만 반환됨을 롤백 트랜잭션으로 재검증.
+  - I/O 매트릭스 7개 시나리오: 단일/다중 태그·+N 접힘·부분결측 유무는 유닛 테스트로, 빈 상태·배치 실패 우선순위·태그 클릭 네비게이션은 기존 저장소 관례(인증 세션 없이는 e2e 불가)에 따라 Manual checks + 코드 경로 검토로 커버.
+- **잔여 리스크:** ① 인증된 세션에서의 카드 그리드/빈 상태 실제 렌더링과 태그 클릭 네비게이션은 자동화 테스트가 없다(defer, low, 저장소 전반의 기존 제약). ② 아직 Epic 4(수급 수집) 미구현이라 프로덕션에 실제 태깅 후보/D0 데이터가 없어, 화면은 RPC 계약 수준에서만 검증됐고 실사용자 트래픽으로 카드가 렌더링되는 모습은 아직 관측되지 않았다.
