@@ -28,14 +28,15 @@ STOCH_DB = dict(k_period=14, d_period=3, threshold=20.0, wk_period=20, wd_period
 DIV3 = dict(k_period=5, d_period=3, div_window=20, min_gap=5)
 
 
-def build_signals(df, tp_pct, sl_pct, ticker):
+def build_signals(df, tp_pct, sl_pct, ticker, *, strict: bool = False):
     """신호 A(OBV합집합), B(스토캐스틱), C(3바닥 다이버전스)를 각각 마스크로 반환"""
     obv_mask = pd.Series(False, index=df.index)
     for _, iname, p in VOLUME:
         try:
             obv_mask |= get_signal_fn(iname)(df, **p).fillna(False)
         except Exception:
-            pass
+            if strict:
+                raise
     a = pd.Series(False, index=df.index)
     for lab, ina, pa, inb, pb in TOP3:
         try:
@@ -43,14 +44,19 @@ def build_signals(df, tp_pct, sl_pct, ticker):
             mb = get_signal_fn(inb)(df, **pb)
             a |= (ma.fillna(False) & mb.fillna(False)) & obv_mask
         except Exception:
-            pass
+            if strict:
+                raise
     try:
         b = get_signal_fn("stoch_db_weekly_k")(df, **STOCH_DB).fillna(False)
     except Exception:
+        if strict:
+            raise
         b = pd.Series(False, index=df.index)
     try:
         c = get_signal_fn("div_stoch3")(df, **DIV3).fillna(False)
     except Exception:
+        if strict:
+            raise
         c = pd.Series(False, index=df.index)
     return a, b, c
 
