@@ -20,15 +20,23 @@ deferred:
       tests/sql/test_dispatch_outbox.sql, .github/workflows/test.yml
     severity: medium
   - summary: >-
-      새 server-only 환경변수 8개(GITHUB_DISPATCH_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME,
-      CRON_CALLBACK_SECRET, SUPABASE_JWKS_URL, SUPABASE_JWT_ISSUER, OPERATOR_ALLOWLIST,
-      SUPABASE_SERVICE_ROLE_KEY 재사용)를 문서화하는 .env.example/README가 없다.
+      새 server-only 환경변수는 실제로 .env.local(gitignored)에 "Story 1.10" 섹션으로
+      이미 문서화돼 있다 -- 리뷰 2개 패스의 "문서화가 없다"는 지적은 부정확했다(리뷰
+      에이전트가 gitignored 파일을 열어보지 않고 리포 전체 grep만으로 판단한 결과로
+      보인다). 남은 실질적 gap은 커밋되는 .env.example이 없어 신규 환경(다른 개발자,
+      CI, 다른 배포 대상)에서는 이 목록을 볼 수 없다는 점뿐이다.
     evidence: |-
-      리뷰 2개 패스에 걸쳐 3번 독립적으로 지적됨. 코드는 누락 시 에러 코드로 안전하게
-      실패하므로 기능 결함은 아니지만, 운영자가 배포 전 무엇을 설정해야 하는지 한눈에
-      볼 곳이 없다. 이 리포에는 .env.example 자체가 story 1.10 이전부터 없었다.
+      .env.local을 직접 열어 확인한 결과 OPERATOR_ALLOWLIST/GITHUB_DISPATCH_TOKEN/
+      CRON_CALLBACK_SECRET/GITHUB_REPO_OWNER/GITHUB_REPO_NAME/SUPABASE_JWKS_URL/
+      SUPABASE_JWT_ISSUER/SUPABASE_SERVICE_ROLE_KEY가 전부 "Story 1.10" 주석 섹션
+      아래 나열돼 있고, 코드가 읽는 이름과 정확히 일치한다(구현 서브에이전트가 이번
+      세션에서 추가). 다만 이 파일에 story 1.10 이전부터 있던 미사용 `INTERNAL_CRON_SECRET`
+      (어떤 코드도 참조하지 않음)과 신규 `CRON_CALLBACK_SECRET`이 같은 용도를 가리키는
+      두 개의 이름으로 공존한다 -- 주석으로 "같은 값을 쓴다"고만 안내할 뿐 코드로 통합
+      되어 있지 않아 향후 혼동 소지가 있다. 이 리포에는 .env.example 자체가 story 1.10
+      이전부터 없었다(gitignore된 .env.local만 존재).
     location: >-
-      apps/web/app/api/dispatch/route.ts, apps/web/app/api/dispatch/worker/route.ts
+      .env.local(미버전관리), apps/web/lib/supabase-service.ts, apps/web/app/api/dispatch/worker/route.ts
     severity: low
 ---
 
