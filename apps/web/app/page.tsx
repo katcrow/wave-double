@@ -1,6 +1,8 @@
+import CandidateCard from "@/components/dashboard/CandidateCard";
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
-import type { DashboardSnapshot } from "@/lib/dashboard-types";
+import { buildCandidateCardViewModels } from "@/lib/candidate-cards";
+import type { DashboardSnapshot, TodayCandidateCardRow } from "@/lib/dashboard-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { deriveTrustBarState } from "@/lib/trust-bar";
 
@@ -24,6 +26,24 @@ export default async function HomePage() {
   const candidateCount = snapshot.complete_snapshot?.sections.candidates.candidate_count;
   const { notice } = deriveTrustBarState(snapshot);
 
+  // Story 2.7: complete_snapshot이 있을 때만 카드 원천 RPC를 호출한다. RPC 실패는 빈 상태로
+  // 폴백하되(NoticeBanner가 이미 배치 실패를 우선 노출하므로 추가 에러 UI 분기는 두지 않는다)
+  // 실패 자체는 로깅하고, 실패 케이스에서는 "참고용 · 오늘 태깅 후보 N건" 텍스트를 숨겨
+  // 진짜 0건 케이스와 RPC 실패 케이스가 같은 문구로 섞이지 않게 한다.
+  let candidateCards: ReturnType<typeof buildCandidateCardViewModels> = [];
+  let candidateCardsFetchFailed = false;
+  if (snapshot.complete_snapshot) {
+    const { data: cardRows, error: cardError } = await supabase.rpc("get_today_candidate_cards", {
+      p_run_id: snapshot.complete_snapshot.run_id,
+    });
+    if (cardError) {
+      candidateCardsFetchFailed = true;
+      console.error("get_today_candidate_cards failed", cardError);
+    } else if (Array.isArray(cardRows)) {
+      candidateCards = buildCandidateCardViewModels(cardRows as TodayCandidateCardRow[]);
+    }
+  }
+
   return (
     <section aria-labelledby="today-candidates-heading">
       <header>
@@ -33,19 +53,23 @@ export default async function HomePage() {
       <DataTrustBar snapshot={snapshot} />
       <NoticeBanner message={notice} />
 
-      {/*
-        Never: Epic 1은 태깅이 없어 `/`는 항상 빈 상태다. candidate_count는 참고 텍스트로만
-        노출하고, 후보 카드/근거 패널/시장수급 패널은 만들지 않는다.
-      */}
-      <div className="empty-state">
-        <p>오늘 태깅된 후보가 없습니다.</p>
-        <p>조건검색 결과 · 전략 시그널 기준으로 후보가 태깅됩니다.</p>
-        {typeof candidateCount === "number" && (
-          <p className="reference-text">
-            참고용 · 오늘 태깅 후보 {candidateCount}건 (후보 카드 화면은 다음 스토리에서 제공됩니다.)
-          </p>
-        )}
-      </div>
+      {candidateCards.length > 0 ? (
+        <ul className="candidate-card-grid">
+          {candidateCards.map((candidate) => (
+            <CandidateCard key={candidate.candidateId} candidate={candidate} />
+          ))}
+        </ul>
+      ) : (
+        <div className="empty-state">
+          <p>오늘 태깅된 후보가 없습니다.</p>
+          <p>조건검색 결과 · 전략 시그널 기준으로 후보가 태깅됩니다.</p>
+          {!candidateCardsFetchFailed && typeof candidateCount === "number" && (
+            <p className="reference-text">
+              참고용 · 오늘 태깅 후보 {candidateCount}건
+            </p>
+          )}
+        </div>
+      )}
     </section>
   );
 }

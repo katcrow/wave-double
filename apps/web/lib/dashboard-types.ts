@@ -79,6 +79,18 @@ export interface RunRow {
   excluded_count: number | null;
 }
 
+/**
+ * infra/supabase/migrations/202609022100_create_get_today_candidate_cards.sql의
+ * get_today_candidate_cards(p_run_id) 반환 배열 원소 shape.
+ */
+export interface TodayCandidateCardRow {
+  candidate_id: string;
+  ticker: string;
+  name: string | null;
+  strategies: string[];
+  supply_partial_missing: boolean;
+}
+
 /** infra/supabase/migrations/202609011600_create_run_lineage.sql의 logical_runs 테이블 컬럼. */
 export interface LogicalRunRow {
   logical_run_key: string;
