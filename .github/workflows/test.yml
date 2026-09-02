@@ -101,7 +101,10 @@ jobs:
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done
 
-      - name: Run dispatch_outbox SQL fixture
+      - name: Run Epic 1 SQL fixtures
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/sql/test_dispatch_outbox.sql
+        run: |
+          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql; do
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
+          done

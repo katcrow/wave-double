@@ -58,7 +58,8 @@ async function headers() {
           value: [
             "default-src 'self'",
             `script-src ${scriptSrc}`,
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+            "font-src 'self' https://cdn.jsdelivr.net",
             "img-src 'self' data:",
             "connect-src 'self' https://*.supabase.co",
             "frame-ancestors 'none'",

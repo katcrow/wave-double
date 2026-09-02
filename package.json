@@ -15,7 +15,8 @@
     "build": "npm run build -w apps/web",
     "test": "npm run test -w apps/web",
     "test:e2e": "playwright test",
-    "test:smoke": "playwright test --config=playwright.smoke.config.ts"
+    "test:smoke": "playwright test --config=playwright.smoke.config.ts",
+    "generate:read-model-types": "npx --yes supabase gen types typescript --project-id qqhjeumlecaudsiqhhdu > packages/read-model/src/database.types.ts"
   },
   "devDependencies": {
     "typescript": "5.9.3",

@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-02-2026 13:00
+last_updated: 09-02-2026 14:14
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -48,7 +48,7 @@ development_status:
   1-10-인증-수동-트리거: done
   1-11-호스팅-배포-파이프라인: done
   1-12-백업-복원-검증: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-일봉-캐시-스키마-신규-종목-초기-적재: backlog
@@ -103,3 +103,49 @@ development_status:
   5-13-bias-diagnostic-ui: backlog
   5-14-원천별-분리-조회-필터-ui: backlog
   epic-5-retrospective: optional
+action_items:
+  - id: "epic-1-retro-item-1-루트-typescript-게이트를-웹-tsconfig와-일치시키고-ci에"
+    epic: 1
+    action: "루트 TypeScript 게이트를 웹 tsconfig와 일치시키고 CI에서 녹색을 증명한다."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+  - id: "epic-1-retro-item-2-운영-supabase에-202609012200-202609021100-m"
+    epic: 1
+    action: "운영 Supabase에 202609012200~202609021100 migration을 순서대로 적용하고 dashboard/dispatch
+      RPC와 worker cron을 fixture로 검증한다."
+    owner: "운영/개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+  - id: "epic-1-retro-item-3-logical_runs-runs-rls-정책을-approved-view"
+    epic: 1
+    action: "logical_runs·runs RLS 정책을 approved view/RPC 및 batch service-role 경계와
+      함께 설계 적용 검증한다."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+  - id: "epic-1-retro-item-4-pretendard-제공-방식을-csp와-일치시킨다"
+    epic: 1
+    action: "Pretendard 제공 방식을 CSP와 일치시킨다."
+    owner: "프론트엔드"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+  - id: "epic-1-retro-item-5-clean-db-n-n-1-generated-read-model-type"
+    epic: 1
+    action: "clean DB N/N-1 generated read-model type diff SQL fixture를 포괄하는 migration
+      CI를 구현한다."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+  - id: "epic-1-retro-item-6-운영-배포-전-인증된-수동-dispatch-및-csp를-다루는-playw"
+    epic: 1
+    action: "운영 배포 전 인증된 수동 dispatch 및 CSP를 다루는 Playwright MCP smoke를 추가한다."
+    owner: "QA/개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+  - id: "epic-1-retro-item-7-스토리-key를-커밋-제목과-build-review-evidence에-표"
+    epic: 1
+    action: "스토리 key를 커밋 제목과 build/review evidence에 표준화한다."
+    owner: "개발 프로세스"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"

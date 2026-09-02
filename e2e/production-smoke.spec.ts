@@ -22,12 +22,20 @@ test("미인증 상태로 배치 이력(/runs)에 접속하면 로그인으로 �
 });
 
 test("/login은 200으로 응답하고 이메일/비밀번호 로그인 폼을 렌더링한다", async ({ page }) => {
+  const cspErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Content Security Policy")) {
+      cspErrors.push(message.text());
+    }
+  });
+
   const response = await page.goto("/login");
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
   await expect(page.getByLabel("이메일")).toBeVisible();
   await expect(page.getByLabel("비밀번호")).toBeVisible();
   await expect(page.getByRole("button", { name: "로그인" })).toBeVisible();
+  expect(cspErrors).toEqual([]);
 });
 
 test("시크릿 헤더 없이 /api/dispatch/worker를 호출하면 401을 반환한다(route가 살아있고 게이트가 걸림을 증명)", async ({
