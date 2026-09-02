@@ -1,5 +1,5 @@
 <!-- bmad:context -->
-<!-- Verified 2026-09-01 against 4852d0b. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-09-02 against 2f690a2. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## wave-double
 
@@ -24,5 +24,10 @@
 ## Conventions that differ from defaults
 
 - 전략 A/B/C 태깅은 `specs/spec-wave-double/backtest-baseline.md`의 룰과 일치해야 하고 `backtest/` 커널을 깨뜨리지 말 것 — 커널 테스트가 회귀망이다.
+
+## Known pitfalls
+
+- `.env.local`(gitignored)에 story별 server-only 환경변수가 이미 문서화돼 있다 — repo 전체 grep은 이 파일을 건너뛰므로, 환경변수가 "없다"고 판단하기 전에 직접 열어 확인할 것(story 1.10 리뷰에서 이 파일을 못 보고 오판한 전례가 있다).
+- `.env.local`에 미사용 `INTERNAL_CRON_SECRET`과 신규 `CRON_CALLBACK_SECRET`이 같은 용도로 이름만 다르게 공존한다 — 정리 전까지는 `CRON_CALLBACK_SECRET`이 실제 사용되는 이름이다.
 
 <!-- /bmad:context -->
