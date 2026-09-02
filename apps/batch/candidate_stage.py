@@ -29,6 +29,8 @@ class CandidateStageResult:
     selection: CandidateSelection | None = None
     fallback_used: bool = False
     run_id: str | None = None
+    fence_token: int | None = None
+    lease_token: str | None = None
 
 
 def _response_records(response: LsResponse) -> Any:
@@ -138,10 +140,10 @@ def run_candidate_stage(
     if active_response.unprocessed_count > 0:
         result = {"result_code": "UNPROCESSED_ITEMS", **selection.metadata, **fallback_note}
         gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.PARTIAL, result=result, unprocessed_count=active_response.unprocessed_count, fallback_used=fallback_used)
-        return CandidateStageResult("partial", "UNPROCESSED_ITEMS", len(selection.candidates), selection, fallback_used=fallback_used, run_id=str(attempt.run_id))
+        return CandidateStageResult("partial", "UNPROCESSED_ITEMS", len(selection.candidates), selection, fallback_used=fallback_used, run_id=str(attempt.run_id), fence_token=attempt.fence_token, lease_token=str(attempt.lease_token))
     result = {"result_code": active_response.result_code, **selection.metadata, **fallback_note}
     gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.SUCCESS, result=result, unprocessed_count=active_response.unprocessed_count, fallback_used=fallback_used)
-    return CandidateStageResult("success", active_response.result_code, len(selection.candidates), selection, fallback_used=fallback_used, run_id=str(attempt.run_id))
+    return CandidateStageResult("success", active_response.result_code, len(selection.candidates), selection, fallback_used=fallback_used, run_id=str(attempt.run_id), fence_token=attempt.fence_token, lease_token=str(attempt.lease_token))
 
 
 __all__ = ["CandidateStageResult", "run_candidate_stage"]

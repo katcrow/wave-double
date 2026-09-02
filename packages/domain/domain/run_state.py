@@ -50,7 +50,7 @@ class StageStatus(StrEnum):
 
 
 STAGES: tuple[Stage, ...] = tuple(Stage)
-REQUIRED_STAGES: tuple[Stage, ...] = (Stage.CANDIDATES,)
+REQUIRED_STAGES: tuple[Stage, ...] = (Stage.CANDIDATES, Stage.TAGS)
 _SLOT_RE = re.compile(r"^(?:[01]\d|2[0-3]):(?:00|30)$")
 
 

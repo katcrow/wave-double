@@ -17,6 +17,9 @@ begin
    perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
    perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
    if (select status from public.runs where runs.run_id = attempt_id) <> 'ready_to_publish' then raise exception 'not ready'; end if;
+   -- Story 2.5: publish_attempt는 tags stage success도 게이트로 요구한다.
+   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.publish_attempt(attempt_id, fence, lease);
    if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) <> attempt_id then raise exception 'close canonical pointer missing'; end if;
    if (select status from public.runs where runs.run_id = attempt_id) <> 'published' then raise exception 'not published'; end if;

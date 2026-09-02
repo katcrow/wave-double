@@ -15,9 +15,21 @@ def verify_candidates(run_id: UUID, stage: str) -> bool:
     return bool(run_id) and stage == Stage.CANDIDATES.value
 
 
+def verify_tags(run_id: UUID, stage: str) -> bool:
+    """Story 2.5의 tags stage 기본 verifier.
+
+    실제 태깅 결과(candidate_tags 존재 여부)의 검증 권위는 ``write_stage`` RPC에 있다.
+    이 기본 verifier는 candidates verifier와 동일하게 run_id/stage 유효성만 확인한다.
+    """
+    return bool(run_id) and stage == Stage.TAGS.value
+
+
 class StageRegistry:
     def __init__(self, verifiers: Mapping[str | Stage, StageVerifier] | None = None) -> None:
-        self._verifiers: dict[Stage, StageVerifier] = {Stage.CANDIDATES: verify_candidates}
+        self._verifiers: dict[Stage, StageVerifier] = {
+            Stage.CANDIDATES: verify_candidates,
+            Stage.TAGS: verify_tags,
+        }
         for stage, verifier in (verifiers or {}).items():
             self.register(stage, verifier)
 

@@ -42,9 +42,12 @@ def test_stage_transitions_are_forward_only_and_terminal_writes_are_idempotent()
         validate_stage_transition("success", "running")
 
 
-def test_only_successful_candidates_can_publish_in_epic_one():
-    assert can_publish({"candidates": "success"})
-    assert not can_publish({"candidates": "partial"})
+def test_both_candidates_and_tags_must_be_success_to_publish():
+    assert can_publish({"candidates": "success", "tags": "success"})
+    assert not can_publish({"candidates": "success", "tags": "pending"})
+    assert not can_publish({"candidates": "success", "tags": "partial"})
+    assert not can_publish({"candidates": "partial", "tags": "success"})
+    assert not can_publish({"candidates": "success"})
 
 
 def test_stage_registry_uses_run_id_and_stage_callable_contract():
@@ -64,11 +67,12 @@ def test_stage_registry_uses_run_id_and_stage_callable_contract():
     assert calls == [(run_id, "tags")]
 
 
-def test_default_candidates_verifier_receives_uuid_and_stage_name():
+def test_default_registry_has_both_candidates_and_tags_verifiers():
     from uuid import uuid4
 
     from domain.stage_registry import default_registry
 
     assert default_registry.verify(uuid4(), "candidates") is True
-    with pytest.raises(KeyError, match="tags"):
-        default_registry.verify(uuid4(), "tags")
+    assert default_registry.verify(uuid4(), "tags") is True
+    with pytest.raises(KeyError, match="supply_3day"):
+        default_registry.verify(uuid4(), "supply_3day")

@@ -16,9 +16,13 @@ from zoneinfo import ZoneInfo
 
 from domain.run_state import Trigger
 
+from .candidate_fetcher import CandidateFetcher
+from .candidate_tags_repository import SupabaseCandidateTagsRepository
 from .ls_auth import LsOAuthTokenProvider
 from .ls_client import LsClient, LsClientConfig
 from .ls_daily_bar import LsDailyBarProvider
+from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
+from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
 from .run_state import RunStateGateway
 from .scheduler import SchedulerResult, run_scheduled_batch
 from .supabase_client import SupabaseCalendarRepository, SupabaseRpcClient
@@ -61,6 +65,20 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
         daily_bar_provider = LsDailyBarProvider(ls_client)
         gateway = RunStateGateway(rpc_client)
 
+        ohlcv_provider = LsOhlcvCacheProvider(ls_client)
+        ohlcv_repository = stack.enter_context(
+            contextlib.closing(SupabaseOhlcvCacheRepository(supabase_url, service_role_key))
+        )
+        candidate_fetcher = stack.enter_context(
+            contextlib.closing(CandidateFetcher(supabase_url, service_role_key))
+        )
+        ohlcv_loader = stack.enter_context(
+            contextlib.closing(SupabaseOhlcvCacheLoader(supabase_url, service_role_key))
+        )
+        tags_repository = stack.enter_context(
+            contextlib.closing(SupabaseCandidateTagsRepository(supabase_url, service_role_key))
+        )
+
         moment = now_kst if now_kst is not None else datetime.now(KST)
 
         return run_scheduled_batch(
@@ -70,6 +88,11 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             daily_bar_provider,
             gateway,
             ls_client,
+            ohlcv_provider,
+            ohlcv_repository,
+            candidate_fetcher,
+            ohlcv_loader,
+            tags_repository,
             query_index=query_index,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,

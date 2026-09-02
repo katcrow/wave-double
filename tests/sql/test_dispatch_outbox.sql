@@ -145,6 +145,9 @@ begin
   select outbox_id into outbox_ok from public.dispatch_outbox where dispatch_request_id = (res_ok->>'dispatch_request_id')::uuid;
   perform public.write_stage(run_ok, 'candidates', fence_ok, lease_ok, 'pending', 'running');
   perform public.write_stage(run_ok, 'candidates', fence_ok, lease_ok, 'running', 'success');
+  -- Story 2.5: publish_attempt는 tags stage success도 게이트로 요구한다.
+  perform public.write_stage(run_ok, 'tags', fence_ok, lease_ok, 'pending', 'running');
+  perform public.write_stage(run_ok, 'tags', fence_ok, lease_ok, 'running', 'success');
   perform public.publish_attempt(run_ok, fence_ok, lease_ok);
 
   -- 실패 종결: runs.status가 failed가 되면 outbox는 failed.

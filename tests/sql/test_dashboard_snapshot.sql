@@ -37,6 +37,11 @@ begin
       'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
     jsonb_build_object('selection_input_hash', 'h1', 'original_count', 1, 'excluded_count', 0, 'truncated_count', 0, 'candidate_count', 1));
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  -- Story 2.5: tags stage가 candidate_tags를 채운 뒤 success로 종결되어야 publish_attempt가 통과한다.
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, params_meta)
+    values (candidate_id, attempt_id, 'A', date '2099-02-01', '{"batch_kind": "premarket"}'::jsonb);
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
   perform public.publish_attempt(attempt_id, fence, lease);
   -- 트랜잭션 내내 now()가 고정되므로, 시나리오 간 started_at 동률로 latest_attempt 정렬이 우연에 기대지 않도록 명시 설정한다.
   update public.runs set started_at = timestamptz '2099-02-01 00:00:00+00' where run_id = attempt_id;
@@ -47,9 +52,12 @@ begin
   if (snapshot->'complete_snapshot'->'sections'->'candidates'->>'candidate_count')::integer <> 1 then
     raise exception 'expected candidate_count=1 in complete_snapshot';
   end if;
-  if snapshot->'available_partial_sections' <> '["candidates"]'::jsonb then raise exception 'expected available_partial_sections=[candidates]'; end if;
-  if snapshot->'missing_sections' <> '["tags", "supply_3day", "market_supply", "outcome_tracking"]'::jsonb then
-    raise exception 'expected four missing sections after publish';
+  if (snapshot->'complete_snapshot'->'sections'->'tags'->>'tag_count')::integer <> 1 then
+    raise exception 'expected tag_count=1 in complete_snapshot';
+  end if;
+  if snapshot->'available_partial_sections' <> '["candidates", "tags"]'::jsonb then raise exception 'expected available_partial_sections=[candidates, tags]'; end if;
+  if snapshot->'missing_sections' <> '["supply_3day", "market_supply", "outcome_tracking"]'::jsonb then
+    raise exception 'expected three missing sections after publish';
   end if;
 end $$;
 
@@ -109,6 +117,13 @@ begin
 end $$;
 
 do $$
+declare direct_row_count integer;
+begin
+  select count(*) into direct_row_count from public.candidate_tags;
+  if direct_row_count <> 0 then raise exception 'anon should not be able to read candidate_tags rows directly via RLS'; end if;
+end $$;
+
+do $$
 declare snapshot jsonb;
 begin
   snapshot := public.get_dashboard_snapshot();
@@ -118,6 +133,9 @@ begin
   end if;
   if (snapshot->'complete_snapshot'->'sections'->'candidates'->>'candidate_count')::integer <> 1 then
     raise exception 'security definer aggregation should still report candidate_count=1 for anon despite RLS lockout on candidates';
+  end if;
+  if (snapshot->'complete_snapshot'->'sections'->'tags'->>'tag_count')::integer <> 1 then
+    raise exception 'security definer aggregation should still report tag_count=1 for anon despite RLS lockout on candidate_tags';
   end if;
 end $$;
 

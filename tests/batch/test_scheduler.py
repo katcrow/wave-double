@@ -5,6 +5,7 @@ from apps.batch.ls_client import LsResponse
 from apps.batch.run_state import RunStateGateway
 from apps.batch.scheduler import run_scheduled_batch
 from domain.calendar import TradingCalendarEntry
+from domain.ohlcv_cache import OhlcvCacheStatus
 from domain.run_state import BatchKind, Trigger
 
 
@@ -65,6 +66,84 @@ class FakeCandidateClient:
         return self.response
 
 
+# --- Story 2.5: ohlcv 확보/갱신 + tags stage 배선용 fakes ---------------------
+
+
+class FakeOhlcvProvider:
+    def __init__(self):
+        self.fetch_full_history_calls = []
+        self.fetch_range_calls = []
+
+    def fetch_full_history(self, ticker, cutoff):
+        self.fetch_full_history_calls.append((ticker, cutoff))
+        return []
+
+    def fetch_range(self, ticker, start, end):
+        self.fetch_range_calls.append((ticker, start, end))
+        return []
+
+
+class FakeOhlcvRepository:
+    """existing_tickers가 전부 존재로 답해 initialize_new_ticker_history가 LS를
+    호출하지 않게 하고, latest_state는 비워 update_existing_ticker_history도
+    LS를 호출하지 않게 한다 -- 이 파일의 관심사는 배선(호출 순서/인자) 검증이다."""
+
+    def __init__(self):
+        self.existing_tickers_calls = []
+        self.latest_state_calls = []
+
+    def existing_tickers(self, tickers):
+        self.existing_tickers_calls.append(list(tickers))
+        return set(tickers)
+
+    def latest_state(self, tickers):
+        self.latest_state_calls.append(list(tickers))
+        return {}
+
+    def upsert_rows(self, ticker, rows, *, adjustment_version=1):
+        raise AssertionError("upsert_rows should not be called given existing_tickers/latest_state stubs")
+
+
+class FakeCandidateFetcher:
+    def __init__(self, rows=None):
+        self.rows = rows if rows is not None else []
+        self.calls = []
+
+    def fetch(self, run_id):
+        self.calls.append(run_id)
+        return self.rows
+
+
+class FakeOhlcvLoader:
+    def __init__(self, status=OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY):
+        self.status = status
+        self.calls = []
+
+    def load_ohlcv(self, ticker, cutoff):
+        self.calls.append((ticker, cutoff))
+        return self.status
+
+
+class FakeTagsRepository:
+    def __init__(self):
+        self.upsert_calls = []
+
+    def upsert_tags(self, tags):
+        self.upsert_calls.append(list(tags))
+        return len(tags)
+
+
+def tags_deps(*, candidate_rows=None, ohlcv_status=OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY):
+    """tags 파이프라인 배선에 필요한 신규 의존성 5종을 fresh하게 만들어 반환한다."""
+    return {
+        "ohlcv_provider": FakeOhlcvProvider(),
+        "ohlcv_repository": FakeOhlcvRepository(),
+        "candidate_fetcher": FakeCandidateFetcher(candidate_rows),
+        "ohlcv_loader": FakeOhlcvLoader(ohlcv_status),
+        "tags_repository": FakeTagsRepository(),
+    }
+
+
 def attempt_payload(logical_run_key="close:2026-09-01"):
     return {
         "run_id": str(uuid4()),
@@ -83,6 +162,7 @@ def test_holiday_skips_without_calling_candidate_client():
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient()
     provider = FakeProvider()
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -91,6 +171,11 @@ def test_holiday_skips_without_calling_candidate_client():
         provider,
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
     )
 
     assert result.status == "skipped"
@@ -100,6 +185,9 @@ def test_holiday_skips_without_calling_candidate_client():
     assert [call[0] for call in rpc.calls] == ["start_attempt", "skip_attempt"]
     skip_call = rpc.calls[-1][1]
     assert skip_call["p_skip_reason"] == "holiday"
+    # 휴장은 candidates stage 자체가 실행되지 않으므로 ohlcv/tags 파이프라인도 실행되지 않는다.
+    assert deps["candidate_fetcher"].calls == []
+    assert deps["ohlcv_provider"].fetch_full_history_calls == []
 
 
 def test_open_day_delegates_to_candidate_stage_with_schedule_trigger():
@@ -108,6 +196,7 @@ def test_open_day_delegates_to_candidate_stage_with_schedule_trigger():
     rpc = FakeRpc(attempt=attempt_payload())
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -116,6 +205,11 @@ def test_open_day_delegates_to_candidate_stage_with_schedule_trigger():
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
     )
 
     assert result.status == "success"
@@ -125,11 +219,190 @@ def test_open_day_delegates_to_candidate_stage_with_schedule_trigger():
     assert start_params["p_batch_kind"] == "close"
 
 
+def test_success_candidates_stage_wires_ohlcv_and_tags_pipeline():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    assert result.status == "success"
+    # ohlcv 확보/갱신이 후보 티커 목록으로 호출된다(초기화/증분 갱신 각 1회씩).
+    assert deps["ohlcv_repository"].existing_tickers_calls == [["005930"]]
+    assert deps["ohlcv_repository"].latest_state_calls == [["005930"]]
+    # tags stage가 이어서 실행되어 후보 조회 + write_stage 호출이 발생한다.
+    assert deps["candidate_fetcher"].calls == [attempt["run_id"]]
+    write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
+    tags_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "tags"]
+    assert [call[1]["p_status"] for call in tags_stage_calls] == ["running", "success"]
+
+
+def test_partial_candidates_stage_wires_ohlcv_and_tags_pipeline():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    # unprocessed_count > 0 -- candidates stage가 partial로 종결된다.
+    candidate_client = FakeCandidateClient(
+        LsResponse(data=[{"ticker": "005930", "trading_value": 1}], unprocessed_count=1)
+    )
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    assert result.status == "partial"
+    # candidates가 partial이어도 ohlcv 확보/갱신 + tags stage가 그대로 배선된다(success/partial 모두 진행).
+    assert deps["ohlcv_repository"].existing_tickers_calls == [["005930"]]
+    assert deps["ohlcv_repository"].latest_state_calls == [["005930"]]
+    assert deps["candidate_fetcher"].calls == [attempt["run_id"]]
+    write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
+    tags_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "tags"]
+    assert [call[1]["p_status"] for call in tags_stage_calls] == ["running", "success"]
+
+
+def test_tags_stage_failure_surfaces_in_scheduler_result_and_is_not_reported_as_success():
+    """Story 2.5 코드 리뷰 발견(high) 수정 커버리지: 후보 재조회 실패로 tags stage가
+    failed로 종결되면, run_scheduled_batch의 반환값도 success가 아니어야 하고
+    tags stage 결과가 SchedulerResult에 노출되어야 한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
+
+    class RaisingCandidateFetcher:
+        def fetch(self, run_id):
+            raise RuntimeError("candidate re-fetch boom")
+
+    deps["candidate_fetcher"] = RaisingCandidateFetcher()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    # candidates stage 자체는 success였지만, tags stage가 failed면 전체 배치 결과도 failed여야 한다
+    # -- 그래야 apps/batch/__main__.py의 CLI 종료 코드가 실제 실패를 반영한다.
+    assert result.status == "failed"
+    assert result.tags_status == "failed"
+    assert result.tags_result_code == "CANDIDATE_FETCH_FAILED"
+    write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
+    tags_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "tags"]
+    assert [call[1]["p_status"] for call in tags_stage_calls] == ["running", "failed"]
+
+
+def test_tags_persist_failure_surfaces_as_failed_scheduler_result():
+    """candidate_tags upsert 자체가 실패(TAGS_PERSIST_FAILED)하는 경로도 성공으로 보고되지 않는다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+
+    class RaisingTagsRepository:
+        def upsert_tags(self, tags):
+            raise RuntimeError("upsert boom")
+
+    deps = tags_deps()
+    deps["tags_repository"] = RaisingTagsRepository()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    # tags_stage는 all_tags가 비어도(후보 0건) upsert_tags를 호출하므로, upsert 자체가 예외를
+    # 던지면 TAGS_PERSIST_FAILED로 종결되고 배치 전체 결과도 failed여야 한다.
+    assert result.status == "failed"
+    assert result.tags_status == "failed"
+    assert result.tags_result_code == "TAGS_PERSIST_FAILED"
+
+
+def test_failed_candidates_stage_does_not_run_ohlcv_or_tags_pipeline():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload())
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(
+        LsResponse(result_code="HTTP_ERROR", message="unavailable")
+    )
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    assert result.status == "failed"
+    assert deps["candidate_fetcher"].calls == []
+    assert deps["ohlcv_repository"].existing_tickers_calls == []
+
+
 def test_calendar_unavailable_is_treated_as_open_and_proceeds():
     repo = FakeRepository()
     rpc = FakeRpc(attempt=attempt_payload())
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.PREMARKET,
@@ -138,6 +411,11 @@ def test_calendar_unavailable_is_treated_as_open_and_proceeds():
         RaisingProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
     )
 
     assert result.status == "success"
@@ -150,6 +428,7 @@ def test_replayed_holiday_attempt_ends_without_skip_call():
     rpc = FakeRpc(replayed=True)
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient()
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -158,6 +437,11 @@ def test_replayed_holiday_attempt_ends_without_skip_call():
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
     )
 
     assert result.status == "success"
@@ -166,12 +450,42 @@ def test_replayed_holiday_attempt_ends_without_skip_call():
     assert candidate_client.calls == []
 
 
+def test_replayed_success_attempt_does_not_run_ohlcv_or_tags_pipeline():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(replayed=True)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    assert result.status == "success"
+    assert result.result_code == "REPLAYED"
+    assert candidate_client.calls == []
+    assert deps["candidate_fetcher"].calls == []
+    assert deps["ohlcv_repository"].existing_tickers_calls == []
+
+
 def test_intraday_slot_uses_floor_to_half_hour():
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
     rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:09:00"))
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
 
     run_scheduled_batch(
         BatchKind.INTRADAY,
@@ -180,6 +494,11 @@ def test_intraday_slot_uses_floor_to_half_hour():
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
     )
 
     start_params = rpc.calls[0][1]
@@ -192,6 +511,7 @@ def test_manual_trigger_is_passed_through_to_start_attempt():
     rpc = FakeRpc(attempt=attempt_payload())
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -200,6 +520,11 @@ def test_manual_trigger_is_passed_through_to_start_attempt():
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
         trigger=Trigger.MANUAL,
     )
 
@@ -215,6 +540,7 @@ def test_dispatch_receipt_recorded_after_open_day_success():
     rpc = FakeRpc(attempt=attempt)
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -223,6 +549,11 @@ def test_dispatch_receipt_recorded_after_open_day_success():
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
         trigger=Trigger.MANUAL,
         dispatch_request_id="dispatch-1",
     )
@@ -240,6 +571,7 @@ def test_dispatch_receipt_recorded_on_holiday_skip():
     rpc = FakeRpc(attempt=attempt)
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient()
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -248,6 +580,11 @@ def test_dispatch_receipt_recorded_on_holiday_skip():
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
         dispatch_request_id="dispatch-holiday",
     )
 
@@ -263,6 +600,7 @@ def test_dispatch_receipt_failure_does_not_fail_the_batch(capsys):
     rpc = FakeRpc(attempt=attempt_payload(), raise_on={"record_dispatch_receipt"})
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -271,6 +609,11 @@ def test_dispatch_receipt_failure_does_not_fail_the_batch(capsys):
         FakeProvider(),
         gateway,
         candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
         trigger=Trigger.MANUAL,
         dispatch_request_id="dispatch-fail",
     )
