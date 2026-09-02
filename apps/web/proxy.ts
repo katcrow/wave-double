@@ -15,10 +15,12 @@ import { CSRF_COOKIE_NAME } from "@/lib/csrf-constants";
  *
  * 정적 자산(robots.txt/manifest.json 등)도 matcher에서 제외한다 -- 이 앱은 지금 그런 파일을
  * 서빙하지 않지만, 나중에 추가되면 로그인 리다이렉트에 걸리지 않아야 크롤러/PWA 요청이 깨지지 않는다.
+ *
+ * 2026-09-02 인증 방식 전환: 이메일/비밀번호 로그인으로 바뀌면서 매직 링크 PKCE 콜백
+ * (`/auth/callback`)이 삭제됐다 -- `/auth/*` 하위 라우트가 더 이상 없으므로 예외 패턴에서 뺐다.
  */
 const PUBLIC_PATH_PATTERNS = [
   /^\/login(\/.*)?$/,
-  /^\/auth(\/.*)?$/,
   /^\/api(\/.*)?$/,
   /^\/robots\.txt$/,
   /^\/manifest\.json$/,

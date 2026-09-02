@@ -60,7 +60,7 @@ NFR9: 가격 기준·조정 — 모든 가격은 수정주가 기준 통일. 등
 - **AD-4 거래 시간 의미론은 하나뿐이다:** 저장/API instant는 UTC timestamptz, 거래일/표시는 Asia/Seoul. trading_calendar가 D-2/D-1/D0 소유. calendar 조회 실패는 CALENDAR_UNAVAILABLE.
 - **AD-5 운영과 백테스트는 하나의 전략 API를 공유한다:** `backtest.strategy_api.compute_abc(frame) -> StrategyResult`가 유일 entrypoint. ohlcv_cache는 READY/INELIGIBLE_INSUFFICIENT_HISTORY/ERROR 반환.
 - **AD-6 LS API 예산과 canonical 후보 집합은 공통 client가 소유한다:** TR별 token bucket, bounded retry, Retry-After 파싱. source 우선순위 t1859>t1852>t1856, 거래대금 내림차순/종목코드 오름차순 150개 선택.
-- **AD-7 브라우저는 단일 운영자 세션과 읽기 권한만 가진다:** Supabase Auth email OTP/magic link. server-side subject allowlist. dispatch route는 JWKS 검증, CSRF, rate limit, idempotency.
+- **AD-7 브라우저는 단일 운영자 세션과 읽기 권한만 가진다:** Supabase Auth 이메일/비밀번호(사전 등록된 단일 슈퍼유저 계정, 공개 회원가입 비활성화). server-side subject allowlist. dispatch route는 JWKS 검증, CSRF, rate limit, idempotency.
 - **AD-8 금융 지표는 versioned read model에서 계산한다:** 수급 3상태, 승률, PF, 신뢰구간, 표본 게이트는 SQL view/RPC가 반환. UI는 계산하지 않는다.
 - **AD-9 Outcome은 append-only event 장부와 재생 가능한 projection이다:** outcome_events/outcome_observations append-only, candidate_outcome은 rebuildable projection. terminal 상태 불변, SUSPENDED 복귀는 outcome_correction event만.
 - **AD-10 운영 가시성은 run_id 중심이다:** 모든 로그/stage result는 run_id/stage/batch_kind/trading_day/attempt_no/duration_ms/result_code. secret 로그 금지.
@@ -455,7 +455,7 @@ So that public 리포지토리에서도 비인가 실행이나 secret 노출 없
 
 **Given** Neo가 로그인하지 않은 상태인 경우
 **When** `/`에 접속하면
-**Then** Supabase Auth email OTP/magic link로 단일 운영자 세션을 요구하며, server-side subject allowlist에 없는 사용자는 dispatch 권한을 얻지 못한다(AD-7).
+**Then** Supabase Auth 이메일/비밀번호(사전 등록된 단일 슈퍼유저 계정)로 단일 운영자 세션을 요구하며, server-side subject allowlist에 없는 사용자는 dispatch 권한을 얻지 못한다(AD-7).
 
 **Given** 인증된 Neo가 수동 실행 버튼을 누르는 경우
 **When** dispatch 요청이 전송되면

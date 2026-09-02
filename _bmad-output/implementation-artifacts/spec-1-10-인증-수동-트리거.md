@@ -133,6 +133,12 @@ deferred:
 
 ## Spec Change Log
 
+### 2026-09-02 — 인증 방식 전환 (bmad-correct-course, 코드 변경 아님)
+- **트리거:** 1인 개인 운영 도구에서 OTP/매직링크 로그인의 이메일 왕복이 불필요한 마찰이라는 Neo의 피드백. `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md` 참고.
+- **수정 내용:** `apps/web/app/login/page.tsx`를 이메일+비밀번호 로그인 폼으로 교체, `apps/web/app/auth/callback/route.ts`(매직 링크 PKCE 콜백) 삭제, `apps/web/proxy.ts`의 `/auth/*` public 경로 패턴 제거. Supabase 대시보드에서 공개 회원가입을 비활성화하고 Neo의 슈퍼유저 계정을 직접 생성하는 절차를 `docs/deployment.md`에 추가. `OPERATOR_ALLOWLIST`/JWKS/CSRF/rate limit 등 AD-7의 나머지 방어선은 무변경.
+- **피한 known-bad 상태:** 인증 메커니즘 변경이 AD-7의 근본 목적(비인가 실행 방지, server-side allowlist 권위)을 약화시키는 것 — 세션 발급 방식만 바뀌고 그 이후의 모든 검증(JWKS/CSRF/rate limit/allowlist)은 동일하게 유지되므로 이 위험은 없다.
+- **KEEP:** `proxy.ts`의 낙관적 세션 리다이렉트 + `/api/dispatch`의 독립 JWKS 검증 2단 방어 구조, `lib/csrf-constants.ts`/`lib/dispatch.ts` 분리, allowlist 기반 dispatch 권한 판정 — 전부 인증 메커니즘과 무관하게 그대로 유지한다.
+
 ### 2026-09-02 — bad_spec 루프백 (review pass 1)
 - **트리거:** `dispatch_outbox`가 `started` 이후 종결 상태(`completed`/`failed`)에 도달하는 경로가 스펙 Tasks에 전혀 없었다(Boundaries의 "Always"는 6개 상태 전이를 전부 약속했지만, 그 전이를 누가/언제 호출하는지가 누락됨) -- 1차 구현은 스펙 그대로 구현했을 뿐이라 이 결함은 구현이 아니라 스펙 책임이다. 함께 발견된 관련 결함(수동 실행 버튼의 `batch_kind` 하드코딩, JWT 검증기 테스트 부재, cron secret 비-상수시간 비교, `trading_day`/`logical_run_key` 불일치 미검증, 영수증 기록 예외가 배치 전체를 실패시킬 수 있는 문제, `queued` 상태에서 GitHub dispatch 반복 실패 시 무한 재시도, dead-letter Issue 생성 실패 미처리, replay 분기의 영수증 기록 테스트 누락)도 같은 재파생 사이클에 묶어 함께 반영한다.
 - **수정 내용:** Boundaries "Always"에 outbox `started`→종결 규칙(`reconcile_dispatch_outbox` RPC), cron secret 상수시간 비교, `trading_day` 검증, 수동 버튼의 `batch_kind` 도출 규칙을 추가. I/O 매트릭스에 배치 정상/실패 종료 2행 추가. Code Map에 `dashboard-types.ts`의 `batch_kind` 노출 지점과 `runs.status` 종결 분류를 추가. Tasks에 `reconcile_dispatch_outbox` RPC, `jwt-verify.test.ts`/`rate-limit.ts`+테스트, `test_candidate_stage.py`의 replay 분기 테스트, 영수증 기록 `try/except`, `queued` 무한 재시도 방지, dead-letter Issue 실패 로깅을 추가. Acceptance Criteria에 위 3개 신규 불변식을 검증하는 항목 3개 추가.

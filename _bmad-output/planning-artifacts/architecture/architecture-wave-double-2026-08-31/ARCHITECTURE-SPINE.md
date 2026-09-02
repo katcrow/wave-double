@@ -156,7 +156,7 @@ flowchart TB
 
 - **Binds:** CAP-5, NFR-1/5, 데이터 거버넌스
 - **Prevents:** public repository·브라우저에서 elevated secret이 노출되거나 비인가 사용자가 배치를 실행하는 것
-- **Rule:** V1은 외부 사용자 관리 없이 Supabase Auth email OTP/magic link로 단일 운영자 세션만 발급한다. server-side subject allowlist가 dispatch 권한의 권위다. 브라우저에는 publishable key와 RLS가 허용한 `SELECT`만 둔다. Supabase secret, LS token, GitHub token은 trusted workflow 또는 server-only 환경에만 둔다. dispatch route는 JWKS signature/issuer/audience/expiry/sub, SameSite=Strict double-submit CSRF, 사용자 rate limit, AD-18 idempotency를 모두 검증한다. owner/repo/workflow/ref는 고정값이며 사용자 입력을 받지 않는다.
+- **Rule:** V1은 외부 사용자 관리 없이 Supabase Auth 이메일/비밀번호(Supabase 대시보드에 사전 등록한 단일 슈퍼유저 계정, 공개 회원가입 비활성화)로 단일 운영자 세션만 발급한다. server-side subject allowlist가 dispatch 권한의 권위다. 브라우저에는 publishable key와 RLS가 허용한 `SELECT`만 둔다. Supabase secret, LS token, GitHub token은 trusted workflow 또는 server-only 환경에만 둔다. dispatch route는 JWKS signature/issuer/audience/expiry/sub, SameSite=Strict double-submit CSRF, 사용자 rate limit, AD-18 idempotency를 모두 검증한다. owner/repo/workflow/ref는 고정값이며 사용자 입력을 받지 않는다.
 
 ### AD-8 — 금융 지표는 versioned read model에서 계산한다
 
