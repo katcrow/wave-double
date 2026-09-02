@@ -11,7 +11,7 @@ from domain.candidate_selection import CandidateSelection, merge_candidate_sourc
 from domain.run_state import LogicalRunKey, Stage, StageStatus, Trigger
 
 from .ls_client import LsResponse
-from .run_state import RunStateGateway, parse_attempt
+from .run_state import RunStateGateway, parse_attempt, safe_record_dispatch_receipt
 
 PRIMARY_TR = "t1859"
 FALLBACK_TR = "t1856"
@@ -28,6 +28,7 @@ class CandidateStageResult:
     candidate_count: int
     selection: CandidateSelection | None = None
     fallback_used: bool = False
+    run_id: str | None = None
 
 
 def _response_records(response: LsResponse) -> Any:
@@ -49,17 +50,27 @@ def run_candidate_stage(
     query_index: str | None = None,
     fallback_params: dict[str, Any] | None = None,
     lease_seconds: int = 300,
+    dispatch_request_id: str | None = None,
 ) -> CandidateStageResult:
     """한 attempt의 candidates stage를 성공/실패로 종결한다.
 
     t1859가 예외를 던지거나 ``response.ok`` 가 False면 t1856 경로로 자동 재시도한다.
     폴백 호출 자체가 성공했을 때만 ``runs.fallback_used`` 를 true로 기록하며, 두 경로가
     모두 실패하면 두 result_code를 모두 남기고 stage는 조용히 성공 처리되지 않는다.
+
+    ``dispatch_request_id``가 주어지면(수동 트리거) run_id가 확정되는 즉시(재생 포함)
+    ``record_dispatch_receipt``를 호출해 outbox를 ``started``로 전이시킨다(AD-18 "workflow
+    첫 단계"). 영수증 기록 실패는 배치 결과에 영향을 주지 않는다.
     """
     started = gateway.start_attempt(key, trigger, lease_seconds=lease_seconds)
     if isinstance(started, dict) and started.get("replayed"):
-        return CandidateStageResult("success", "REPLAYED", 0)
+        replayed_run_id = started.get("run_id")
+        safe_record_dispatch_receipt(gateway, dispatch_request_id, replayed_run_id)
+        return CandidateStageResult(
+            "success", "REPLAYED", 0, run_id=str(replayed_run_id) if replayed_run_id is not None else None
+        )
     attempt = parse_attempt(started)
+    safe_record_dispatch_receipt(gateway, dispatch_request_id, attempt.run_id)
     gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.PENDING, StageStatus.RUNNING)
     request_params = params if params is not None else {"t1859InBlock": {"query_index": query_index or ""}}
 
@@ -105,13 +116,13 @@ def run_candidate_stage(
                 "t1856_result_code": fallback_failure_code,
             }
             gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result=result, unprocessed_count=unprocessed, fallback_used=False)
-            return CandidateStageResult("failed", "CANDIDATE_SOURCES_EXHAUSTED", 0, fallback_used=False)
+            return CandidateStageResult("failed", "CANDIDATE_SOURCES_EXHAUSTED", 0, fallback_used=False, run_id=str(attempt.run_id))
 
     try:
         selection = merge_candidate_sources({active_source: _response_records(active_response)})
     except Exception:
         gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "INVALID_RESPONSE", "message": "LS response could not be normalized"}, fallback_used=fallback_used)
-        return CandidateStageResult("failed", "INVALID_RESPONSE", 0, fallback_used=fallback_used)
+        return CandidateStageResult("failed", "INVALID_RESPONSE", 0, fallback_used=fallback_used, run_id=str(attempt.run_id))
     # 상한 밖 종목은 runs.truncated_count로만 보존한다. candidates에는 상위 150건만 남긴다.
     rows = [
         {"candidate_id": str(uuid4()), **candidate.as_dict(), "truncated": False}
@@ -121,16 +132,16 @@ def run_candidate_stage(
         gateway.write_candidates(attempt.run_id, attempt.fence_token, attempt.lease_token, rows, selection.metadata)
     except Exception:
         gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "CANDIDATE_PERSIST_FAILED", "message": "candidate persistence failed"}, fallback_used=fallback_used)
-        return CandidateStageResult("failed", "CANDIDATE_PERSIST_FAILED", 0, fallback_used=fallback_used)
+        return CandidateStageResult("failed", "CANDIDATE_PERSIST_FAILED", 0, fallback_used=fallback_used, run_id=str(attempt.run_id))
 
     fallback_note = {"t1859_result_code": primary_failure_code} if fallback_used else {}
     if active_response.unprocessed_count > 0:
         result = {"result_code": "UNPROCESSED_ITEMS", **selection.metadata, **fallback_note}
         gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.PARTIAL, result=result, unprocessed_count=active_response.unprocessed_count, fallback_used=fallback_used)
-        return CandidateStageResult("partial", "UNPROCESSED_ITEMS", len(selection.candidates), selection, fallback_used=fallback_used)
+        return CandidateStageResult("partial", "UNPROCESSED_ITEMS", len(selection.candidates), selection, fallback_used=fallback_used, run_id=str(attempt.run_id))
     result = {"result_code": active_response.result_code, **selection.metadata, **fallback_note}
     gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.SUCCESS, result=result, unprocessed_count=active_response.unprocessed_count, fallback_used=fallback_used)
-    return CandidateStageResult("success", active_response.result_code, len(selection.candidates), selection, fallback_used=fallback_used)
+    return CandidateStageResult("success", active_response.result_code, len(selection.candidates), selection, fallback_used=fallback_used, run_id=str(attempt.run_id))
 
 
 __all__ = ["CandidateStageResult", "run_candidate_stage"]

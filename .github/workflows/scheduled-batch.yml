@@ -21,6 +21,11 @@ on:
           - premarket
           - intraday
           - close
+      dispatch_request_id:
+        description: "Story 1.10: outbox worker가 채우는 dispatch_request_id(사람이 직접 채우지 않는다)"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   # 스케줄 트리거 시점에는 아직 logical_run_key(거래일·슬롯)를 알 수 없으므로
@@ -60,6 +65,19 @@ jobs:
             *) echo "::error::unrecognized schedule: $SCHEDULE" ; exit 1 ;;
           esac
 
+      - name: Determine trigger
+        id: trigger
+        env:
+          DISPATCH_BATCH_KIND: ${{ inputs.batch_kind }}
+        run: |
+          # workflow_dispatch 호출(outbox worker 또는 사람의 수동 테스트)에서만 inputs.batch_kind가
+          # 채워진다(default "close"). schedule 이벤트에서는 항상 빈 문자열이다.
+          if [ -n "$DISPATCH_BATCH_KIND" ]; then
+            echo "value=manual" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=schedule" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run scheduled batch
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -68,4 +86,10 @@ jobs:
           LS_APP_SECRET: ${{ secrets.LS_APP_SECRET }}
           LS_QUERY_INDEX: ${{ secrets.LS_QUERY_INDEX }}
           LS_MAC_ADDRESS: ${{ secrets.LS_MAC_ADDRESS }}
-        run: uv run --with httpx python -m apps.batch --batch-kind "${{ steps.batch-kind.outputs.value }}"
+          DISPATCH_REQUEST_ID: ${{ inputs.dispatch_request_id }}
+        run: |
+          args=(--batch-kind "${{ steps.batch-kind.outputs.value }}" --trigger "${{ steps.trigger.outputs.value }}")
+          if [ -n "$DISPATCH_REQUEST_ID" ]; then
+            args+=(--dispatch-request-id "$DISPATCH_REQUEST_ID")
+          fi
+          uv run --with httpx python -m apps.batch "${args[@]}"

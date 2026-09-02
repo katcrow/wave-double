@@ -19,18 +19,25 @@ export interface TrustBarState {
   /** epics.md AC: "KST 실행 시각·트리거 유형·신선도"의 트리거 유형. */
   triggerLabel: string | undefined;
   /**
-   * 비차단 Toast/notice 문구(실패/부분성공/stale에서만 채워짐).
+   * 비차단 Toast/notice 문구(실패/부분성공/stale/수동 실행 거부·실패에서만 채워짐).
    * 폴백 원천 사용은 스펙 Never 절에 따라 판정 근거(원천 필드)가 없어 이 알림에 포함하지 않는다.
    */
   notice: string | null;
+}
+
+/** Story 1.10: DataTrustBar가 클라이언트에서 진행 중인 수동 실행 요청의 로컬 상태. */
+export interface DispatchUiState {
+  phase: "idle" | "pending" | "conflict" | "error";
+  message?: string;
 }
 
 /**
  * Story 1.9 I/O 매트릭스 6개 상태(스냅샷 없음/정상 발행/실패/부분성공/휴장일 스킵/stale)를 판정한다.
  * Design Notes: freshness 기준 시각은 complete_snapshot.published_at, 없으면
  * latest_attempt.finished_at ?? started_at이며 60분 이상 경과 시 stale.
+ * Story 1.10: `dispatch` 인자가 idle이 아니면 수동 실행 진행/거부 문구가 배치 상태 문구를 덮는다.
  */
-export function deriveTrustBarState(snapshot: DashboardSnapshot): TrustBarState {
+export function deriveTrustBarState(snapshot: DashboardSnapshot, dispatch?: DispatchUiState): TrustBarState {
   const { latest_attempt: latestAttempt, complete_snapshot: completeSnapshot } = snapshot;
 
   const referenceTimestamp =
@@ -67,6 +74,17 @@ export function deriveTrustBarState(snapshot: DashboardSnapshot): TrustBarState 
     notice = statusLine;
   } else if (stale) {
     notice = `데이터가 60분 이상 오래됨 (${referenceTimestamp ? formatKstDateTime(referenceTimestamp) : "-"})`;
+  }
+
+  // Story 1.10: 수동 실행 진행/거부/실패는 배치 상태 문구보다 우선해 사용자에게 즉시 보인다.
+  if (dispatch?.phase === "pending") {
+    statusLine = "수동 실행 요청 처리 중...";
+  } else if (dispatch?.phase === "conflict") {
+    statusLine = `수동 실행 거부됨 · ${dispatch.message ?? "이미 실행 중인 배치가 있습니다."}`;
+    notice = statusLine;
+  } else if (dispatch?.phase === "error") {
+    statusLine = `수동 실행 실패 · ${dispatch.message ?? "잠시 후 다시 시도해 주세요."}`;
+    notice = statusLine;
   }
 
   return {

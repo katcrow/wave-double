@@ -197,3 +197,41 @@ test("notice: 실패/부분성공/stale에서만 채워지고 정상/휴장일�
   );
   assert.equal(skipped.notice, null);
 });
+
+// Story 1.10: 수동 실행 진행/거부(409)/실패 상태 문구
+test("수동 실행 진행 중: pending 문구가 배치 상태 문구를 덮는다", () => {
+  const state = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt() }),
+    { phase: "pending" }
+  );
+  assert.equal(state.statusLine, "수동 실행 요청 처리 중...");
+});
+
+test("수동 실행 거부(409): conflict 문구와 notice가 채워진다", () => {
+  const state = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt() }),
+    { phase: "conflict", message: "이미 실행 중인 배치가 있습니다." }
+  );
+  assert.match(state.statusLine, /^수동 실행 거부됨/);
+  assert.equal(state.notice, state.statusLine);
+});
+
+test("수동 실행 실패: error 문구와 notice가 채워진다", () => {
+  const state = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt() }),
+    { phase: "error", message: "네트워크 오류" }
+  );
+  assert.match(state.statusLine, /^수동 실행 실패/);
+  assert.equal(state.notice, state.statusLine);
+});
+
+test("dispatch 인자를 생략하면 기존 동작과 동일하다(하위 호환)", () => {
+  const withoutDispatch = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt() })
+  );
+  const withIdle = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt() }),
+    { phase: "idle" }
+  );
+  assert.deepEqual(withoutDispatch, withIdle);
+});

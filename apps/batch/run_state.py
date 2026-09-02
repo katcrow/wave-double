@@ -61,6 +61,22 @@ def parse_attempt(value: Any) -> Attempt:
         raise RunStateError("INVALID_ATTEMPT", "start_attempt returned incomplete data") from exc
 
 
+def safe_record_dispatch_receipt(gateway: "RunStateGateway", dispatch_request_id: Any, run_id: Any) -> None:
+    """Story 1.10: 영수증 기록 실패가 정상 종료된 배치를 실패로 오판시키지 않도록 감싼다.
+
+    ``dispatch_request_id``가 없으면(스케줄 트리거) 아무 일도 하지 않는다. 실패는 로그로만 남긴다.
+    """
+    if not dispatch_request_id or run_id is None:
+        return
+    try:
+        gateway.record_dispatch_receipt(dispatch_request_id, run_id)
+    except Exception as exc:  # noqa: BLE001 - 배치 결과에 영향을 주지 않는 최상위 경계
+        print(
+            f"dispatch_request_id={dispatch_request_id} run_id={run_id} "
+            f"result_code=DISPATCH_RECEIPT_FAILED message={exc}"
+        )
+
+
 class RunStateGateway:
     def __init__(self, client: RpcClient) -> None:
         self._client = client
@@ -193,6 +209,15 @@ class RunStateGateway:
         return self._call(
             "publish_attempt",
             {"p_run_id": str(run_id), "p_fence_token": fence_token, "p_lease_token": str(lease_token)},
+        )
+
+    def record_dispatch_receipt(self, dispatch_request_id: Any, run_id: UUID | str) -> Any:
+        """Story 1.10: 배치 CLI의 첫 단계가 dispatch outbox에 receipt(run_id)를 idempotent 기록한다(AD-18)."""
+        if not dispatch_request_id:
+            raise ValueError("dispatch_request_id must be non-empty")
+        return self._call(
+            "record_dispatch_receipt",
+            {"p_dispatch_request_id": str(dispatch_request_id), "p_run_id": str(run_id)},
         )
 
     def skip(self, run_id: UUID, fence_token: int, lease_token: UUID, skip_reason: str) -> Any:

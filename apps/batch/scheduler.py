@@ -15,7 +15,7 @@ from domain.run_state import BatchKind, LogicalRunKey, Trigger
 
 from .calendar import CalendarRepository, DailyBarProvider, resolve_for_schedule
 from .candidate_stage import CandidateClient, CandidateStageResult, run_candidate_stage
-from .run_state import RunStateGateway, parse_attempt
+from .run_state import RunStateGateway, parse_attempt, safe_record_dispatch_receipt
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,7 @@ def _from_candidate_result(result: CandidateStageResult) -> SchedulerResult:
         result.result_code,
         candidate_count=result.candidate_count,
         fallback_used=result.fallback_used,
+        run_id=result.run_id,
     )
 
 
@@ -56,25 +57,35 @@ def run_scheduled_batch(
     *,
     query_index: str | None = None,
     lease_seconds: int = 300,
+    trigger: Trigger = Trigger.SCHEDULE,
+    dispatch_request_id: str | None = None,
 ) -> SchedulerResult:
-    """휴장이면 attempt를 시작한 뒤 즉시 skip 처리하고, 개장일이면 candidate stage로 위임한다."""
+    """휴장이면 attempt를 시작한 뒤 즉시 skip 처리하고, 개장일이면 candidate stage로 위임한다.
+
+    ``dispatch_request_id``가 주어지면(수동 트리거로 GitHub Actions가 CLI를 호출한 경우)
+    run_id가 확정되는 즉시 dispatch outbox에 receipt를 기록한다(AD-18). 기록 실패는
+    ``safe_record_dispatch_receipt``가 흡수하므로 이 함수의 반환 결과에는 영향이 없다.
+    """
     kind = batch_kind if isinstance(batch_kind, BatchKind) else BatchKind(batch_kind)
     key = _build_logical_run_key(kind, now_kst)
 
     decision = resolve_for_schedule(key.trading_day, daily_bar_provider, calendar_repository)
 
     if decision.status is CalendarStatus.CLOSED:
-        started = gateway.start_attempt(key, Trigger.SCHEDULE, lease_seconds=lease_seconds)
+        started = gateway.start_attempt(key, trigger, lease_seconds=lease_seconds)
         if isinstance(started, dict) and started.get("replayed"):
+            replayed_run_id = started.get("run_id")
+            safe_record_dispatch_receipt(gateway, dispatch_request_id, replayed_run_id)
             return SchedulerResult(
                 "success",
                 "REPLAYED",
-                run_id=str(started.get("run_id")) if started.get("run_id") is not None else None,
+                run_id=str(replayed_run_id) if replayed_run_id is not None else None,
                 logical_run_key=str(started.get("logical_run_key"))
                 if started.get("logical_run_key") is not None
                 else None,
             )
         attempt = parse_attempt(started)
+        safe_record_dispatch_receipt(gateway, dispatch_request_id, attempt.run_id)
         gateway.skip(attempt.run_id, attempt.fence_token, attempt.lease_token, "holiday")
         return SchedulerResult(
             "skipped",
@@ -89,9 +100,10 @@ def run_scheduled_batch(
         gateway,
         candidate_client,
         key,
-        Trigger.SCHEDULE,
+        trigger,
         query_index=query_index,
         lease_seconds=lease_seconds,
+        dispatch_request_id=dispatch_request_id,
     )
     return _from_candidate_result(result)
 

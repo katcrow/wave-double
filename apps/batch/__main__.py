@@ -14,6 +14,8 @@ import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from domain.run_state import Trigger
+
 from .ls_auth import LsOAuthTokenProvider
 from .ls_client import LsClient, LsClientConfig
 from .ls_daily_bar import LsDailyBarProvider
@@ -34,6 +36,8 @@ def _require_env(name: str) -> str:
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m apps.batch")
     parser.add_argument("--batch-kind", required=True, choices=["premarket", "intraday", "close"])
+    parser.add_argument("--trigger", default="schedule", choices=["schedule", "manual"])
+    parser.add_argument("--dispatch-request-id", default=None)
     return parser.parse_args(argv)
 
 
@@ -67,6 +71,8 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             gateway,
             ls_client,
             query_index=query_index,
+            trigger=Trigger(args.trigger),
+            dispatch_request_id=args.dispatch_request_id,
         )
 
 

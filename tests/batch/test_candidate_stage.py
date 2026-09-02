@@ -8,13 +8,22 @@ from domain.run_state import BatchKind, LogicalRunKey, Trigger
 
 
 class FakeRpc:
-    def __init__(self, attempt):
+    def __init__(self, attempt, replayed_run_id=None):
         self.calls = []
         self.attempt = attempt
+        self.replayed_run_id = replayed_run_id
 
     def rpc(self, function, params):
         self.calls.append((function, params))
-        return self.attempt if function == "start_attempt" else {"ok": True}
+        if function == "start_attempt":
+            if self.replayed_run_id is not None:
+                return {
+                    "replayed": True,
+                    "run_id": self.replayed_run_id,
+                    "logical_run_key": params["p_logical_run_key"],
+                }
+            return self.attempt
+        return {"ok": True}
 
 
 class FakeLs:
@@ -161,3 +170,48 @@ def test_fallback_uses_supplied_fallback_params():
         fallback_params={"t1856InBlock": {"sFileData": "base64=="}},
     )
     assert ls.calls[1] == ("t1856", {"t1856InBlock": {"sFileData": "base64=="}})
+
+
+def test_replayed_attempt_records_dispatch_receipt_with_replayed_run_id():
+    replayed_run_id = str(uuid4())
+    rpc = FakeRpc(attempt_payload(), replayed_run_id=replayed_run_id)
+    result = run_candidate_stage(
+        RunStateGateway(rpc),
+        FakeLs(LsResponse(data=[])),
+        LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE),
+        Trigger.MANUAL,
+        dispatch_request_id="dispatch-replay",
+    )
+    assert result.status == "success" and result.result_code == "REPLAYED"
+    assert result.run_id == replayed_run_id
+    assert [call[0] for call in rpc.calls] == ["start_attempt", "record_dispatch_receipt"]
+    assert rpc.calls[1][1] == {"p_dispatch_request_id": "dispatch-replay", "p_run_id": replayed_run_id}
+
+
+def test_replayed_attempt_without_dispatch_request_id_skips_receipt():
+    replayed_run_id = str(uuid4())
+    rpc = FakeRpc(attempt_payload(), replayed_run_id=replayed_run_id)
+    result = run_candidate_stage(
+        RunStateGateway(rpc),
+        FakeLs(LsResponse(data=[])),
+        LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE),
+        Trigger.SCHEDULE,
+    )
+    assert result.status == "success" and result.result_code == "REPLAYED"
+    assert [call[0] for call in rpc.calls] == ["start_attempt"]
+
+
+def test_success_path_records_dispatch_receipt_with_run_id():
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt)
+    result = run_candidate_stage(
+        RunStateGateway(rpc),
+        FakeLs(LsResponse(data=[{"ticker": "005930", "trading_value": 1}])),
+        LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE),
+        Trigger.MANUAL,
+        dispatch_request_id="dispatch-success",
+    )
+    assert result.status == "success"
+    assert result.run_id == attempt["run_id"]
+    assert rpc.calls[1][0] == "record_dispatch_receipt"
+    assert rpc.calls[1][1] == {"p_dispatch_request_id": "dispatch-success", "p_run_id": attempt["run_id"]}
