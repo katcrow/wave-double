@@ -130,3 +130,32 @@ test("형식이 깨진 토큰은 거부된다", async () => {
     (err: unknown) => err instanceof JwtVerificationError && err.code === "INVALID_TOKEN"
   );
 });
+
+test("kid 없는 헤더는 alg로 일치하는 키를 찾는다(여러 kty/alg가 섞인 JWKS에서도)", async () => {
+  function fetchMixedJwks(): Promise<Jwks> {
+    return Promise.resolve({
+      keys: [
+        { kty: ecJwk.kty, kid: "ec-kid", alg: "ES256", crv: ecJwk.crv, x: ecJwk.x, y: ecJwk.y },
+        { kty: rsaJwk.kty, kid: "rsa-kid", alg: "RS256", n: rsaJwk.n, e: rsaJwk.e },
+      ],
+    });
+  }
+  const token = buildToken({ alg: "RS256", typ: "JWT" }, baseClaims(), signRs256);
+  const claims = await verifyJwt(token, { jwksUrl: JWKS_URL, issuer: ISSUER, audience: AUDIENCE, fetchJwks: fetchMixedJwks });
+  assert.equal(claims.sub, "11111111-1111-1111-1111-111111111111");
+});
+
+test("JWKS 응답에 keys 배열이 없으면 JWKS_FETCH_FAILED로 거부된다", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ not_keys: [] }), { status: 200 })) as typeof fetch;
+  try {
+    const token = buildToken({ alg: "RS256", kid: "rsa-kid", typ: "JWT" }, baseClaims(), signRs256);
+    await assert.rejects(
+      verifyJwt(token, { jwksUrl: JWKS_URL, issuer: ISSUER, audience: AUDIENCE }),
+      (err: unknown) => err instanceof JwtVerificationError && err.code === "JWKS_FETCH_FAILED"
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

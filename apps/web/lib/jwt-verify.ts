@@ -78,7 +78,29 @@ async function defaultFetchJwks(url: string): Promise<Jwks> {
   if (!response.ok) {
     throw new JwtVerificationError("JWKS_FETCH_FAILED", `failed to fetch JWKS: HTTP ${response.status}`);
   }
-  return (await response.json()) as Jwks;
+  const body = (await response.json()) as Partial<Jwks>;
+  if (!Array.isArray(body.keys)) {
+    throw new JwtVerificationError("JWKS_FETCH_FAILED", "JWKS response is missing a keys array");
+  }
+  return body as Jwks;
+}
+
+/**
+ * JWKS는 짧은 TTL로 캐싱한다 -- 매 dispatch 호출마다 네트워크를 왕복하면 불필요한 지연/의존성이
+ * 생기고, Supabase Auth/JWKS 엔드포인트의 일시 장애가 곧바로 401(세션 무효)로 오인된다(실제로는
+ * JWKS_FETCH_FAILED). `KEY_NOT_FOUND`(키 로테이션 직후일 수 있음)를 만나면 캐시를 무시하고 한 번
+ * 즉시 재조회한다.
+ */
+const JWKS_CACHE_TTL_MS = 10 * 60 * 1000;
+let jwksCache: { url: string; jwks: Jwks; fetchedAtMs: number } | null = null;
+
+async function cachedFetchJwks(url: string, fetchJwks: (url: string) => Promise<Jwks>, nowMs: number): Promise<Jwks> {
+  if (jwksCache && jwksCache.url === url && nowMs - jwksCache.fetchedAtMs < JWKS_CACHE_TTL_MS) {
+    return jwksCache.jwks;
+  }
+  const jwks = await fetchJwks(url);
+  jwksCache = { url, jwks, fetchedAtMs: nowMs };
+  return jwks;
 }
 
 function toPublicKey(jwk: JwkRecord): KeyObject {
@@ -90,6 +112,10 @@ function toPublicKey(jwk: JwkRecord): KeyObject {
 }
 
 export async function verifyJwt(token: string, options: VerifyJwtOptions): Promise<JwtClaims> {
+  // 캐싱은 실제 네트워크 fetch(기본 경로)에만 적용한다 -- 테스트가 주입하는 `fetchJwks`는 매 호출을
+  // 그대로 실행해야 하므로(예: RS256/ES256 fixture가 같은 jwksUrl로 서로 다른 키를 반환) 캐시를
+  // 우회한다.
+  const usingDefaultFetch = options.fetchJwks === undefined;
   const fetchJwks = options.fetchJwks ?? defaultFetchJwks;
   const nowMs = (options.now ?? Date.now)();
 
@@ -109,8 +135,19 @@ export async function verifyJwt(token: string, options: VerifyJwtOptions): Promi
   const algSpec = header.alg ? ALGORITHMS[header.alg] : undefined;
   if (!algSpec) throw new JwtVerificationError("UNSUPPORTED_ALG", `unsupported alg: ${String(header.alg)}`);
 
-  const jwks = await fetchJwks(options.jwksUrl);
-  const jwk = jwks.keys.find((key) => (header.kid ? key.kid === header.kid : true));
+  const findMatch = (jwks: Jwks) =>
+    jwks.keys.find((key) => (header.kid ? key.kid === header.kid : key.alg === header.alg));
+
+  let jwks = usingDefaultFetch
+    ? await cachedFetchJwks(options.jwksUrl, fetchJwks, nowMs)
+    : await fetchJwks(options.jwksUrl);
+  let jwk = findMatch(jwks);
+  if (!jwk && usingDefaultFetch) {
+    // 캐시가 최신 키 로테이션을 놓쳤을 수 있으니, 캐시를 무시하고 한 번만 강제로 재조회한다.
+    jwks = await fetchJwks(options.jwksUrl);
+    jwksCache = { url: options.jwksUrl, jwks, fetchedAtMs: nowMs };
+    jwk = findMatch(jwks);
+  }
   if (!jwk) throw new JwtVerificationError("KEY_NOT_FOUND", "no matching JWK for kid");
 
   let publicKey: KeyObject;

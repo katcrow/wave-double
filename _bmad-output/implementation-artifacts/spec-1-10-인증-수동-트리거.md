@@ -11,14 +11,17 @@ context:
 warnings: [oversized]
 deferred:
   - summary: >-
-      tests/sql/test_dispatch_outbox.sql이 CI에 연결되지 않아 자동 회귀 검증이 없다.
+      (RESOLVED, /bmad-review 후속 수정) tests/sql/test_dispatch_outbox.sql이 CI에 연결되지
+      않아 자동 회귀 검증이 없던 문제 -- .github/workflows/test.yml에 postgres:16 서비스
+      컨테이너를 쓰는 `sql-outbox-tests` job을 추가해 pg_cron/pg_net 확장이 필요한
+      202609021100 migration만 제외하고 나머지를 적용한 뒤 fixture를 실행하도록 했다. 이
+      세션에도 psql이 없어 CI에서 실제로 통과하는지는 다음 CI 실행에서 확인이 필요하다.
     evidence: |-
-      .github/workflows/test.yml에는 psql/Postgres를 실행하는 스텝이 전혀 없다. story 1.8부터
-      이어진 프로젝트 전역의 기존 공백이며, 로컬 개발 환경에도 psql/docker/Postgres가 없어
-      이번 세션에서 SQL fixture를 직접 실행해 검증하지 못했다.
+      .github/workflows/test.yml의 sql-outbox-tests job(postgres 서비스 컨테이너 + psql
+      client 설치 + migration 순차 적용 + tests/sql/test_dispatch_outbox.sql 실행).
     location: >-
       tests/sql/test_dispatch_outbox.sql, .github/workflows/test.yml
-    severity: medium
+    severity: low
   - summary: >-
       새 server-only 환경변수는 실제로 .env.local(gitignored)에 "Story 1.10" 섹션으로
       이미 문서화돼 있다 -- 리뷰 2개 패스의 "문서화가 없다"는 지적은 부정확했다(리뷰
@@ -178,6 +181,13 @@ deferred:
   - `[low]` `[patch]` `apps/web/lib/dispatch.test.ts`: 같은 파일의 다른 순수 함수는 모두 테스트가 있는데 `isValidLogicalRunKey`만 없었다 -- 배치 종류별 유효/무효 케이스를 추가했다.
 - deferred:
   - `/api/dispatch`·`/api/dispatch/worker` route 핸들러 전체 흐름(요청→응답 매핑)에 대한 자동 테스트가 없다 -- 이 리포의 기존 관례(route/서버 컴포넌트는 e2e+추출된 순수 함수 단위 테스트로 검증)를 따른 것이라 이번 스토리가 새로 만든 공백은 아니지만, 개선 여지로 남긴다. `deferred` 프런트매터에는 별도 기록하지 않음(범위가 이 스토리 하나에 국한되지 않는 리포 전역 테스트 전략 논의 대상).
+
+### 2026-09-02 — /bmad-review 후속 수정 (adversarial/edge-case-hunter/verification-gap)
+`/bmad-review story 1-10`이 commit `ead4821`(story 1.10 구현) diff에 세 렌즈를 병렬 적용해 21건을 발견했고, 전부 수정했다.
+- **adversarial(11건) 수정**: `scheduled-batch.yml`의 concurrency group을 schedule/manual(batch_kind+dispatch_request_id)로 분리(서로 다른 수동 배치가 GitHub Actions 큐에서 서로를 막지 않게 함); outbox worker의 재시도 예산을 queued(`MAX_DISPATCH_ATTEMPTS=5`)/accepted(`MAX_RECEIPT_ATTEMPTS=30`)로 분리(GitHub Actions 콜드스타트를 dead_letter로 오탐하지 않게 함, `lib/dispatch-outbox-worker.ts`); dispatch 성공 후 실행 목록을 한 번 조회해 모호하지 않을 때만 `github_run_id`를 채우도록 best-effort 상관관계 추가; `GITHUB_DISPATCH_TOKEN` 필요 권한(Actions+Issues write) 문서화; 202 이후 대시보드 스냅샷을 주기적으로 재조회해 UI가 실제 배치 시작을 곧 반영하도록 폴링 추가(`DataTrustBar`); `/api/auth/signout` 라우트 신설(세션 강제 로그아웃 경로 부재 해소); JWKS를 10분 TTL로 캐싱하고 `JWKS_FETCH_FAILED`는 401 대신 503으로 매핑(세션 만료와 인프라 장애를 구분); `/api/dispatch`의 rate limit을 body/CSRF 검증 이후로 재배치; `advance_dispatch_outbox`에 순방향 전이 가드 추가(queued→accepted, {queued,accepted}→dead_letter만 허용) 및 `tests/sql/test_dispatch_outbox.sql`에 케이스 추가; `.github/workflows/test.yml`에 postgres 서비스 컨테이너로 SQL fixture를 실행하는 `sql-outbox-tests` job 신설; `next.config.ts`에 CSP/보안 헤더 추가.
+- **edge-case-hunter(7건) 수정**: JWT 검증의 `kid` 없는 헤더를 `alg`로 매칭하도록 수정, JWKS 응답에 `keys` 배열이 없으면 `JWKS_FETCH_FAILED`로 명확히 거부; `proxy.ts`의 Supabase 환경변수 누락 시 fail-open을 fail-closed(로그인 리다이렉트)로 전환, `getUser()` 예외를 try/catch로 감싸 사이트 전체 크래시 방지, 정적 자산 경로(robots.txt 등)를 matcher에서 추가 제외; outbox worker의 `advance_dispatch_outbox('accepted')` 실패를 로그로 남김(중복 dispatch 추적 가능하게); `/api/dispatch`의 서비스 클라이언트/rpc 호출 전체를 try/catch로 감싸 JSON 에러 계약 유지.
+- **verification-gap(3건) 수정**: SQL outbox RPC fixture를 CI에 연결(위 adversarial 항목과 동일); `apps/batch/__main__.py`의 `--trigger`/`--dispatch-request-id` 포워딩 경로를 검증하는 테스트 추가(`tests/batch/test_main.py`, 기존에는 CI에도 연결돼 있지 않아 `.github/workflows/test.yml`에 추가); outbox worker의 재시도/dead-letter 결정 로직을 `lib/dispatch-outbox-worker.ts` 순수 함수로 추출하고 전용 단위 테스트 작성(이 스토리의 다른 모든 신규 로직과 같은 패턴으로 통일).
+- **검증**: `npm run typecheck`/`npm run test`(47/47)/`npm run build`/`npm run test:e2e`(4/4) 통과. `uv run pytest tests/batch/ tests/domain/ backtest`(266/266) 통과. `npm run test:e2e`는 최초 시도에서 잘못된 작업 디렉터리 확인 때문에 "환경 부재"로 오판했다가, 재확인해 실제로는 `.env.local`/`playwright.config.ts`가 모두 있어 정상 실행됨을 확인했다 -- 그 과정에서 새로 추가한 CSP가 Next 개발 모드의 `eval()`(React 디버깅용 스택 재구성)을 막아 브라우저 콘솔에 경고를 내는 실제 회귀를 잡아 `script-src`에 `'unsafe-eval'`을 개발 환경에서만 허용하도록 고쳤다(프로덕션은 그대로 엄격). SQL 순방향 전이 가드와 `sql-outbox-tests` CI job만 이 세션에 psql/Postgres가 없어 실행 검증하지 못했다(다음 CI 실행에서 확인 필요) -- 코드 리뷰로 로직만 검증했다.
 
 ## Design Notes
 

@@ -277,6 +277,15 @@ a {
   cursor: not-allowed;
 }
 
+.data-trust-bar__sign-out {
+  background: transparent;
+  color: var(--color-ink-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+
 /* Notice banner (비차단 Toast/notice) */
 
 .notice-banner {

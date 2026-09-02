@@ -35,7 +35,7 @@ jobs:
         run: uv run --with pytest pytest tests/domain/test_calendar.py tests/batch/test_calendar.py -q
 
       - name: Scheduler tests (Python)
-        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py -q
+        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_main.py -q
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -61,3 +61,47 @@ jobs:
 
       - name: E2E test (web)
         run: npm run test:e2e
+
+  sql-outbox-tests:
+    # Story 1.10 후속: tests/sql/test_dispatch_outbox.sql이 실제 Postgres에서 한 번도 실행되지
+    # 않아 dispatch_outbox RPC(request_manual_dispatch/claim/advance/record_dispatch_receipt/
+    # reconcile)의 회귀를 잡을 자동 검증이 없었다. pg_cron/pg_net 확장이 필요한
+    # 202609021100_schedule_dispatch_worker_cron.sql만 제외하고 나머지 migration을 순서대로
+    # 적용한 뒤 fixture를 실행한다(fixture 자체가 `begin`/`rollback`으로 감싸여 있어 상태를 남기지 않는다).
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for f in $(ls infra/supabase/migrations/*.sql | sort); do
+            case "$f" in
+              *schedule_dispatch_worker_cron.sql) echo "skipping $f (requires pg_cron/pg_net, not available in CI)"; continue ;;
+            esac
+            echo "applying $f"
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Run dispatch_outbox SQL fixture
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/sql/test_dispatch_outbox.sql

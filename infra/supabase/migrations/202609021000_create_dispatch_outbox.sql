@@ -191,6 +191,15 @@ begin
   if not found then raise exception using message = 'OUTBOX_NOT_FOUND'; end if;
   if o.lease_token is distinct from p_lease_token then raise exception using message = 'STALE_LEASE'; end if;
   if o.status in ('completed', 'failed', 'dead_letter') then raise exception using message = 'OUTBOX_ALREADY_TERMINAL'; end if;
+  -- 순방향 상태 전이만 허용한다: queued->accepted, {queued,accepted}->dead_letter.
+  -- started/completed/failed는 이 RPC의 책임이 아니다(각각 record_dispatch_receipt/
+  -- reconcile_dispatch_outbox가 전담) -- 그 외 조합은 호출자 실수/오용으로 간주해 거부한다.
+  if not (
+    (o.status = 'queued' and p_status in ('accepted', 'dead_letter'))
+    or (o.status = 'accepted' and p_status = 'dead_letter')
+  ) then
+    raise exception using message = 'INVALID_OUTBOX_TRANSITION';
+  end if;
   update dispatch_outbox
     set status = p_status,
         run_id = coalesce(p_run_id, run_id),

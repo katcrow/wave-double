@@ -46,8 +46,13 @@ export async function POST(request: NextRequest) {
   try {
     claims = await verifyJwt(token, { jwksUrl, issuer, audience: "authenticated" });
   } catch (error) {
-    const code = error instanceof JwtVerificationError ? error.code : "UNAUTHENTICATED";
-    return NextResponse.json({ error: code }, { status: 401 });
+    if (error instanceof JwtVerificationError) {
+      // JWKS_FETCH_FAILED는 세션이 유효하지 않다는 뜻이 아니라 인증 인프라 자체가 응답하지 않는다는
+      // 뜻이다 -- 401(재로그인 유도)로 뭉뚱그리면 운영자가 잘못된 진단(세션 만료)을 하게 된다.
+      const status = error.code === "JWKS_FETCH_FAILED" ? 503 : 401;
+      return NextResponse.json({ error: error.code }, { status });
+    }
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
   }
 
   const subjectEmail = typeof claims.email === "string" ? claims.email : null;
@@ -59,14 +64,6 @@ export async function POST(request: NextRequest) {
   const headerValue = request.headers.get(CSRF_HEADER_NAME);
   if (!validateCsrf(cookieValue, headerValue)) {
     return NextResponse.json({ error: "CSRF_VALIDATION_FAILED" }, { status: 403 });
-  }
-
-  const rateLimitResult = rateLimiter.check(claims.sub);
-  if (!rateLimitResult.allowed) {
-    return NextResponse.json(
-      { error: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(rateLimitResult.retryAfterMs / 1000)) } }
-    );
   }
 
   let body: DispatchRequestBody;
@@ -89,6 +86,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "INVALID_DISPATCH_REQUEST" }, { status: 400 });
   }
 
+  // rate limit은 요청이 형식적으로 유효하다고 판정된 뒤에만 소비한다 -- 그렇지 않으면 CSRF 재발급
+  // 지연이나 클라이언트 버그로 인한 잘못된 요청들이 정상 요청의 슬롯까지 잠식해, 정작 장애 대응
+  // 중인 단일 운영자가 스스로를 잠그게 된다.
+  const rateLimitResult = rateLimiter.check(claims.sub);
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: "RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rateLimitResult.retryAfterMs / 1000)) } }
+    );
+  }
+
   // 클라이언트가 보낸 hash는 절대 신뢰하지 않는다 -- 서버가 canonical 필드에서 직접 계산한다.
   const payloadHash = hashDispatchPayload({
     logical_run_key: logicalRunKey,
@@ -96,15 +104,24 @@ export async function POST(request: NextRequest) {
     batch_kind: batchKind,
   });
 
-  const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.rpc("request_manual_dispatch", {
-    p_idempotency_key: idempotencyKey,
-    p_payload_hash: payloadHash,
-    p_requested_by: subjectEmail,
-    p_logical_run_key: logicalRunKey,
-    p_trading_day: tradingDay,
-    p_batch_kind: batchKind,
-  });
+  let data: { status?: string; dispatch_request_id?: string; outbox_id?: string; reason?: string; run_id?: string; started_at?: string; trigger?: string } | null;
+  let error: { message: string } | null;
+  try {
+    const supabase = getSupabaseServiceClient();
+    ({ data, error } = await supabase.rpc("request_manual_dispatch", {
+      p_idempotency_key: idempotencyKey,
+      p_payload_hash: payloadHash,
+      p_requested_by: subjectEmail,
+      p_logical_run_key: logicalRunKey,
+      p_trading_day: tradingDay,
+      p_batch_kind: batchKind,
+    }));
+  } catch (thrown) {
+    // 서비스 클라이언트 생성(환경변수 누락) 또는 rpc() 자체의 네트워크 예외 -- route의 JSON 에러
+    // 계약을 지켜 Next.js 기본 HTML 500 페이지 대신 구조화된 응답을 낸다.
+    console.error(`request_manual_dispatch threw: ${thrown instanceof Error ? thrown.message : "unknown error"}`);
+    return NextResponse.json({ error: "DISPATCH_REQUEST_FAILED" }, { status: 500 });
+  }
 
   if (error) {
     if (error.message === "IDEMPOTENCY_KEY_CONFLICT") {

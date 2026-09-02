@@ -9,6 +9,7 @@
 
 - 개발·테스트(e2e 등)는 **playwright MCP**를 사용한다.
 - Supabase 작업 시엔 **supabase MCP**를 사용한다.
+- **Supabase는 별도 dev/staging 프로젝트 없이 운영 프로젝트(`qqhjeumlecaudsiqhhdu`, "wave-double") 하나만 쓴다.** migration 적용, RPC/SQL 실행, fixture 검증 등 모든 Supabase 작업은 이 운영 프로젝트에 바로 적용한다 — 별도 확인 없이 바로 진행할 것(Neo의 명시적 정책, 2026-09-02).
 - 프로젝트 기본 언어는 **한국어**를 사용한다.
 
 ## Where things are

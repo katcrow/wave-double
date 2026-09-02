@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { BatchKind, DashboardSnapshot } from "@/lib/dashboard-types";
 import { deriveTrustBarState, type DispatchUiState } from "@/lib/trust-bar";
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "@/lib/csrf-constants";
@@ -48,11 +49,49 @@ function deriveManualDispatchTarget(
   return { batchKind: "close", logicalRunKey: `close:${today}`, tradingDay: today };
 }
 
+const POST_DISPATCH_POLL_INTERVAL_MS = 10_000;
+const POST_DISPATCH_POLL_MAX_TICKS = 12; // ~2분
+
 export default function DataTrustBar({ snapshot }: { snapshot: DashboardSnapshot }) {
   const [dispatchState, setDispatchState] = useState<DispatchUiState>({ phase: "idle" });
   const idempotencyKeyRef = useRef<string | null>(null);
+  const router = useRouter();
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { statusLine, candidateCount, triggerLabel } = deriveTrustBarState(snapshot, dispatchState);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
+  /**
+   * Story 1.10 후속: dispatch가 202로 수락된 뒤 UI는 outbox의 비동기 결과(실제 배치 시작/실패/
+   * dead_letter)를 알 방법이 전혀 없었다. outbox 상태를 직접 노출하는 새 RPC 없이도, 대시보드
+   * 스냅샷(latest_attempt/trigger)을 잠시 주기적으로 재조회하면 배치가 실제로 시작되는 순간은
+   * 곧바로 반영된다 -- 완전한 신호는 아니지만(dead_letter까지는 드러내지 못한다), 페이지를 수동
+   * 새로고침해야만 알 수 있던 것보다는 낫다.
+   */
+  const startPostDispatchPolling = useCallback(() => {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    let ticks = 0;
+    pollTimerRef.current = setInterval(() => {
+      ticks += 1;
+      router.refresh();
+      if (ticks >= POST_DISPATCH_POLL_MAX_TICKS && pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    }, POST_DISPATCH_POLL_INTERVAL_MS);
+  }, [router]);
+
+  const handleSignOut = useCallback(async () => {
+    // Story 1.10 후속: 세션 침해 의심 등으로 강제 로그아웃이 필요할 때 앱 안에서 할 방법이
+    // 없었다 -- 단일 운영자 세션이 이 앱의 유일한 보안 경계이므로 in-product 로그아웃을 둔다.
+    await fetch("/api/auth/signout", { method: "POST" });
+    window.location.href = "/login";
+  }, []);
 
   const handleManualTrigger = useCallback(async () => {
     setDispatchState({ phase: "pending" });
@@ -90,6 +129,7 @@ export default function DataTrustBar({ snapshot }: { snapshot: DashboardSnapshot
       if (response.status === 202) {
         idempotencyKeyRef.current = null;
         setDispatchState({ phase: "idle" });
+        startPostDispatchPolling();
         return;
       }
 
@@ -109,7 +149,7 @@ export default function DataTrustBar({ snapshot }: { snapshot: DashboardSnapshot
       idempotencyKeyRef.current = null;
       setDispatchState({ phase: "error", message: "네트워크 오류로 수동 실행 요청이 실패했습니다." });
     }
-  }, [snapshot]);
+  }, [snapshot, startPostDispatchPolling]);
 
   return (
     <div className="data-trust-bar" role="status" aria-live="polite">
@@ -128,6 +168,9 @@ export default function DataTrustBar({ snapshot }: { snapshot: DashboardSnapshot
         disabled={dispatchState.phase === "pending"}
       >
         {dispatchState.phase === "pending" ? "수동 실행 요청 중..." : "수동 실행"}
+      </button>
+      <button type="button" className="data-trust-bar__sign-out" onClick={handleSignOut}>
+        로그아웃
       </button>
     </div>
   );

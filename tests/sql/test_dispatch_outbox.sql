@@ -75,35 +75,35 @@ end $$;
 
 -- 6) claim_dispatch_outbox: FOR UPDATE SKIP LOCKED로 queued 행을 claim하고 lease/attempts를 갱신한다.
 do $$
-declare res jsonb; claimed jsonb; outbox_id uuid; lease uuid;
+declare res jsonb; claimed jsonb; claimed_outbox_id uuid; lease uuid;
 begin
   res := public.request_manual_dispatch('idem-claim', 'hash-claim', 'neo@example.com', 'close:2099-03-06', date '2099-03-06', 'close');
   claimed := public.claim_dispatch_outbox(120, 20);
   if not exists (select 1 from jsonb_array_elements(claimed) e where (e->>'dispatch_request_id')::uuid = (res->>'dispatch_request_id')::uuid) then
     raise exception 'claim_dispatch_outbox did not return the queued row';
   end if;
-  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into outbox_id, lease
+  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into claimed_outbox_id, lease
     from jsonb_array_elements(claimed) e where (e->>'dispatch_request_id')::uuid = (res->>'dispatch_request_id')::uuid;
-  if (select attempts from public.dispatch_outbox where outbox_id = outbox_id) <> 1 then raise exception 'attempts was not incremented on claim'; end if;
+  if (select attempts from public.dispatch_outbox where outbox_id = claimed_outbox_id) <> 1 then raise exception 'attempts was not incremented on claim'; end if;
   -- 아직 lease가 살아있는 동안 재호출하면 다시 claim되지 않는다.
   claimed := public.claim_dispatch_outbox(120, 20);
-  if exists (select 1 from jsonb_array_elements(claimed) e where (e->>'outbox_id')::uuid = outbox_id) then
+  if exists (select 1 from jsonb_array_elements(claimed) e where (e->>'outbox_id')::uuid = claimed_outbox_id) then
     raise exception 'a leased row was claimed again before lease expiry';
   end if;
 end $$;
 
 -- 7) dead_letter 전이: advance_dispatch_outbox가 lease 소유 하에서만 종결 상태로 전이시킨다.
 do $$
-declare res jsonb; claimed jsonb; outbox_id uuid; lease uuid; advanced jsonb; caught boolean := false;
+declare res jsonb; claimed jsonb; claimed_outbox_id uuid; lease uuid; advanced jsonb; caught boolean := false;
 begin
   res := public.request_manual_dispatch('idem-dead', 'hash-dead', 'neo@example.com', 'close:2099-03-07', date '2099-03-07', 'close');
   claimed := public.claim_dispatch_outbox(120, 20);
-  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into outbox_id, lease
+  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into claimed_outbox_id, lease
     from jsonb_array_elements(claimed) e where (e->>'dispatch_request_id')::uuid = (res->>'dispatch_request_id')::uuid;
-  advanced := public.advance_dispatch_outbox(outbox_id, 'dead_letter', lease);
+  advanced := public.advance_dispatch_outbox(claimed_outbox_id, 'dead_letter', lease);
   if advanced->>'status' <> 'dead_letter' then raise exception 'advance_dispatch_outbox did not reach dead_letter'; end if;
   begin
-    perform public.advance_dispatch_outbox(outbox_id, 'accepted', lease);
+    perform public.advance_dispatch_outbox(claimed_outbox_id, 'accepted', lease);
   exception when others then caught := true;
   end;
   if not caught then raise exception 'a terminal outbox row accepted a further transition'; end if;
@@ -111,13 +111,13 @@ end $$;
 
 -- 8) record_dispatch_receipt: accepted -> started로 idempotent하게 run_id를 기록한다.
 do $$
-declare res jsonb; claimed jsonb; outbox_id uuid; lease uuid; started jsonb; run_id uuid; receipt jsonb;
+declare res jsonb; claimed jsonb; claimed_outbox_id uuid; lease uuid; started jsonb; run_id uuid; receipt jsonb;
 begin
   res := public.request_manual_dispatch('idem-receipt', 'hash-receipt', 'neo@example.com', 'close:2099-03-08', date '2099-03-08', 'close');
   claimed := public.claim_dispatch_outbox(120, 20);
-  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into outbox_id, lease
+  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into claimed_outbox_id, lease
     from jsonb_array_elements(claimed) e where (e->>'dispatch_request_id')::uuid = (res->>'dispatch_request_id')::uuid;
-  perform public.advance_dispatch_outbox(outbox_id, 'accepted', lease);
+  perform public.advance_dispatch_outbox(claimed_outbox_id, 'accepted', lease);
   started := public.start_attempt('close:2099-03-08', date '2099-03-08', 'close', 'manual', 300);
   run_id := (started->>'run_id')::uuid;
   receipt := public.record_dispatch_receipt((res->>'dispatch_request_id')::uuid, run_id);
@@ -167,6 +167,39 @@ begin
   reconciled := public.reconcile_dispatch_outbox();
   if (reconciled->>'completed')::integer <> 0 or (reconciled->>'failed')::integer <> 0 then
     raise exception 'reconcile_dispatch_outbox re-processed already-terminal outbox rows';
+  end if;
+end $$;
+
+-- 10) advance_dispatch_outbox는 순방향 전이만 허용한다: queued 행에 started/queued로의 전이는 거부된다
+-- (started는 record_dispatch_receipt 전담, 그 외 임의 전이는 호출자 오용으로 간주한다).
+do $$
+declare res jsonb; claimed jsonb; claimed_outbox_id uuid; lease uuid; caught_started boolean := false; caught_queued boolean := false;
+begin
+  res := public.request_manual_dispatch('idem-transition', 'hash-transition', 'neo@example.com', 'close:2099-03-11', date '2099-03-11', 'close');
+  claimed := public.claim_dispatch_outbox(120, 20);
+  select (e->>'outbox_id')::uuid, (e->>'lease_token')::uuid into claimed_outbox_id, lease
+    from jsonb_array_elements(claimed) e where (e->>'dispatch_request_id')::uuid = (res->>'dispatch_request_id')::uuid;
+
+  begin
+    perform public.advance_dispatch_outbox(claimed_outbox_id, 'started', lease);
+  exception when others then caught_started := true;
+  end;
+  if not caught_started then raise exception 'queued->started was accepted by advance_dispatch_outbox'; end if;
+
+  begin
+    perform public.advance_dispatch_outbox(claimed_outbox_id, 'queued', lease);
+  exception when others then caught_queued := true;
+  end;
+  if not caught_queued then raise exception 'queued->queued was accepted by advance_dispatch_outbox'; end if;
+
+  if (select status from public.dispatch_outbox where outbox_id = claimed_outbox_id) <> 'queued' then
+    raise exception 'rejected transitions still mutated the outbox row';
+  end if;
+
+  -- 정상 순방향 전이(queued->accepted)는 여전히 허용된다.
+  perform public.advance_dispatch_outbox(claimed_outbox_id, 'accepted', lease);
+  if (select status from public.dispatch_outbox where outbox_id = claimed_outbox_id) <> 'accepted' then
+    raise exception 'valid queued->accepted transition was rejected';
   end if;
 end $$;
 
