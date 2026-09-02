@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-02-2026 18:12
+last_updated: 09-02-2026 12:10
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -55,7 +55,7 @@ development_status:
   2-2-일봉-캐시-증분-갱신: done
   2-3-운영-백테스트-공유-전략-api-진입점: done
   2-4-골든-픽스처-회귀-테스트: done
-  2-5-후보-태깅-stage-저장: backlog
+  2-5-후보-태깅-stage-저장: done
   2-6-supply_3day-스키마: backlog
   2-7-오늘의-후보-카드-ui: backlog
   2-8-장중-시그널-유지-소멸-표시: backlog
