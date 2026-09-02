@@ -47,7 +47,7 @@
 - 후보 저장: `candidates`(candidate_id attempt-scoped, UNIQUE(ticker, trading_day, attempt_run_id)) + `candidate_source_contrib`(source/contribution_weight). `candidates.source` 컬럼은 두지 않는다(AD-21). 절단 완료 후 저장 건수와 반환 건수 대조는 `truncated_count`로 설명.
 - 스냅샷: `get_dashboard_snapshot()`이 `complete_snapshot`/`latest_attempt`/`available_partial_sections`/`missing_sections`/`unprocessed_items`/`no_snapshot`을 분리 반환. Epic 1에는 `candidates` section만 구현(나머지는 후속 에픽까지 항상 `missing_sections`), section 하나는 단일 run_id에서만 읽는다.
 - Dispatch 멱등화: `dispatch_request`+`dispatch_outbox`(queued→accepted→started→completed|failed|dead_letter), `FOR UPDATE SKIP LOCKED`+만료 lease, `pg_cron` 1분 durable fallback. 같은 idempotency key+hash는 replay, 다른 hash는 409. active attempt 존재 시 409. 브라우저는 publishable key+RLS SELECT만, dispatch는 server-only + JWKS/CSRF/rate limit 검증, `NEXT_PUBLIC_*`에 secret 금지.
-- 인증: Supabase Auth email OTP/magic link 단일 운영자 세션 + server-side subject allowlist. cron은 전부 UTC로 기술하고 KST 환산 주석 병기. 백업은 `age` 공개키 암호화 후 GitHub Actions artifact로 보관.
+- 인증: Supabase Auth 이메일/비밀번호(사전 등록된 단일 슈퍼유저 계정, 공개 회원가입 비활성화) 단일 운영자 세션 + server-side subject allowlist(2026-09-02 sprint change로 OTP/매직링크에서 전환 — 세션 발급 방식만 바뀌고 JWKS/CSRF/rate limit/allowlist 등 나머지 방어선은 무변경). cron은 전부 UTC로 기술하고 KST 환산 주석 병기. 백업은 `age` 공개키 암호화 후 GitHub Actions artifact로 보관.
 
 ## UX & Interaction Patterns
 

@@ -1,0 +1,120 @@
+name: backup
+
+# spec-1-12 (AD-17): 무료 Supabase 플랜에는 PITR이 없다. 6시간마다 transaction-consistent
+# pg_dump를 만들어 age로 암호화하고 GitHub Actions artifact(14일 보관)로 남긴다. schedule
+# 이벤트는 fork에서 실행되지 않으므로(GitHub 기본 동작) production secret이 fork로 새지 않는다
+# (AD-11, scheduled-batch.yml과 동일 관례) -- 그래서 pull_request 트리거는 절대 두지 않는다.
+on:
+  schedule:
+    # UTC 00/06/12/18시 = 6시간 간격.
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: wave-double-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pg_dump and age
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client age
+
+      - name: Determine schema migration version and cutoff
+        id: meta
+        run: |
+          version=$(ls infra/supabase/migrations/*.sql | sort | tail -n1 | xargs basename)
+          cutoff=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "cutoff=$cutoff" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=wave-double-backup-$(date -u +%Y%m%dT%H%M%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Dump, encrypt, and build manifest
+        id: dump
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
+          SCHEMA_MIGRATION_VERSION: ${{ steps.meta.outputs.version }}
+          CUTOFF_UTC: ${{ steps.meta.outputs.cutoff }}
+        run: |
+          set -euo pipefail
+          workdir=$(mktemp -d)
+          plain="$workdir/dump.sql"
+          encrypted="$workdir/backup.sql.age"
+
+          # --single-transaction: 하나의 REPEATABLE READ 스냅샷으로 전체 덤프를 읽어
+          # transaction-consistent를 보장한다(Design Notes 참고).
+          # --no-owner --no-privileges: 복원 대상(disposable Postgres, backup-restore-drill.yml)에는
+          # Supabase 전용 role(anon/authenticated/service_role 등)이 없으므로, 이 role을 참조하는
+          # OWNER TO / GRANT 구문이 덤프에 섞이면 plain psql -f 복원이 깨진다. 데이터·스키마 자체의
+          # transaction-consistency와는 무관한 순수 이식성 옵션이다.
+          pg_dump --format=plain --single-transaction --no-owner --no-privileges \
+            "$SUPABASE_DB_URL" > "$plain"
+
+          age -r "$BACKUP_AGE_PUBLIC_KEY" -o "$encrypted" "$plain"
+
+          # 평문 덤프는 워크플로 종료 전에 반드시 삭제한다.
+          shred -u "$plain" 2>/dev/null || rm -f "$plain"
+
+          checksum=$(sha256sum "$encrypted" | cut -d' ' -f1)
+
+          cat > "$workdir/manifest.json" <<JSON
+          {
+            "schema_migration_version": "$SCHEMA_MIGRATION_VERSION",
+            "cutoff_utc": "$CUTOFF_UTC",
+            "checksum_sha256": "$checksum"
+          }
+          JSON
+
+          echo "workdir=$workdir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload encrypted backup + manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: |
+            ${{ steps.dump.outputs.workdir }}/backup.sql.age
+            ${{ steps.dump.outputs.workdir }}/manifest.json
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Create failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # gh issue create --label은 라벨이 저장소에 미리 존재해야 하므로(REST API의 issue 생성과
+          # 달리 자동 생성되지 않는다), 실패 시점에 idempotent하게 먼저 만들어 둔다.
+          gh label create backup-failed --color d73a4a --description "backup.yml 실패" --force
+
+          # 지속 장애 시 매 6시간(또는 반복 workflow_dispatch)마다 새 Issue가 쌓이지 않도록, 같은
+          # 라벨의 열린 Issue가 이미 있으면 새로 만들지 않는다.
+          existing_open=$(gh issue list --label backup-failed --state open --json number --jq 'length')
+          if [ "$existing_open" -gt 0 ]; then
+            echo "backup-failed 라벨의 열린 Issue가 이미 있어 새로 만들지 않습니다."
+            exit 0
+          fi
+
+          gh issue create \
+            --title "[backup] backup.yml 실패 ($(date -u +%Y-%m-%dT%H:%M:%SZ))" \
+            --label backup-failed \
+            --body "$(cat <<'EOF'
+          backup.yml 워크플로가 실패했습니다.
+
+          run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          필요 조치: 위 run 로그를 확인하고(secret 값은 노출되지 않습니다), 원인을 해결한 뒤
+          workflow_dispatch로 수동 재실행하세요(AD-17, docs/backup-restore.md 참고).
+          EOF
+          )"
