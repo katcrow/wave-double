@@ -35,7 +35,7 @@ jobs:
         run: uv run --with pytest pytest tests/domain/test_calendar.py tests/batch/test_calendar.py -q
 
       - name: Scheduler tests (Python)
-        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_main.py -q
+        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py -q
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -105,6 +105,6 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql; do
+          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql tests/sql/test_daily_ohlcv.sql; do
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done
