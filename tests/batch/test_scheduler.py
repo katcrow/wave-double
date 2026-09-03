@@ -127,10 +127,15 @@ class FakeOhlcvLoader:
 class FakeTagsRepository:
     def __init__(self):
         self.upsert_calls = []
+        self.sync_vanished_calls = []
 
     def upsert_tags(self, tags):
         self.upsert_calls.append(list(tags))
         return len(tags)
+
+    def sync_vanished(self, run_id):
+        self.sync_vanished_calls.append(run_id)
+        return {"vanished_count": 0}
 
 
 def tags_deps(*, candidate_rows=None, ohlcv_status=OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY):

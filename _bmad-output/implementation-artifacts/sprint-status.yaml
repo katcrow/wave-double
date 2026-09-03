@@ -154,8 +154,8 @@ action_items:
     action: "공통 scheduler fake와 batch regression을 sync_vanished protocol에 맞게 수정하고
       234+ 테스트 전체를 녹색으로 만든다."
     owner: "개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md, deferred-work.md(story 3.5 후속 조치)"
   - id: "epic-2-retro-item-9-운영-supabase에-epic-2-migration을-적용하고-sql"
     epic: 2
     action: "운영 Supabase에 Epic 2 migration을 적용하고 SQL fixture·RLS·function grants를
