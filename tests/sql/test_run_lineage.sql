@@ -423,17 +423,19 @@ begin
     values ('ZZLIN9', 'B', date '2099-01-07', 100, 'OPEN')
     returning outcome_id into outcome_gap;
 
-  -- ZZLIN10(strategy C): pricechk는 null이고 갭은 12%(임계값 이하)라 전이 없이 OPEN으로 유지되어야 한다.
+  -- ZZLIN10(strategy C): pricechk는 null이고 갭은 10%(임계값 이하)라 전이 없이 OPEN으로 유지되어야 한다.
+  -- entry_price(110)는 Story 3.6의 TP/SL 판정(고가 111/저가 108 모두 ±3% 이내)도 우연히 충족하지
+  -- 않도록 오늘 daily_ohlcv 범위 안쪽으로 골랐다 -- 이 시나리오는 SUSPENDED 감지만 검증한다.
   insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
     values ('ZZLIN10', date '2099-01-10', 100, 105, 99, 100, 1000)
     on conflict (ticker, trading_day) do nothing;
   insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
-    values ('ZZLIN10', date '2099-01-11', 110, 115, 108, 112, 1000)
+    values ('ZZLIN10', date '2099-01-11', 109, 111, 108, 110, 1000)
     on conflict (ticker, trading_day) do nothing;
   insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
-    values ('ZZLIN10', 'C', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-07', 'entry_price', 100));
+    values ('ZZLIN10', 'C', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-07', 'entry_price', 110));
   insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
-    values ('ZZLIN10', 'C', date '2099-01-07', 100, 'OPEN')
+    values ('ZZLIN10', 'C', date '2099-01-07', 110, 'OPEN')
     returning outcome_id into outcome_normal;
 
   -- ZZLIN11(strategy A): 이미 SUSPENDED 상태 -- 감지 대상에서 제외되어 재전이/중복 이벤트가 없어야 한다.
@@ -587,6 +589,226 @@ begin
   select count(*) into suspended_event_count from public.outcome_events
     where logical_run_key = key and ticker = 'ZZLIN13' and strategy = 'C' and command_type = 'SUSPENDED';
   if suspended_event_count <> 1 then raise exception 'expected 1 SUSPENDED event for ZZLIN13/C, got %', suspended_event_count; end if;
+end $$;
+
+-- Story 3.6: TP/SL 판정 & 비용 반영 손익률. SUSPENDED 감지 루프 뒤에 재조회한 status='OPEN' and
+-- entry_date<오늘인 candidate_outcome만 대상으로, 오늘자 outcome_observations(record_outcome_observation이
+-- 이번 attempt에서 방금 기록)의 고가/저가로 TP/SL/동시충족(SL우선)/진입당일/임계값미달/이미SUSPENDED/
+-- 관찰없음/terminal재판정제외/재시도idempotency를 하나의 close 발행으로 검증한다.
+do $$
+declare
+  key text := 'close:2099-01-13'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  outcome_tp uuid; outcome_sl uuid; outcome_both uuid; outcome_entry_day uuid; outcome_below uuid;
+  outcome_suspended uuid; outcome_no_obs uuid; outcome_terminal uuid;
+  event_count integer;
+  publish_result jsonb;
+  transitions jsonb;
+begin
+  -- ZZLIN14/A: TP 확정. entry=100, 오늘 고가 103(>=103), 저가 100(>97).
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN14', date '2099-01-12', 100, 102, 98, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN14', date '2099-01-13', 101, 103, 100, 101, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN14', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN14', 'A', date '2099-01-11', 100, 'OPEN')
+    returning outcome_id into outcome_tp;
+
+  -- ZZLIN15/B: SL 확정. entry=100, 오늘 저가 97(<=97).
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN15', date '2099-01-12', 100, 102, 98, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN15', date '2099-01-13', 99, 99, 97, 98, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN15', 'B', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN15', 'B', date '2099-01-11', 100, 'OPEN')
+    returning outcome_id into outcome_sl;
+
+  -- ZZLIN16/C: 동일일 TP·SL 동시 충족 -- SL이 우선 확정되어야 한다. entry=100, 고가 105(TP충족), 저가 95(SL충족).
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN16', date '2099-01-12', 100, 102, 98, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN16', date '2099-01-13', 100, 105, 95, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN16', 'C', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN16', 'C', date '2099-01-11', 100, 'OPEN')
+    returning outcome_id into outcome_both;
+
+  -- ZZLIN17/A: 진입 당일(entry_date=오늘) -- 임계값을 충족해도 판정하지 않고 OPEN 유지되어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN17', date '2099-01-12', 100, 102, 98, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN17', date '2099-01-13', 100, 110, 100, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN17', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-13', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN17', 'A', date '2099-01-13', 100, 'OPEN')
+    returning outcome_id into outcome_entry_day;
+
+  -- ZZLIN18/B: 임계값 미달 -- 고가 102(<103), 저가 98(>97). 판정 없음, OPEN 유지.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN18', date '2099-01-12', 100, 102, 98, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN18', date '2099-01-13', 100, 102, 98, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN18', 'B', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN18', 'B', date '2099-01-11', 100, 'OPEN')
+    returning outcome_id into outcome_below;
+
+  -- ZZLIN19/C: 이미 SUSPENDED -- 오늘 고가/저가가 SL/TP 임계값을 모두 충족해도 판정 대상에서 제외되어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN19', date '2099-01-13', 100, 130, 70, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN19', 'C', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN19', 'C', date '2099-01-11', 100, 'SUSPENDED')
+    returning outcome_id into outcome_suspended;
+
+  -- ZZLIN20/A: 오늘 daily_ohlcv가 없어 3.4가 관찰을 기록하지 않음 -- 판정을 건너뛰고 OPEN 유지되어야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN20', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN20', 'A', date '2099-01-11', 100, 'OPEN')
+    returning outcome_id into outcome_no_obs;
+
+  -- ZZLIN21/B: 이미 TP로 terminal -- status='OPEN' 쿼리에서 애초에 제외되어 재판정하지 않아야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN21', 'B', 'OPEN', 'close:2099-01-05', jsonb_build_object('entry_date', date '2099-01-05', 'entry_price', 100));
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN21', 'B', 'TP', 'close:2099-01-05', jsonb_build_object('trading_day', date '2099-01-06', 'exit_price', 103, 'return_pct', 2.9));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct)
+    values ('ZZLIN21', 'B', date '2099-01-05', 100, 'TP', date '2099-01-06', 103, 2.9)
+    returning outcome_id into outcome_terminal;
+
+  started := public.start_attempt(key, date '2099-01-13', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+
+  publish_result := public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'close attempt with TP/SL-candidate outcomes did not publish';
+  end if;
+
+  -- TP 확정.
+  if (select status from public.candidate_outcome where outcome_id = outcome_tp) <> 'TP' then
+    raise exception 'expected ZZLIN14/A to transition to TP';
+  end if;
+  if (select exit_price from public.candidate_outcome where outcome_id = outcome_tp) <> 103 then
+    raise exception 'expected ZZLIN14/A exit_price to be entry*1.03 = 103';
+  end if;
+  if (select return_pct from public.candidate_outcome where outcome_id = outcome_tp) <> 2.9 then
+    raise exception 'expected ZZLIN14/A return_pct to be fixed +2.9';
+  end if;
+  select count(*) into event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN14' and strategy = 'A' and command_type = 'TP';
+  if event_count <> 1 then raise exception 'expected exactly 1 TP event for ZZLIN14/A, got %', event_count; end if;
+
+  -- SL 확정.
+  if (select status from public.candidate_outcome where outcome_id = outcome_sl) <> 'SL' then
+    raise exception 'expected ZZLIN15/B to transition to SL';
+  end if;
+  if (select exit_price from public.candidate_outcome where outcome_id = outcome_sl) <> 97 then
+    raise exception 'expected ZZLIN15/B exit_price to be entry*0.97 = 97';
+  end if;
+  if (select return_pct from public.candidate_outcome where outcome_id = outcome_sl) <> -3.1 then
+    raise exception 'expected ZZLIN15/B return_pct to be fixed -3.1';
+  end if;
+  select count(*) into event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN15' and strategy = 'B' and command_type = 'SL';
+  if event_count <> 1 then raise exception 'expected exactly 1 SL event for ZZLIN15/B, got %', event_count; end if;
+
+  -- 동일일 TP·SL 동시 충족: SL 우선.
+  if (select status from public.candidate_outcome where outcome_id = outcome_both) <> 'SL' then
+    raise exception 'expected ZZLIN16/C to resolve to SL when both TP and SL thresholds are met on the same day';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN16' and strategy = 'C' and command_type = 'TP') then
+    raise exception 'ZZLIN16/C must not also receive a TP event when SL wins the same-day tie';
+  end if;
+
+  -- 진입 당일: 판정 없음, OPEN 유지.
+  if (select status from public.candidate_outcome where outcome_id = outcome_entry_day) <> 'OPEN' then
+    raise exception 'expected ZZLIN17/A to remain OPEN when entry_date equals trading_day';
+  end if;
+
+  -- 임계값 미달: 판정 없음, OPEN 유지.
+  if (select status from public.candidate_outcome where outcome_id = outcome_below) <> 'OPEN' then
+    raise exception 'expected ZZLIN18/B to remain OPEN under both TP and SL thresholds';
+  end if;
+
+  -- 이미 SUSPENDED: 판정 대상에서 제외, 상태 그대로.
+  if (select status from public.candidate_outcome where outcome_id = outcome_suspended) <> 'SUSPENDED' then
+    raise exception 'expected ZZLIN19/C to remain SUSPENDED and not be judged for TP/SL';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN19' and command_type in ('TP', 'SL')) then
+    raise exception 'ZZLIN19/C must not receive a TP/SL event while SUSPENDED';
+  end if;
+
+  -- 오늘 관찰 없음: 판정 건너뜀, OPEN 유지.
+  if (select status from public.candidate_outcome where outcome_id = outcome_no_obs) <> 'OPEN' then
+    raise exception 'expected ZZLIN20/A to remain OPEN when no outcome_observations row exists for today';
+  end if;
+
+  -- terminal 재판정 시도: status='OPEN' 쿼리에서 애초에 제외되어 변하지 않는다.
+  if (select status from public.candidate_outcome where outcome_id = outcome_terminal) <> 'TP' then
+    raise exception 'expected ZZLIN21/B to remain TP (already-terminal outcomes are not re-judged)';
+  end if;
+  select count(*) into event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN21' and strategy = 'B' and command_type in ('TP', 'SL');
+  if event_count <> 0 then raise exception 'ZZLIN21/B must not receive any new TP/SL event from this attempt, got %', event_count; end if;
+
+  -- publish_attempt 반환 jsonb의 tp_sl_transitions에 이번 attempt 신규 전이 3건(TP,SL,SL)만 노출되어야 한다.
+  transitions := publish_result->'tp_sl_transitions';
+  if jsonb_array_length(transitions) <> 3 then
+    raise exception 'expected 3 tp_sl_transitions entries, got %', jsonb_array_length(transitions);
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(transitions) e
+      where e->>'ticker' = 'ZZLIN14' and e->>'strategy' = 'A' and e->>'status' = 'TP'
+        and (e->>'exit_price')::numeric = 103 and (e->>'return_pct')::numeric = 2.9
+  ) then
+    raise exception 'expected tp_sl_transitions to expose ZZLIN14/A as TP with exit_price 103 and return_pct 2.9';
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(transitions) e
+      where e->>'ticker' = 'ZZLIN15' and e->>'strategy' = 'B' and e->>'status' = 'SL'
+        and (e->>'exit_price')::numeric = 97 and (e->>'return_pct')::numeric = -3.1
+  ) then
+    raise exception 'expected tp_sl_transitions to expose ZZLIN15/B as SL with exit_price 97 and return_pct -3.1';
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(transitions) e
+      where e->>'ticker' = 'ZZLIN16' and e->>'strategy' = 'C' and e->>'status' = 'SL'
+  ) then
+    raise exception 'expected tp_sl_transitions to expose ZZLIN16/C as SL (same-day tie)';
+  end if;
+
+  -- 재시도(동일 attempt 재발행): 같은 (logical_run_key,ticker,strategy,'TP') 이벤트가 이미 있으므로
+  -- 직접 재호출해도 새 이벤트를 만들지 않아야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN14', 'A', 'TP', key, jsonb_build_object('retry', true))
+    on conflict (logical_run_key, ticker, strategy, command_type) do nothing;
+  select count(*) into event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN14' and strategy = 'A' and command_type = 'TP';
+  if event_count <> 1 then raise exception 'idempotent retry created a duplicate TP event, got %', event_count; end if;
 end $$;
 
 rollback;

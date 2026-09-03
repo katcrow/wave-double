@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-03-2026 18:50
+last_updated: 09-03-2026 23:02
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -67,7 +67,7 @@ development_status:
   3-3-close-발행-트랜잭션-연결-재진입-금지: done
   3-4-일자별-판정-관찰-수집: done
   3-5-가격-조정-이상-감지-suspended-전이: done
-  3-6-tp-sl-판정-비용-반영-손익률: backlog
+  3-6-tp-sl-판정-비용-반영-손익률: done
   3-7-timeout-컷오프-확정-추적-대상-유계화: backlog
   3-8-outcome-correction-이벤트-메커니즘: backlog
   3-9-상장폐지-delisted-종결: backlog
@@ -155,7 +155,8 @@ action_items:
       234+ 테스트 전체를 녹색으로 만든다."
     owner: "개발"
     status: done
-    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md, deferred-work.md(story 3.5 후속 조치)"
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md, deferred-work.md(story
+      3.5 후속 조치)"
   - id: "epic-2-retro-item-9-운영-supabase에-epic-2-migration을-적용하고-sql"
     epic: 2
     action: "운영 Supabase에 Epic 2 migration을 적용하고 SQL fixture·RLS·function grants를
