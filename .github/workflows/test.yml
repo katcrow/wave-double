@@ -105,6 +105,6 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql tests/sql/test_daily_ohlcv.sql tests/sql/test_candidate_tags.sql tests/sql/test_supply_3day.sql tests/sql/test_get_today_candidate_cards.sql tests/sql/test_sync_vanished_tags.sql tests/sql/test_get_today_disappeared_candidates.sql tests/sql/test_outcome_schema.sql; do
+          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql tests/sql/test_daily_ohlcv.sql tests/sql/test_candidate_tags.sql tests/sql/test_supply_3day.sql tests/sql/test_get_today_candidate_cards.sql tests/sql/test_sync_vanished_tags.sql tests/sql/test_get_today_disappeared_candidates.sql tests/sql/test_outcome_schema.sql tests/sql/test_outcome_open_command.sql; do
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done

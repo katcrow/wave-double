@@ -1,0 +1,203 @@
+-- Story 3.2 emit_open_command fixture. All writes are rolled back.
+begin;
+
+do $$
+declare
+  v_result jsonb;
+  v_result2 jsonb;
+  v_result3 jsonb;
+  v_event_id uuid;
+  v_outcome_id uuid;
+  v_caught boolean;
+  v_event_count integer;
+  v_outcome_count integer;
+  v_result4 jsonb;
+  v_result5 jsonb;
+  v_preexisting_outcome_id uuid;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values
+    ('close:2099-07-01', date '2099-07-01', 'close'),
+    ('close:2099-07-02', date '2099-07-02', 'close'),
+    ('intraday:2099-07-01:09:30', date '2099-07-01', 'intraday')
+  on conflict (logical_run_key) do nothing;
+
+  -- ZZTEST1/A has a close-day OHLCV row; ZZTEST2/B (missing daily_ohlcv scenario) does not.
+  -- Fake, non-real tickers are used so this fixture is safe to run against a database that
+  -- already holds real production outcome data (real KRX tickers are 6-digit codes).
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+  values
+    ('ZZTEST1', date '2099-07-01', 100, 105, 99, 101, 1000),
+    ('ZZTEST1', date '2099-07-02', 100, 105, 99, 102, 1000),
+    ('ZZTEST3', date '2099-07-01', 200, 205, 199, 201, 1000),
+    ('ZZTEST4', date '2099-07-01', 300, 305, 299, 301, 1000)
+  on conflict (ticker, trading_day) do nothing;
+
+  -- Scenario: 최초 발행.
+  v_result := public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'A');
+  if (v_result->>'replayed')::boolean is distinct from false
+     or (v_result->>'skipped')::boolean is distinct from false
+     or v_result->>'event_id' is null
+     or v_result->>'outcome_id' is null
+     or (v_result->>'entry_date')::date <> date '2099-07-01'
+     or (v_result->>'entry_price')::numeric <> 101 then
+    raise exception 'initial emit_open_command result mismatch: %', v_result;
+  end if;
+  v_event_id := (v_result->>'event_id')::uuid;
+  v_outcome_id := (v_result->>'outcome_id')::uuid;
+
+  select count(*) into v_event_count from public.outcome_events
+    where logical_run_key = 'close:2099-07-01' and ticker = 'ZZTEST1' and strategy = 'A' and command_type = 'OPEN';
+  if v_event_count <> 1 then raise exception 'expected exactly one OPEN event, got %', v_event_count; end if;
+
+  if not exists (
+    select 1 from public.candidate_outcome
+    where outcome_id = v_outcome_id and ticker = 'ZZTEST1' and strategy = 'A'
+      and entry_date = date '2099-07-01' and entry_price = 101 and status = 'OPEN'
+  ) then raise exception 'candidate_outcome projection row missing or mismatched after initial emit'; end if;
+
+  -- Mutate daily_ohlcv after publication to prove entry_price is fixed at OPEN time,
+  -- not recomputed on replay.
+  update public.daily_ohlcv set close = 999 where ticker = 'ZZTEST1' and trading_day = date '2099-07-01';
+
+  -- Scenario: 동일 key 재호출 -> replay, no new rows, unchanged entry_price.
+  v_result2 := public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'A');
+  if (v_result2->>'replayed')::boolean is distinct from true
+     or (v_result2->>'skipped')::boolean is distinct from false
+     or (v_result2->>'event_id')::uuid <> v_event_id
+     or (v_result2->>'outcome_id')::uuid <> v_outcome_id
+     or (v_result2->>'entry_price')::numeric <> 101 then
+    raise exception 'replayed emit_open_command result mismatch: %', v_result2;
+  end if;
+
+  select count(*) into v_event_count from public.outcome_events
+    where logical_run_key = 'close:2099-07-01' and ticker = 'ZZTEST1' and strategy = 'A' and command_type = 'OPEN';
+  if v_event_count <> 1 then raise exception 'replay must not create a new event, got count %', v_event_count; end if;
+
+  select count(*) into v_outcome_count from public.candidate_outcome where outcome_id = v_outcome_id;
+  if v_outcome_count <> 1 then raise exception 'replay must not create a new projection row'; end if;
+
+  -- Scenario: 재진입 금지 -- different (next) trading day's close batch, same (ticker,strategy) still OPEN.
+  v_result3 := public.emit_open_command('close:2099-07-02', 'ZZTEST1', 'A');
+  if (v_result3->>'replayed')::boolean is distinct from false
+     or (v_result3->>'skipped')::boolean is distinct from true
+     or v_result3->>'reason' <> 'ALREADY_OPEN'
+     or (v_result3->>'outcome_id')::uuid <> v_outcome_id then
+    raise exception 'reentry guard result mismatch: %', v_result3;
+  end if;
+
+  select count(*) into v_event_count from public.outcome_events
+    where ticker = 'ZZTEST1' and strategy = 'A' and command_type = 'OPEN';
+  if v_event_count <> 1 then raise exception 'reentry attempt must not create a new event, got count %', v_event_count; end if;
+
+  select count(*) into v_outcome_count from public.candidate_outcome where ticker = 'ZZTEST1' and strategy = 'A';
+  if v_outcome_count <> 1 then raise exception 'reentry attempt must not create a new projection row'; end if;
+
+  -- Scenario: 장중 배치 오호출.
+  v_caught := false;
+  begin
+    perform public.emit_open_command('intraday:2099-07-01:09:30', 'ZZTEST1', 'A');
+  exception when others then
+    if sqlerrm = 'OPEN_COMMAND_REQUIRES_CLOSE_BATCH' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'intraday logical_run_key was accepted'; end if;
+
+  -- Scenario: 종가 데이터 없음.
+  v_caught := false;
+  begin
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST2', 'B');
+  exception when others then
+    if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'missing daily_ohlcv close was accepted'; end if;
+
+  -- Scenario: 미지원 전략.
+  v_caught := false;
+  begin
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'D');
+  exception when others then
+    if sqlerrm = 'INVALID_STRATEGY' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'unsupported strategy was accepted'; end if;
+
+  -- Scenario: NULL 전략 (fix #1 -- `not in` with NULL is NULL, not TRUE, so the guard must
+  -- explicitly check `is null` too, else this falls through to a NOT NULL constraint error).
+  v_caught := false;
+  begin
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', null);
+  exception when others then
+    if sqlerrm = 'INVALID_STRATEGY' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'NULL strategy was accepted'; end if;
+
+  -- Scenario: 동시 삽입 경쟁 (fix #2) -- simulate a losing concurrent call by pre-seeding a
+  -- candidate_outcome OPEN row for (ticker,strategy) whose entry_date equals this call's
+  -- trading_day. The pre-check does not fire (entry_date matches), so the function proceeds
+  -- to insert a new outcome_events row (succeeds) and then a new candidate_outcome row, which
+  -- collides with the pre-seeded OPEN row on the one-open-per-ticker-strategy unique index.
+  -- The exception handler must catch that unique_violation and return the ALREADY_OPEN skip
+  -- shape (with event_id, since the event insert did succeed) instead of raising.
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZTEST3', 'A', date '2099-07-01', 201, 'OPEN')
+    returning outcome_id into v_preexisting_outcome_id;
+
+  v_result4 := public.emit_open_command('close:2099-07-01', 'ZZTEST3', 'A');
+  if (v_result4->>'replayed')::boolean is distinct from false
+     or (v_result4->>'skipped')::boolean is distinct from true
+     or v_result4->>'reason' <> 'ALREADY_OPEN'
+     or v_result4->>'event_id' is null
+     or (v_result4->>'outcome_id')::uuid <> v_preexisting_outcome_id
+     or (v_result4->>'entry_price')::numeric <> 201 then
+    raise exception 'concurrent-insert race result mismatch: %', v_result4;
+  end if;
+
+  select count(*) into v_event_count from public.outcome_events
+    where logical_run_key = 'close:2099-07-01' and ticker = 'ZZTEST3' and strategy = 'A' and command_type = 'OPEN';
+  if v_event_count <> 1 then
+    raise exception 'concurrent-insert race must still record the submitted command event, got count %', v_event_count;
+  end if;
+
+  select count(*) into v_outcome_count from public.candidate_outcome where ticker = 'ZZTEST3' and strategy = 'A';
+  if v_outcome_count <> 1 then
+    raise exception 'concurrent-insert race must not create a duplicate OPEN projection row, got count %', v_outcome_count;
+  end if;
+
+  -- Scenario: projection drift on replay (fix #4) -- an outcome_events row exists for the
+  -- command key, but its matching candidate_outcome projection row is missing. The replay
+  -- branch must raise a clear error (OUTCOME_PROJECTION_MISSING) instead of silently
+  -- returning nulls.
+  v_result5 := public.emit_open_command('close:2099-07-01', 'ZZTEST4', 'C');
+  if (v_result5->>'replayed')::boolean is distinct from false
+     or (v_result5->>'skipped')::boolean is distinct from false
+     or v_result5->>'outcome_id' is null then
+    raise exception 'ZZTEST4 initial emit_open_command result mismatch: %', v_result5;
+  end if;
+
+  delete from public.candidate_outcome where outcome_id = (v_result5->>'outcome_id')::uuid;
+
+  v_caught := false;
+  begin
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST4', 'C');
+  exception when others then
+    if sqlerrm = 'OUTCOME_PROJECTION_MISSING' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'projection drift on replay was not detected'; end if;
+
+  -- Grant/revoke: only service_role may execute.
+  if exists (
+    select 1
+    from information_schema.role_routine_grants
+    where routine_schema = 'public' and routine_name = 'emit_open_command'
+      and grantee in ('PUBLIC', 'anon', 'authenticated')
+  ) then raise exception 'emit_open_command must not be executable by public/anon/authenticated'; end if;
+
+  if not exists (
+    select 1
+    from information_schema.role_routine_grants
+    where routine_schema = 'public' and routine_name = 'emit_open_command'
+      and grantee = 'service_role' and privilege_type = 'EXECUTE'
+  ) then raise exception 'emit_open_command must be executable by service_role'; end if;
+end $$;
+
+select 'outcome_open_command' as fixture, 'pass' as result;
+rollback;

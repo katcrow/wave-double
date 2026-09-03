@@ -589,6 +589,14 @@ export type Database = {
         Args: { p_limit?: number; p_worker_lease_seconds?: number }
         Returns: Json
       }
+      emit_open_command: {
+        Args: {
+          p_logical_run_key: string
+          p_strategy: string
+          p_ticker: string
+        }
+        Returns: Json
+      }
       get_dashboard_snapshot: { Args: never; Returns: Json }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
       get_today_disappeared_candidates: {
