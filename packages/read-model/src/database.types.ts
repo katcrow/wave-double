@@ -612,6 +612,7 @@ export type Database = {
         }
         Returns: Json
       }
+      price_adjustment_gap_threshold: { Args: never; Returns: number }
       publish_attempt:
         | { Args: { p_fence_token: number; p_run_id: string }; Returns: Json }
         | {

@@ -247,6 +247,16 @@ begin
     raise exception 'observation should not exist for outcome_b due to missing daily_ohlcv';
   end if;
 
+  -- Story 3.5: 오늘 daily_ohlcv가 없으면 SUSPENDED 감지 루프도 판정 근거가 없어 자연 제외되어야 한다
+  -- (outcome_b는 이 attempt에서 daily_ohlcv가 없는 채로 status='OPEN'을 유지해야 하며, SUSPENDED로 잘못
+  -- 전이되거나 예외가 발생하면 안 된다).
+  if (select status from public.candidate_outcome where outcome_id = outcome_b) <> 'OPEN' then
+    raise exception 'expected outcome_b to remain OPEN when today''s daily_ohlcv is missing (no basis for SUSPENDED detection)';
+  end if;
+  if exists (select 1 from public.outcome_events where ticker = 'ZZLIN2' and strategy = 'B' and command_type = 'SUSPENDED') then
+    raise exception 'unexpected SUSPENDED event for ZZLIN2/B despite missing daily_ohlcv';
+  end if;
+
   -- terminal(TP) outcome은 관찰 루프에서 제외된다.
   if exists (select 1 from public.outcome_observations where outcome_id = outcome_tp and evaluation_trading_day = date '2099-01-10') then
     raise exception 'terminal TP outcome should not receive a new observation';
@@ -374,6 +384,209 @@ begin
   if exists (select 1 from public.candidate_outcome where (ticker, strategy) in (('ZZLIN4', 'A'), ('ZZLIN5', 'B'))) then
     raise exception 'candidate_outcome rows leaked for the partial loop despite rollback';
   end if;
+end $$;
+
+-- Story 3.5: 가격 조정 이상 감지 & SUSPENDED 전이. pricechk 갭 무관 전이, 갭 안전망(35%), 임계값 이하(12%)
+-- 정상 유지, 이미 SUSPENDED인 outcome의 제외, 동일 attempt 재발행 idempotency, 전일 daily_ohlcv 없음
+-- (갭 계산 스킵) 케이스를 하나의 close 발행으로 검증한다.
+do $$
+declare
+  key text := 'close:2099-01-11'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  outcome_pricechk uuid; outcome_gap uuid; outcome_normal uuid; outcome_already_suspended uuid; outcome_no_prev uuid;
+  suspended_event_count integer;
+  transitions jsonb;
+  publish_result jsonb;
+begin
+  -- ZZLIN8(strategy A): pricechk가 0이 아니고 갭은 10%뿐이지만 그래도 무조건 SUSPENDED로 전이되어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN8', date '2099-01-10', 100, 105, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume, pricechk)
+    values ('ZZLIN8', date '2099-01-11', 108, 115, 105, 110, 1000, 1)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN8', 'A', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-07', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN8', 'A', date '2099-01-07', 100, 'OPEN')
+    returning outcome_id into outcome_pricechk;
+
+  -- ZZLIN9(strategy B): pricechk는 null이지만 전일 대비 종가 갭이 35%(안전망 임계값 30% 초과)라 SUSPENDED로 전이되어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN9', date '2099-01-10', 100, 105, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN9', date '2099-01-11', 130, 138, 128, 135, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN9', 'B', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-07', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN9', 'B', date '2099-01-07', 100, 'OPEN')
+    returning outcome_id into outcome_gap;
+
+  -- ZZLIN10(strategy C): pricechk는 null이고 갭은 12%(임계값 이하)라 전이 없이 OPEN으로 유지되어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN10', date '2099-01-10', 100, 105, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN10', date '2099-01-11', 110, 115, 108, 112, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN10', 'C', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-07', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN10', 'C', date '2099-01-07', 100, 'OPEN')
+    returning outcome_id into outcome_normal;
+
+  -- ZZLIN11(strategy A): 이미 SUSPENDED 상태 -- 감지 대상에서 제외되어 재전이/중복 이벤트가 없어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume, pricechk)
+    values ('ZZLIN11', date '2099-01-11', 200, 250, 190, 240, 1000, 1)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN11', 'A', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-07', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN11', 'A', date '2099-01-07', 100, 'SUSPENDED')
+    returning outcome_id into outcome_already_suspended;
+
+  -- ZZLIN12(strategy B): 신규 진입 첫날이라 전일 daily_ohlcv가 없다. pricechk는 null이므로 갭 계산을
+  -- 시도하지만 전일 행이 없어 계산을 건너뛰고 오탐 없이 OPEN으로 유지되어야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN12', date '2099-01-11', 50, 55, 48, 52, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN12', 'B', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-11', 'entry_price', 52));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN12', 'B', date '2099-01-11', 52, 'OPEN')
+    returning outcome_id into outcome_no_prev;
+
+  started := public.start_attempt(key, date '2099-01-11', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+
+  publish_result := public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'close attempt with SUSPENDED-candidate outcomes did not publish';
+  end if;
+
+  -- pricechk 관측(갭 무관): SUSPENDED 전이 + outcome_events 1행.
+  if (select status from public.candidate_outcome where outcome_id = outcome_pricechk) <> 'SUSPENDED' then
+    raise exception 'expected ZZLIN8/A to transition to SUSPENDED via pricechk';
+  end if;
+  select count(*) into suspended_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN8' and strategy = 'A' and command_type = 'SUSPENDED';
+  if suspended_event_count <> 1 then raise exception 'expected exactly 1 SUSPENDED event for ZZLIN8/A, got %', suspended_event_count; end if;
+
+  -- 갭 안전망(35% > 30%): SUSPENDED 전이.
+  if (select status from public.candidate_outcome where outcome_id = outcome_gap) <> 'SUSPENDED' then
+    raise exception 'expected ZZLIN9/B to transition to SUSPENDED via gap safety net';
+  end if;
+  select count(*) into suspended_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN9' and strategy = 'B' and command_type = 'SUSPENDED';
+  if suspended_event_count <> 1 then raise exception 'expected exactly 1 SUSPENDED event for ZZLIN9/B, got %', suspended_event_count; end if;
+
+  -- 임계값 이하(12%): 전이 없음, OPEN 유지.
+  if (select status from public.candidate_outcome where outcome_id = outcome_normal) <> 'OPEN' then
+    raise exception 'expected ZZLIN10/C to remain OPEN under the 30%% gap threshold';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN10' and command_type = 'SUSPENDED') then
+    raise exception 'unexpected SUSPENDED event for ZZLIN10/C under threshold';
+  end if;
+
+  -- 이미 SUSPENDED: 감지 대상 제외, 중복 이벤트 없음, 상태 그대로.
+  if (select status from public.candidate_outcome where outcome_id = outcome_already_suspended) <> 'SUSPENDED' then
+    raise exception 'expected ZZLIN11/A to remain SUSPENDED';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN11' and command_type = 'SUSPENDED') then
+    raise exception 'already-SUSPENDED outcome should not receive a new SUSPENDED event from this attempt';
+  end if;
+
+  -- 전일 daily_ohlcv 없음: 갭 계산 스킵, 오탐 없이 OPEN 유지.
+  if (select status from public.candidate_outcome where outcome_id = outcome_no_prev) <> 'OPEN' then
+    raise exception 'expected ZZLIN12/B to remain OPEN when no prior trading day daily_ohlcv exists';
+  end if;
+
+  -- publish_attempt 반환 jsonb의 suspended_transitions에 이번 attempt 신규 전이 2건만 노출되어야 한다.
+  transitions := publish_result->'suspended_transitions';
+  if jsonb_array_length(transitions) <> 2 then
+    raise exception 'expected 2 suspended_transitions entries, got %', jsonb_array_length(transitions);
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(transitions) e
+      where e->>'ticker' = 'ZZLIN8' and e->>'strategy' = 'A' and (e->>'via_pricechk')::boolean is true
+  ) then
+    raise exception 'expected suspended_transitions to expose ZZLIN8/A via pricechk';
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(transitions) e
+      where e->>'ticker' = 'ZZLIN9' and e->>'strategy' = 'B' and (e->>'via_pricechk')::boolean is false
+  ) then
+    raise exception 'expected suspended_transitions to expose ZZLIN9/B via gap safety net';
+  end if;
+
+  -- 재시도(동일 attempt 재발행): 같은 (logical_run_key,ticker,strategy,'SUSPENDED') 이벤트가 이미 있으므로
+  -- 직접 재호출해도 새 이벤트를 만들지 않고 publish_attempt 자체는 정상 커밋된 상태를 유지해야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN8', 'A', 'SUSPENDED', key, jsonb_build_object('retry', true))
+    on conflict (logical_run_key, ticker, strategy, command_type) do nothing;
+  select count(*) into suspended_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN8' and strategy = 'A' and command_type = 'SUSPENDED';
+  if suspended_event_count <> 1 then raise exception 'idempotent retry created a duplicate SUSPENDED event, got %', suspended_event_count; end if;
+end $$;
+
+-- Story 3.5 review patch(verification-gap/edge-case-hunter): 같은 attempt 안에서 emit_open_command(3.2)가
+-- 방금 새로 OPEN시킨 outcome도, 오늘 daily_ohlcv에 pricechk가 관측되면 SUSPENDED 감지 루프가 곧바로
+-- 전이시켜야 한다 -- tag_row/emit_open_command 루프와 susp_row 루프가 실제로 결합되는 유일한 실경로이며
+-- 지금까지의 3.5 시나리오는 모두 candidate_outcome을 직접 insert해 이 경로를 우회했다.
+do $$
+declare
+  key text := 'close:2099-01-12'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_f uuid := gen_random_uuid();
+  outcome_same_day uuid;
+  open_event_count integer;
+  suspended_event_count integer;
+begin
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN13', date '2099-01-11', 100, 105, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume, pricechk)
+    values ('ZZLIN13', date '2099-01-12', 100, 105, 99, 101, 1000, 1)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-01-12', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(jsonb_build_object('candidate_id', candidate_f, 'ticker', 'ZZLIN13', 'name', 'Lineage Test 13', 'trading_value', 100,
+      'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('f', 64), 'original_count', 1, 'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (candidate_f, attempt_id, 'C', date '2099-01-12');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
+
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'close attempt with same-day pricechk on a freshly-opened tag did not publish';
+  end if;
+
+  select outcome_id into outcome_same_day from public.candidate_outcome where ticker = 'ZZLIN13' and strategy = 'C';
+  if outcome_same_day is null then raise exception 'expected emit_open_command to open ZZLIN13/C'; end if;
+
+  if (select status from public.candidate_outcome where outcome_id = outcome_same_day) <> 'SUSPENDED' then
+    raise exception 'expected same-day-opened ZZLIN13/C to be immediately transitioned to SUSPENDED by the pricechk observed on its own entry day';
+  end if;
+
+  select count(*) into open_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN13' and strategy = 'C' and command_type = 'OPEN';
+  if open_event_count <> 1 then raise exception 'expected 1 OPEN event for ZZLIN13/C, got %', open_event_count; end if;
+
+  select count(*) into suspended_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN13' and strategy = 'C' and command_type = 'SUSPENDED';
+  if suspended_event_count <> 1 then raise exception 'expected 1 SUSPENDED event for ZZLIN13/C, got %', suspended_event_count; end if;
 end $$;
 
 rollback;
