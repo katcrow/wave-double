@@ -10,6 +10,8 @@ export interface CandidateCardViewModel {
   candidateId: string;
   ticker: string;
   name: string | null;
+  /** 렌더링용 표시 이름. name이 null이면 ticker로 대체(row.name ?? row.ticker). */
+  displayName: string;
   /** 정렬된(A/B/C) 태그 중 MAX_VISIBLE_TAGS개까지. */
   visibleStrategies: string[];
   /** visibleStrategies에서 접힌 나머지 태그 수. 0이면 "+N" 배지를 렌더링하지 않는다. */
@@ -31,6 +33,7 @@ export function buildCandidateCardViewModels(
     candidateId: row.candidate_id,
     ticker: row.ticker,
     name: row.name,
+    displayName: row.name ?? row.ticker,
     visibleStrategies: row.strategies.slice(0, MAX_VISIBLE_TAGS),
     hiddenStrategyCount: Math.max(0, row.strategies.length - MAX_VISIBLE_TAGS),
     supplyPartialMissing: row.supply_partial_missing,

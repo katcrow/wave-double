@@ -33,27 +33,18 @@ as $$
       array_agg(distinct t.strategy order by t.strategy) as strategies,
       -- D0 행이 없으면(Epic 4 수집 미구현) NULL -> coalesce로 false. D0 행이 있고 investor_net_status가
       -- pending/missing일 때만 true -- 부분결측은 데이터 일부가 존재할 때의 상태이지 전체 부재가 아니다.
-      coalesce(d0.investor_net_status in ('pending', 'missing'), false) as supply_partial_missing
+      coalesce(s.investor_net_status in ('pending', 'missing'), false) as supply_partial_missing
     from public.candidates c
     inner join public.candidate_tags t
       on t.candidate_id = c.candidate_id
       and t.attempt_run_id = c.attempt_run_id
       and t.status = 'active'
-    -- supply_3day의 D0 슬롯은 attempt_run_id별로 누적되며 덮어쓰지 않는다(테이블 comment 참고) --
-    -- 같은 (candidate_id, attempt_run_id)에 D0 행이 여러 개일 수 있으므로, 조인/집계 전에 후보당
-    -- 정확히 한 행만(trading_day 기준 최신) distinct on으로 선택해 investor_net_status가 group by
-    -- 키에 들어가 카드가 중복 노출되는 일을 막는다.
-    left join lateral (
-      select s.investor_net_status
-      from public.supply_3day s
-      where s.candidate_id = c.candidate_id
-        and s.attempt_run_id = c.attempt_run_id
-        and s.slot = 'D0'
-      order by s.trading_day desc
-      limit 1
-    ) d0 on true
+    left join public.supply_3day s
+      on s.candidate_id = c.candidate_id
+      and s.attempt_run_id = c.attempt_run_id
+      and s.slot = 'D0'
     where c.attempt_run_id = p_run_id
-    group by c.candidate_id, c.ticker, c.name, d0.investor_net_status
+    group by c.candidate_id, c.ticker, c.name, s.investor_net_status
   ) card
 $$;
 

@@ -57,6 +57,11 @@ test("name이 null이어도 그대로 보존한다(렌더 단계에서 ticker로
   assert.equal(vm.name, null);
 });
 
+test("name이 null이면 displayName은 ticker로 대체된다", () => {
+  const [vm] = buildCandidateCardViewModels([row({ name: null, ticker: "005930" })]);
+  assert.equal(vm.displayName, "005930");
+});
+
 test("빈 배열 입력은 빈 배열을 반환한다", () => {
   assert.deepEqual(buildCandidateCardViewModels([]), []);
 });

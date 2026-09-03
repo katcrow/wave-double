@@ -14,7 +14,7 @@ export default function StrategyTagList({
   hiddenCount: number;
 }) {
   return (
-    <ul className="strategy-tag-list" aria-label="전략 태그">
+    <ul className="strategy-tag-list" aria-label="전략 태그" role="list">
       {visibleStrategies.map((strategy) => (
         <li key={strategy}>
           <Link href={`/strategies/${strategy}`} className="strategy-tag">

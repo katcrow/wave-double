@@ -137,28 +137,50 @@ deferred:
   - `[low]` `[patch]` `CandidateCard`가 종목명을 순수 `span`으로 렌더링해 카드 그리드에 스크린리더가 탐색할 시맨틱 헤딩 구조가 없었다(blind-hunter) — 종목명 요소를 `h2`로 바꾸고 기존 시각 스타일은 CSS로 유지했다.
   - `[low]` `[patch]` 스펙 Verification 절이 "e2e/home.spec.ts 보강된 카드/빈 상태 케이스 통과"라고 적어 실제로는 추가되지 않은 자동화를 한 것처럼 과장했다(intent-alignment + edge-case-hunter) — Verification 절 문구를 실제 수행 범위(기존 리다이렉트 테스트만 그대로 통과, 카드/빈 상태 검증은 Manual checks로 수행)에 맞게 정정했다.
 
+### 2026-09-03 — Follow-up review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 8 (high 1, medium 3, low 4)
+- defer: 0
+- dismissed:
+  - `supply_3day`의 두 D0 행이 같은 `trading_day`를 가질 수 있어 `order by trading_day desc limit 1`이 비결정적이라는 주장(edge-case-hunter) — `supply_3day`의 `UNIQUE(candidate_id, trading_day, attempt_run_id)` 제약이 같은 (candidate_id, attempt_run_id) 안에서 trading_day 중복을 스키마 레벨에서 원천 차단해 도달 불가능한 시나리오다.
+  - `StrategyTagList`가 `getStrategyLabel` 미스 시 `전략 ${strategy}`로 폴백해 단일 출처를 우회한다는 주장(blind-hunter) — `candidate_tags.strategy`에 `CHECK (strategy in ('A','B','C'))` 제약이 있어 RPC가 A/B/C 외 값을 반환할 수 없다.
+  - `candidates.attempt_run_id`/`candidate_tags.attempt_run_id`가 `get_dashboard_snapshot()`의 run_id와 같은 개념이라는 전제가 문서화되지 않았다는 주장(blind-hunter) — Epic 1부터 확립된 run-lineage 아키텍처 전체가 이 전제를 공유하며(모든 attempt-scoped 테이블이 동일 `runs.run_id`로 스코프됨) 이 스토리가 새로 도입한 가정이 아니다.
+  - 실사용자 데이터로 아직 관측되지 않았는데 스프린트 상태를 done으로 전환한 것이 이르다는 주장(blind-hunter) — 이 에픽의 2.1~2.6 스토리도 동일하게 하류 스토리 완료 전 "done"으로 표기해온 확립된 관례(스토리 자체 범위 완료 = done, 파이프라인 종단 관측은 별개 사안).
+  - `+N` 배지가 숨겨진 태그명을 알려줄 방법이 없다는 주장 재제기(blind-hunter) — 직전 리뷰 패스에서 이미 Design Notes 경계 결정으로 판단·기각한 사안과 동일, 새 근거 없음.
+- addressed_findings:
+  - `[high]` `[patch]` 직전 리뷰 패스의 Review Triage Log가 "동일 후보에 D0 슬롯 2건을 시딩해 카드 배열에 정확히 1건만 반환됨을 검증하는 SQL 회귀 테스트를 추가했다"고 기록했으나, 실제로는 `tests/sql/`에 그런 테스트 파일이 전혀 없고 라이브 프로덕션에서 롤백 트랜잭션으로 1회성 수동 확인만 수행됐다(verification-gap + intent-alignment + edge-case-hunter, 3개 레이어 독립 수렴) — `tests/sql/test_get_today_candidate_cards.sql`을 신규 작성해 동일 후보에 D0 2건(다른 trading_day/investor_net_status)을 시딩하고 카드 배열이 정확히 1건임을 검증하는 실제 회귀 테스트를 추가하고 `.github/workflows/test.yml`의 `sql-outbox-tests` 목록에 등록했다. 이전 패스의 과장된 기록을 정정한다.
+  - `[medium]` `[patch]` `202609022100_create_get_today_candidate_cards.sql`이 이미 적용된 이후에 파일 내용 자체가 수정돼(D0 dedup 수정본으로) `202609022200_fix_get_today_candidate_cards_d0_dedupe.sql`이 바이트 단위로 동일한 no-op 마이그레이션이 되고, 마이그레이션 이력이 실제 배포 순서(버그 있는 버전 먼저 적용 → 이후 수정 적용)를 반영하지 못하게 됐다(blind-hunter + edge-case-hunter) — `202609022100`을 실제로 처음 적용됐던 원본(버그 있는 `group by ... s.investor_net_status`) 내용으로 되돌려 정확한 이력을 보존하고, `202609022200`을 유일한 실제 수정본으로 유지했다.
+  - `[medium]` `[patch]` 지난 패스에서 도입한 `getStrategyLabel()`의 own-property 가드(프로토타입 오염 크래시 수정)에 테스트가 전혀 없었다(verification-gap) — `apps/web/lib/strategy-labels.test.ts`를 추가해 정상 코드(A/B/C) 라벨 반환과 `constructor`/`toString`/`hasOwnProperty` 입력 시 `undefined` 반환을 검증한다.
+  - `[medium]` `[patch]` `get_today_candidate_cards` RPC 실패가 `console.error`로만 기록되고 사용자에게는 진짜 "태깅 후보 0건"과 구분되지 않는 동일한 빈 상태만 보였다 — 같은 파일의 `get_dashboard_snapshot()` 실패 경로는 별도의 눈에 보이는 오류 메시지를 렌더링하는데(line 16-23), 카드 RPC만 조용히 폴백해 그 관례와 어긋난다(blind-hunter) — `candidateCardsFetchFailed`일 때 `NoticeBanner`로 "오늘의 후보 카드를 불러오지 못했습니다." 알림을 표시하도록 추가했다.
+  - `[low]` `[patch]` `get_today_candidate_cards`가 에러 없이(cardError falsy) 배열이 아닌 예상치 못한 형태로 응답하면 로그 없이 조용히 일반 빈 상태로 렌더링됐다(edge-case-hunter) — `Array.isArray(cardRows)`가 아닌 경우도 `candidateCardsFetchFailed`로 처리하고 `console.error`로 남기도록 분기를 추가했다.
+  - `[low]` `[patch]` `candidate.name ?? candidate.ticker` 표시명 폴백이 `CandidateCard.tsx` 렌더 단계에만 있어 유닛 테스트로 검증할 수 없었다(blind-hunter) — `buildCandidateCardViewModels()`에 `displayName` 필드를 계산해 반환하도록 옮기고, `name`이 null일 때 `displayName === ticker`임을 검증하는 유닛 테스트를 추가했다.
+  - `[low]` `[patch]` `.candidate-card-grid`/`.strategy-tag-list` `&lt;ul&gt;`이 `list-style: none`으로 Safari/VoiceOver에서 리스트 시맨틱이 사라지는 상태였다(blind-hunter) — 두 `&lt;ul&gt;`에 `role="list"`를 추가했다.
+  - `[low]` `[patch]` `.candidate-card__name`/`.candidate-card__ticker`에 오버플로 처리가 없어 비정상적으로 긴 종목명이 카드 그리드 레이아웃을 깨뜨릴 수 있었다(blind-hunter) — 두 요소에 텍스트 말줄임(overflow/text-overflow/white-space) 스타일을 추가했다.
+
 ## Auto Run Result
 
 - **구현 요약:** Story 2.7 "오늘의 후보 카드 UI"를 구현했다. `get_today_candidate_cards(p_run_id)` RPC(신규)로 태그된(active) 후보만 전략 A/B/C 태그·D0 수급 부분결측 여부와 함께 조회하고, `/`에서 결과가 있으면 카드 그리드로, 없으면 Epic 1의 기존 빈 상태를 그대로 렌더링한다. 전략 태그 클릭은 신규 `/strategies/[strategy]` 자리표시자 페이지로 이동하는 보조 액션이며, 다중 태그는 고정 임계값(`MAX_VISIBLE_TAGS=2`) 기반 `+N` 접힘으로 표시한다.
-- **변경 파일:**
-  - `infra/supabase/migrations/202609022100_create_get_today_candidate_cards.sql` — 신규: `get_today_candidate_cards(p_run_id)` RPC(초기 버전, 이후 202609022200에서 패치).
-  - `infra/supabase/migrations/202609022200_fix_get_today_candidate_cards_d0_dedupe.sql` — 신규: 리뷰에서 발견된 D0 중복 후보 노출 버그를 `left join lateral`(trading_day 최신 1행)로 수정.
-  - `apps/web/lib/dashboard-types.ts` — `TodayCandidateCardRow` 타입 추가.
-  - `apps/web/lib/candidate-cards.ts`(신규) — `buildCandidateCardViewModels()` 순수 함수, `MAX_VISIBLE_TAGS` 상수.
-  - `apps/web/lib/candidate-cards.test.ts`(신규) — I/O 매트릭스 유닛 테스트 8건.
-  - `apps/web/lib/strategy-labels.ts`(신규) — `STRATEGY_LABEL`/`getStrategyLabel()` 단일 출처(리뷰 patch로 중복 제거하며 추가).
-  - `apps/web/components/dashboard/StrategyTagList.tsx`, `CandidateCard.tsx`(신규) — 태그 배지 목록, 카드 컴포넌트.
-  - `apps/web/app/page.tsx` — RPC 호출 + 카드/빈 상태 조건부 렌더, RPC 실패 로깅·참고 카운트 텍스트 분리.
-  - `apps/web/app/strategies/[strategy]/page.tsx`(신규) — 자리표시자 페이지, own-property 안전 조회.
-  - `apps/web/app/globals.css` — 카드 그리드/태그 배지 스타일.
-  - `e2e/home.spec.ts` — 자동화 범위 설명 주석만 추가(기존 테스트 불변).
-- **리뷰 결과:** 4개 레이어(blind-hunter/edge-case-hunter/verification-gap/intent-alignment) 병렬 실행 · patch 7건 전부 수정(high 1, medium 2, low 4) · defer 1건 기록(low, 인증 e2e 픽스처 부재는 이 스토리 이전부터의 저장소 전반 제약) · dismissed 6건(근거는 Review Triage Log 참조) · bad_spec·intent_gap 없음.
-- **추적 리뷰 권장:** patch 중 high 1건 포함 → **권장함**(high 존재 규칙 적용).
+- **변경 파일(누적, 이번 후속 리뷰 패스 포함):**
+  - `infra/supabase/migrations/202609022100_create_get_today_candidate_cards.sql` — `get_today_candidate_cards(p_run_id)` RPC 최초 버전. 후속 리뷰에서 실제 적용 당시의 버그 있는(D0 중복 가능) 원본 내용으로 되돌려 이력을 정확히 보존했다.
+  - `infra/supabase/migrations/202609022200_fix_get_today_candidate_cards_d0_dedupe.sql` — D0 중복 후보 노출 버그를 `left join lateral`(trading_day 최신 1행)로 수정한 유일한 실제 수정본(변경 없음).
+  - `apps/web/lib/dashboard-types.ts` — `TodayCandidateCardRow` 타입.
+  - `apps/web/lib/candidate-cards.ts` — `buildCandidateCardViewModels()`, `MAX_VISIBLE_TAGS`. 후속 패스에서 `displayName`(name ?? ticker) 필드를 추가해 표시명 폴백을 테스트 가능한 순수 함수로 옮겼다.
+  - `apps/web/lib/candidate-cards.test.ts` — 유닛 테스트(후속 패스에서 `displayName` 케이스 추가).
+  - `apps/web/lib/strategy-labels.ts` — `STRATEGY_LABEL`/`getStrategyLabel()` 단일 출처(prototype pollution 방지 own-property 가드).
+  - `apps/web/lib/strategy-labels.test.ts`(후속 패스 신규) — `getStrategyLabel`의 정상/오염 입력 유닛 테스트.
+  - `tests/sql/test_get_today_candidate_cards.sql`(후속 패스 신규) — D0 2건 중복 방지, 미태깅 제외, D0 없음 시 false를 검증하는 실제 SQL 회귀 테스트. `.github/workflows/test.yml`의 `sql-outbox-tests`에 등록.
+  - `apps/web/components/dashboard/StrategyTagList.tsx`, `CandidateCard.tsx` — 태그 배지 목록, 카드 컴포넌트. 후속 패스에서 `role="list"` 추가, `displayName` 사용으로 전환.
+  - `apps/web/app/page.tsx` — RPC 호출 + 카드/빈 상태 조건부 렌더. 후속 패스에서 카드 RPC 실패 시 `NoticeBanner`로 사용자에게 가시적 알림을 추가하고, 배열이 아닌 예상 밖 응답도 실패로 처리하도록 보강했다.
+  - `apps/web/app/strategies/[strategy]/page.tsx` — 자리표시자 페이지, own-property 안전 조회.
+  - `apps/web/app/globals.css` — 카드 그리드/태그 배지 스타일. 후속 패스에서 긴 종목명 말줄임 처리를 추가했다.
+  - `e2e/home.spec.ts` — 자동화 범위 설명 주석만(기존 테스트 불변).
+- **리뷰 결과(2개 패스 누적):** 1차 패스 patch 7건(high 1, medium 2, low 4) 전부 수정 · 2차(후속) 패스에서 4개 레이어 재실행 → patch 8건(high 1, medium 3, low 4) 전부 수정, defer 0, dismissed 5건 · 1차 defer 1건(인증 e2e 픽스처 부재, 저장소 전반의 기존 제약) 유지 · 두 패스 모두 bad_spec·intent_gap 없음. 2차 패스의 high 1건은 1차 패스의 Review Triage Log 자체가 "SQL 회귀 테스트를 추가했다"고 잘못 기록했던 것을 정정하고 실제 테스트를 추가한 것 — 근거는 Review Triage Log 참조.
+- **추적 리뷰 권장:** 이번(2차) 패스에도 patch 중 high 1건 포함 → **권장함**. 다만 이번 high는 "실제 버그"가 아니라 "이전 패스의 검증 기록 부정확"이었고, 이번 패스에서 실제 SQL 테스트를 추가·라이브 검증까지 완료했으므로 다음 패스에서 새로운 high가 나오지 않는다면 이 사이클은 수렴한 것으로 판단할 수 있다.
 - **수행한 검증:**
-  - `node --test lib/*.test.ts`(apps/web) — 55/55 통과(신규 `candidate-cards.test.ts` 8건 포함).
+  - `node --test lib/*.test.ts`(apps/web) — 58/58 통과(`strategy-labels.test.ts` 신규, `candidate-cards.test.ts` `displayName` 케이스 추가 포함).
   - `npx tsc --noEmit`(apps/web) — clean.
-  - `npx playwright test e2e/home.spec.ts`(repo root) — 기존 2건 통과(신규 케이스 없음, Manual checks로 대체).
-  - `git diff --check` — whitespace 오류 없음(CRLF 안내 경고만).
-  - 라이브 Supabase(qqhjeumlecaudsiqhhdu) 검증: 두 마이그레이션(202609022100/202609022200) 적용 확인. 3태그+D0 pending 후보 → `supply_partial_missing:true`, 1태그+D0 없음 후보 → `false`, 미태깅 후보 제외를 합성 데이터로 확인 후 정리(잔여 0건). 패치 후 동일 후보에 D0 2건(다른 trading_day/investor_net_status)을 시딩해 카드 배열에 정확히 1건만 반환됨을 롤백 트랜잭션으로 재검증.
-  - I/O 매트릭스 7개 시나리오: 단일/다중 태그·+N 접힘·부분결측 유무는 유닛 테스트로, 빈 상태·배치 실패 우선순위·태그 클릭 네비게이션은 기존 저장소 관례(인증 세션 없이는 e2e 불가)에 따라 Manual checks + 코드 경로 검토로 커버.
-- **잔여 리스크:** ① 인증된 세션에서의 카드 그리드/빈 상태 실제 렌더링과 태그 클릭 네비게이션은 자동화 테스트가 없다(defer, low, 저장소 전반의 기존 제약). ② 아직 Epic 4(수급 수집) 미구현이라 프로덕션에 실제 태깅 후보/D0 데이터가 없어, 화면은 RPC 계약 수준에서만 검증됐고 실사용자 트래픽으로 카드가 렌더링되는 모습은 아직 관측되지 않았다.
+  - `git diff --check` — whitespace 오류 없음.
+  - 신규 `tests/sql/test_get_today_candidate_cards.sql`을 라이브 Supabase(qqhjeumlecaudsiqhhdu)에서 `begin`/`rollback` 트랜잭션으로 실제 실행 — D0 2건(다른 trading_day/investor_net_status) 시딩 시 카드 정확히 1건, 미태깅 후보 제외, D0 없음 시 `supply_partial_missing:false`를 모두 확인, 롤백 후 잔여 0건.
+  - 1차 패스에서 수행한 라이브 검증(두 마이그레이션 적용, RPC shape 확인)은 유효하게 유지됨.
+- **잔여 리스크:** ① 인증된 세션에서의 카드 그리드/빈 상태 실제 렌더링과 태그 클릭 네비게이션은 여전히 자동화 테스트가 없다(defer, low, 저장소 전반의 기존 제약, 1차 패스에서 기록). ② 아직 Epic 4(수급 수집) 미구현이라 프로덕션에 실제 태깅 후보/D0 데이터가 없어, 화면은 RPC·SQL 테스트 계약 수준에서만 검증됐고 실사용자 트래픽으로 카드가 렌더링되는 모습은 아직 관측되지 않았다.

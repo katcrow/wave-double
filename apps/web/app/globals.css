@@ -353,6 +353,7 @@ a {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .candidate-card__name {
@@ -360,12 +361,18 @@ a {
   font-size: var(--font-size-data);
   font-weight: var(--font-weight-data);
   color: var(--color-ink-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .candidate-card__ticker {
   font-family: var(--font-family-data);
   font-size: var(--font-size-label);
   color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .candidate-card__notice {

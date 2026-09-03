@@ -41,6 +41,9 @@ export default async function HomePage() {
       console.error("get_today_candidate_cards failed", cardError);
     } else if (Array.isArray(cardRows)) {
       candidateCards = buildCandidateCardViewModels(cardRows as TodayCandidateCardRow[]);
+    } else {
+      candidateCardsFetchFailed = true;
+      console.error("unexpected get_today_candidate_cards shape", cardRows);
     }
   }
 
@@ -52,9 +55,12 @@ export default async function HomePage() {
 
       <DataTrustBar snapshot={snapshot} />
       <NoticeBanner message={notice} />
+      {candidateCardsFetchFailed && (
+        <NoticeBanner message="오늘의 후보 카드를 불러오지 못했습니다." />
+      )}
 
       {candidateCards.length > 0 ? (
-        <ul className="candidate-card-grid">
+        <ul className="candidate-card-grid" role="list">
           {candidateCards.map((candidate) => (
             <CandidateCard key={candidate.candidateId} candidate={candidate} />
           ))}

@@ -10,7 +10,7 @@ export default function CandidateCard({ candidate }: { candidate: CandidateCardV
   return (
     <li className="candidate-card">
       <div className="candidate-card__header">
-        <h2 className="candidate-card__name">{candidate.name ?? candidate.ticker}</h2>
+        <h2 className="candidate-card__name">{candidate.displayName}</h2>
         <span className="candidate-card__ticker">{candidate.ticker}</span>
       </div>
       <StrategyTagList
