@@ -1,4 +1,4 @@
-// Generated from Supabase project qqhjeumlecaudsiqhhdu on 2026-09-03. Do not edit by hand.
+// Generated from Supabase project qqhjeumlecaudsiqhhdu on 2026-09-04. Do not edit by hand.
 export type Json =
   | string
   | number
@@ -28,6 +28,7 @@ export type Database = {
           status: string
           strategy: string
           ticker: string
+          version: number
         }
         Insert: {
           cutoff_n?: number
@@ -41,6 +42,7 @@ export type Database = {
           status: string
           strategy: string
           ticker: string
+          version?: number
         }
         Update: {
           cutoff_n?: number
@@ -54,6 +56,7 @@ export type Database = {
           status?: string
           strategy?: string
           ticker?: string
+          version?: number
         }
         Relationships: []
       }
@@ -582,6 +585,22 @@ export type Database = {
           p_outbox_id: string
           p_run_id?: string
           p_status: string
+        }
+        Returns: Json
+      }
+      apply_outcome_correction: {
+        Args: {
+          p_expected_version: number
+          p_logical_run_key: string
+          p_new_cutoff_n?: number
+          p_new_entry_price?: number
+          p_new_exit_date?: string
+          p_new_exit_price?: number
+          p_new_holding_days?: number
+          p_new_return_pct?: number
+          p_new_status: string
+          p_outcome_id: string
+          p_reason: string
         }
         Returns: Json
       }

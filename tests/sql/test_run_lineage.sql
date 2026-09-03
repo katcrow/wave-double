@@ -1067,4 +1067,206 @@ begin
   end if;
 end $$;
 
+-- Story 3.8: outcome correction 이벤트 메커니즘. raw UPDATE 차단, SUSPENDED->OPEN 정상 복귀
+-- (exit 3필드 null 복귀, entry 보존, version+1), stale expected_version 거부, terminal 수치
+-- 정정, 존재하지 않는 outcome_id, 잘못된 신규 상태값, outcome_events append-only 회귀를
+-- close:2099-01-16을 감사 앵커로 검증한다.
+do $$
+declare
+  key text := 'close:2099-01-16';
+  outcome_raw_update uuid;
+  outcome_suspended_return uuid;
+  outcome_terminal uuid;
+  v_version integer;
+  caught boolean := false;
+  correction_result jsonb;
+  v_event_count integer;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+    values (key, date '2099-01-16', 'close')
+    on conflict (logical_run_key) do nothing;
+
+  -- Scenario: raw UPDATE 차단 -- 가드 플래그 없이 직접 UPDATE를 시도하면 55000 예외로 거부되고
+  -- 상태/version 모두 변경되지 않아야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZCORR1', 'A', 'OPEN', key, jsonb_build_object('entry_date', date '2099-01-16', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZCORR1', 'A', date '2099-01-16', 100, 'OPEN')
+    returning outcome_id into outcome_raw_update;
+
+  caught := false;
+  begin
+    update public.candidate_outcome set status = 'TIMEOUT' where outcome_id = outcome_raw_update;
+  exception when others then
+    if sqlstate = '55000' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'raw UPDATE on candidate_outcome was not rejected'; end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_raw_update) <> 'OPEN' then
+    raise exception 'raw UPDATE attempt mutated candidate_outcome despite rejection';
+  end if;
+  if (select version from public.candidate_outcome where outcome_id = outcome_raw_update) <> 1 then
+    raise exception 'rejected raw UPDATE must not increment version';
+  end if;
+
+  -- Scenario: SUSPENDED -> OPEN 정상 복귀. exit_date/exit_price/return_pct는 null로 복귀,
+  -- entry_date/entry_price는 보존, version은 정확히 1 증가해야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZCORR2', 'B', 'OPEN', key, jsonb_build_object('entry_date', date '2099-01-10', 'entry_price', 200));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct)
+    values ('ZZCORR2', 'B', date '2099-01-10', 200, 'SUSPENDED', date '2099-01-15', 190, -5.0)
+    returning outcome_id into outcome_suspended_return;
+
+  select version into v_version from public.candidate_outcome where outcome_id = outcome_suspended_return;
+  correction_result := public.apply_outcome_correction(key, outcome_suspended_return, v_version, 'price adjustment cleared, resume tracking', 'OPEN');
+
+  if (correction_result->>'status') <> 'OPEN' then raise exception 'expected OPEN after SUSPENDED return correction, got %', correction_result; end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_suspended_return) <> 'OPEN' then
+    raise exception 'projection status was not updated to OPEN';
+  end if;
+  if exists (
+    select 1 from public.candidate_outcome
+    where outcome_id = outcome_suspended_return
+      and (exit_date is not null or exit_price is not null or return_pct is not null)
+  ) then
+    raise exception 'expected exit_date/exit_price/return_pct to be reset to null on SUSPENDED->OPEN correction';
+  end if;
+  if (select entry_price from public.candidate_outcome where outcome_id = outcome_suspended_return) <> 200 then
+    raise exception 'entry_price must be preserved on SUSPENDED->OPEN correction';
+  end if;
+  if (select version from public.candidate_outcome where outcome_id = outcome_suspended_return) <> v_version + 1 then
+    raise exception 'expected version to increment by exactly 1 on correction';
+  end if;
+  if not exists (
+    select 1 from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZCORR2' and strategy = 'B' and command_type = 'CORRECTION'
+      and payload->>'reason' = 'price adjustment cleared, resume tracking'
+  ) then
+    raise exception 'expected CORRECTION event with reason to be recorded';
+  end if;
+
+  -- Scenario: stale expected_version -- 위 correction으로 이미 버전이 증가했으므로 옛 버전으로
+  -- 재호출하면 이벤트/projection 모두 변경 없이 거부되어야 한다.
+  caught := false;
+  begin
+    perform public.apply_outcome_correction(key, outcome_suspended_return, v_version, 'stale retry', 'OPEN');
+  exception when others then
+    if sqlerrm = 'CORRECTION_VERSION_MISMATCH' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'stale expected_version was accepted'; end if;
+  select count(*) into v_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZCORR2' and strategy = 'B' and command_type = 'CORRECTION';
+  if v_event_count <> 1 then raise exception 'stale expected_version must not append a new CORRECTION event, got %', v_event_count; end if;
+
+  -- Scenario: terminal 수치 정정 -- TP로 이미 종결된 행의 return_pct만 보정하고 status/다른
+  -- 값은 그대로 유지되어야 한다(epics AC1의 "수치 수정" 요구).
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZCORR3', 'C', 'OPEN', key, jsonb_build_object('entry_date', date '2099-01-10', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct, holding_days)
+    values ('ZZCORR3', 'C', date '2099-01-10', 100, 'TP', date '2099-01-11', 103, 2.9, 1)
+    returning outcome_id into outcome_terminal;
+
+  select version into v_version from public.candidate_outcome where outcome_id = outcome_terminal;
+  correction_result := public.apply_outcome_correction(key, outcome_terminal, v_version, 'exit price data correction', 'TP', null, null, null, 2.85);
+
+  if (select status from public.candidate_outcome where outcome_id = outcome_terminal) <> 'TP' then
+    raise exception 'terminal numeric correction must keep status TP';
+  end if;
+  if (select return_pct from public.candidate_outcome where outcome_id = outcome_terminal) <> 2.85 then
+    raise exception 'expected return_pct to be corrected to 2.85, got %', (select return_pct from public.candidate_outcome where outcome_id = outcome_terminal);
+  end if;
+  if (select exit_price from public.candidate_outcome where outcome_id = outcome_terminal) <> 103 then
+    raise exception 'unspecified exit_price must be preserved on terminal numeric correction';
+  end if;
+  if (select entry_price from public.candidate_outcome where outcome_id = outcome_terminal) <> 100 then
+    raise exception 'unspecified entry_price must be preserved on terminal numeric correction';
+  end if;
+  if (select version from public.candidate_outcome where outcome_id = outcome_terminal) <> v_version + 1 then
+    raise exception 'expected version to increment by exactly 1 on terminal numeric correction';
+  end if;
+
+  -- Scenario: 존재하지 않는 outcome_id.
+  caught := false;
+  begin
+    perform public.apply_outcome_correction(key, gen_random_uuid(), 1, 'no such outcome', 'OPEN');
+  exception when others then
+    if sqlerrm = 'OUTCOME_NOT_FOUND' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'nonexistent outcome_id was accepted'; end if;
+
+  -- Scenario: 잘못된 신규 상태값 -- 스키마 CHECK 도달 전에 조기 검증되어야 한다.
+  select version into v_version from public.candidate_outcome where outcome_id = outcome_terminal;
+  caught := false;
+  begin
+    perform public.apply_outcome_correction(key, outcome_terminal, v_version, 'bad status', 'INVALID');
+  exception when others then
+    if sqlerrm = 'INVALID_STATUS' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'invalid new status was accepted'; end if;
+  if (select version from public.candidate_outcome where outcome_id = outcome_terminal) <> v_version then
+    raise exception 'rejected invalid-status correction must not increment version';
+  end if;
+
+  -- Scenario: outcome_events는 여전히 append-only다 -- CORRECTION 이벤트 자체도 UPDATE되면
+  -- 안 된다(기존 3.1 append-only 트리거의 회귀 확인).
+  caught := false;
+  begin
+    update public.outcome_events set payload = '{}'::jsonb
+      where logical_run_key = key and ticker = 'ZZCORR2' and command_type = 'CORRECTION';
+  exception when others then
+    if sqlstate = '55000' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'CORRECTION outcome_events row was mutable'; end if;
+
+  -- Scenario: NULL expected_version must not bypass the version check (review patch) -- a
+  -- correction called with p_expected_version=null must be rejected the same way a stale
+  -- version is, with no event/projection change.
+  caught := false;
+  begin
+    perform public.apply_outcome_correction(key, outcome_suspended_return, null, 'null version probe', 'OPEN');
+  exception when others then
+    if sqlerrm = 'CORRECTION_VERSION_MISMATCH' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'NULL expected_version was accepted'; end if;
+  select count(*) into v_event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZCORR2' and strategy = 'B' and command_type = 'CORRECTION';
+  if v_event_count <> 1 then raise exception 'NULL expected_version must not append a new CORRECTION event, got %', v_event_count; end if;
+
+  -- Scenario: p_reason NULL/blank must be rejected (review patch, epics AC4).
+  select version into v_version from public.candidate_outcome where outcome_id = outcome_terminal;
+  caught := false;
+  begin
+    perform public.apply_outcome_correction(key, outcome_terminal, v_version, null, 'TP');
+  exception when others then
+    if sqlerrm = 'REASON_REQUIRED' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'NULL reason was accepted'; end if;
+
+  caught := false;
+  begin
+    perform public.apply_outcome_correction(key, outcome_terminal, v_version, '   ', 'TP');
+  exception when others then
+    if sqlerrm = 'REASON_REQUIRED' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'blank reason was accepted'; end if;
+  if (select version from public.candidate_outcome where outcome_id = outcome_terminal) <> v_version then
+    raise exception 'rejected reason-less correction must not increment version';
+  end if;
+
+  -- Grant/revoke: only service_role may execute apply_outcome_correction (same pattern as
+  -- emit_open_command in test_outcome_open_command.sql).
+  if exists (
+    select 1
+    from information_schema.role_routine_grants
+    where routine_schema = 'public' and routine_name = 'apply_outcome_correction'
+      and grantee in ('PUBLIC', 'anon', 'authenticated')
+  ) then raise exception 'apply_outcome_correction must not be executable by public/anon/authenticated'; end if;
+
+  if not exists (
+    select 1
+    from information_schema.role_routine_grants
+    where routine_schema = 'public' and routine_name = 'apply_outcome_correction'
+      and grantee = 'service_role' and privilege_type = 'EXECUTE'
+  ) then raise exception 'apply_outcome_correction must be executable by service_role'; end if;
+end $$;
+
 rollback;

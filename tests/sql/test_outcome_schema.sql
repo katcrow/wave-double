@@ -48,14 +48,15 @@ begin
     into v_columns
   from information_schema.columns
   where table_schema = 'public' and table_name = 'candidate_outcome';
-  if v_columns <> array['outcome_id','ticker','strategy','entry_date','entry_price','status','exit_date','exit_price','return_pct','cutoff_n','holding_days'] then
+  -- Story 3.8 added the `version` column (optimistic concurrency for apply_outcome_correction).
+  if v_columns <> array['outcome_id','ticker','strategy','entry_date','entry_price','status','exit_date','exit_price','return_pct','cutoff_n','holding_days','version'] then
     raise exception 'candidate_outcome columns mismatch: %', v_columns;
   end if;
   select array_agg(data_type::text order by ordinal_position)
     into v_column_types
   from information_schema.columns
   where table_schema = 'public' and table_name = 'candidate_outcome';
-  if v_column_types <> array['uuid','text','text','date','numeric','text','date','numeric','numeric','integer','integer'] then
+  if v_column_types <> array['uuid','text','text','date','numeric','text','date','numeric','numeric','integer','integer','integer'] then
     raise exception 'candidate_outcome column types mismatch: %', v_column_types;
   end if;
 
@@ -220,8 +221,14 @@ begin
   end;
   if not v_caught then raise exception 'duplicate OPEN ticker/strategy was accepted'; end if;
 
+  -- Story 3.8 review patch: candidate_outcome_guard_mutation now rejects any UPDATE that
+  -- doesn't set the wave_double.outcome_mutation_allowed session flag first. This fixture
+  -- setup UPDATE isn't testing that guard itself (see test_run_lineage.sql's 3.8 block for
+  -- that), so it bypasses the guard the same way publish_attempt/apply_outcome_correction do.
+  perform set_config('wave_double.outcome_mutation_allowed', 'on', true);
   update public.candidate_outcome set status = 'TP', exit_date = date '2099-06-03', exit_price = 103, return_pct = 2.9, holding_days = 2
   where outcome_id = v_outcome_id;
+  perform set_config('wave_double.outcome_mutation_allowed', 'off', true);
   insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct, holding_days)
   values
     ('005930', 'A', date '2099-06-04', 104, 'SL', date '2099-06-05', 100.88, -3.1, 1),
