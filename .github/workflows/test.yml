@@ -62,10 +62,10 @@ jobs:
       - name: E2E test (web)
         run: npm run test:e2e
 
-  sql-outbox-tests:
-    # Story 1.10 후속: tests/sql/test_dispatch_outbox.sql이 실제 Postgres에서 한 번도 실행되지
-    # 않아 dispatch_outbox RPC(request_manual_dispatch/claim/advance/record_dispatch_receipt/
-    # reconcile)의 회귀를 잡을 자동 검증이 없었다. pg_cron/pg_net 확장이 필요한
+  sql-schema-tests:
+    # Story 1.10 후속으로 dispatch_outbox RPC 회귀 검증에서 시작했으나, 이후 스토리마다
+    # 자신의 스키마 계약을 검증하는 fixture를 이 잡에 계속 추가하는 구조로 넓어졌다(현재는
+    # Story 3.1 outcome 스키마 fixture까지 포함). pg_cron/pg_net 확장이 필요한
     # 202609021100_schedule_dispatch_worker_cron.sql만 제외하고 나머지 migration을 순서대로
     # 적용한 뒤 fixture를 실행한다(fixture 자체가 `begin`/`rollback`으로 감싸여 있어 상태를 남기지 않는다).
     runs-on: ubuntu-24.04
@@ -101,10 +101,10 @@ jobs:
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done
 
-      - name: Run Epic 1 SQL fixtures
+      - name: Run schema SQL fixtures
         env:
           PGPASSWORD: postgres
         run: |
-          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql tests/sql/test_daily_ohlcv.sql tests/sql/test_candidate_tags.sql tests/sql/test_supply_3day.sql tests/sql/test_get_today_candidate_cards.sql tests/sql/test_sync_vanished_tags.sql tests/sql/test_get_today_disappeared_candidates.sql; do
+          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql tests/sql/test_daily_ohlcv.sql tests/sql/test_candidate_tags.sql tests/sql/test_supply_3day.sql tests/sql/test_get_today_candidate_cards.sql tests/sql/test_sync_vanished_tags.sql tests/sql/test_get_today_disappeared_candidates.sql tests/sql/test_outcome_schema.sql; do
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done
