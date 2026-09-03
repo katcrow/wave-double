@@ -18,6 +18,10 @@ export interface CandidateCardViewModel {
   hiddenStrategyCount: number;
   /** true면 카드에 "수급 일부 미수집" 단서를 표시한다(카드를 목록에서 제외하지 않는다). */
   supplyPartialMissing: boolean;
+  /** Story 2.8: 이전 attempt에서 active였으나 현재 attempt에서 재태깅되지 않은 전략(정렬됨, 접힘 없음). */
+  vanishedStrategies: string[];
+  /** true면 active 태그가 0건이고 vanished 태그만 있다(카드는 목록에서 제외되지 않고 "소멸" 배지로 표시). */
+  isFullyVanished: boolean;
 }
 
 /**
@@ -37,5 +41,7 @@ export function buildCandidateCardViewModels(
     visibleStrategies: row.strategies.slice(0, MAX_VISIBLE_TAGS),
     hiddenStrategyCount: Math.max(0, row.strategies.length - MAX_VISIBLE_TAGS),
     supplyPartialMissing: row.supply_partial_missing,
+    vanishedStrategies: row.vanished_strategies,
+    isFullyVanished: row.strategies.length === 0 && row.vanished_strategies.length > 0,
   }));
 }

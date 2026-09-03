@@ -102,6 +102,75 @@ begin
   ) then
     raise exception 'candidate with no D0 row at all must get supply_partial_missing=false';
   end if;
+
+  -- active 태그만 있는 후보(tagged_dup_id, no_d0_id)는 vanished_strategies가 빈 배열이어야 한다.
+  if exists (
+    select 1 from jsonb_array_elements(result) e
+    where (e->>'candidate_id')::uuid in (tagged_dup_id, no_d0_id)
+      and e->'vanished_strategies' <> '[]'::jsonb
+  ) then
+    raise exception 'candidates with only active tags must have empty vanished_strategies';
+  end if;
+end $$;
+
+-- Story 2.8: 부분 재태깅 -- 후보가 active(A) + vanished(B) 태그를 모두 가지면
+-- strategies=["A"], vanished_strategies=["B"]가 함께 반환되고 카드는 정상 노출된다.
+-- 완전 소멸(active 태그 0건 + vanished 태그만 존재)해도 카드는 제외되지 않는다.
+do $$
+declare
+  key text := 'close:2099-06-02'; started jsonb; run_id uuid; fence bigint; lease uuid;
+  partial_id uuid := gen_random_uuid();  -- A active, B vanished
+  fully_vanished_id uuid := gen_random_uuid(); -- vanished만 존재
+  result jsonb;
+  partial_card jsonb;
+  vanished_card jsonb;
+begin
+  started := public.start_attempt(key, date '2099-06-02', 'close', 'manual', 300);
+  run_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(run_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(run_id, fence, lease,
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', partial_id, 'ticker', '000040', 'name', '부분재태깅', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', fully_vanished_id, 'ticker', '000050', 'name', '완전소멸', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
+    ),
+    jsonb_build_object('selection_input_hash', repeat('d', 64), 'original_count', 2, 'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
+
+  perform public.write_stage(run_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
+    values (partial_id, run_id, 'A', date '2099-06-02', 'active');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
+    values (partial_id, run_id, 'B', date '2099-06-02', 'vanished');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
+    values (fully_vanished_id, run_id, 'C', date '2099-06-02', 'vanished');
+  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 3));
+
+  result := public.get_today_candidate_cards(run_id);
+
+  if jsonb_array_length(result) <> 2 then
+    raise exception 'expected exactly 2 cards (partial_id + fully_vanished_id), got %', jsonb_array_length(result);
+  end if;
+
+  select e into partial_card from jsonb_array_elements(result) e where (e->>'candidate_id')::uuid = partial_id;
+  if partial_card->'strategies' <> '["A"]'::jsonb then
+    raise exception 'expected strategies=[A] for partially retagged candidate, got %', partial_card->'strategies';
+  end if;
+  if partial_card->'vanished_strategies' <> '["B"]'::jsonb then
+    raise exception 'expected vanished_strategies=[B] for partially retagged candidate, got %', partial_card->'vanished_strategies';
+  end if;
+
+  select e into vanished_card from jsonb_array_elements(result) e where (e->>'candidate_id')::uuid = fully_vanished_id;
+  if vanished_card is null then
+    raise exception 'a candidate with only vanished tags must still be returned as a card';
+  end if;
+  if vanished_card->'strategies' <> '[]'::jsonb then
+    raise exception 'expected strategies=[] for a fully vanished candidate, got %', vanished_card->'strategies';
+  end if;
+  if vanished_card->'vanished_strategies' <> '["C"]'::jsonb then
+    raise exception 'expected vanished_strategies=[C] for a fully vanished candidate, got %', vanished_card->'vanished_strategies';
+  end if;
 end $$;
 
 rollback;

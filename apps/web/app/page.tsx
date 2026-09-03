@@ -1,8 +1,11 @@
 import CandidateCard from "@/components/dashboard/CandidateCard";
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
+import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
 import { buildCandidateCardViewModels } from "@/lib/candidate-cards";
-import type { DashboardSnapshot, TodayCandidateCardRow } from "@/lib/dashboard-types";
+import { isIntradaySnapshot } from "@/lib/dashboard-types";
+import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
+import { buildDisappearedCandidateViewModels } from "@/lib/disappeared-candidates";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { deriveTrustBarState } from "@/lib/trust-bar";
 
@@ -47,6 +50,30 @@ export default async function HomePage() {
     }
   }
 
+  // Story 2.8: get_today_candidate_cards와 같은 조건(complete_snapshot 존재 시)으로 호출한다.
+  // 실패는 candidateCardsFetchFailed와 달리 NoticeBanner를 띄우지 않고 로깅 후 조용히 생략한다
+  // (신규 기능 실패가 기존 카드 렌더를 막지 않게 하기 위함).
+  let disappearedCandidates: ReturnType<typeof buildDisappearedCandidateViewModels> = [];
+  if (snapshot.complete_snapshot) {
+    const { data: disappearedRows, error: disappearedError } = await supabase.rpc(
+      "get_today_disappeared_candidates",
+      { p_run_id: snapshot.complete_snapshot.run_id }
+    );
+    if (disappearedError) {
+      console.error("get_today_disappeared_candidates failed", disappearedError);
+    } else if (Array.isArray(disappearedRows)) {
+      disappearedCandidates = buildDisappearedCandidateViewModels(
+        disappearedRows as DisappearedCandidateRow[]
+      );
+    } else {
+      console.error("unexpected get_today_disappeared_candidates shape", disappearedRows);
+    }
+  }
+
+  // UJ-2: 장중 배치(batch_kind !== 'close')로 만들어진 complete_snapshot에는 최종 추천이 아님을
+  // 항상 고정 표시한다(trust bar의 상태 문구가 실패/부분성공/stale 알림으로 덮여도 이 라벨은 유지).
+  const isIntraday = isIntradaySnapshot(snapshot);
+
   return (
     <section aria-labelledby="today-candidates-heading">
       <header>
@@ -54,6 +81,11 @@ export default async function HomePage() {
       </header>
 
       <DataTrustBar snapshot={snapshot} />
+      {isIntraday && (
+        <p className="intraday-label" role="status">
+          장중 참고 · 최종 추천 미확정
+        </p>
+      )}
       <NoticeBanner message={notice} />
       {candidateCardsFetchFailed && (
         <NoticeBanner message="오늘의 후보 카드를 불러오지 못했습니다." />
@@ -76,6 +108,8 @@ export default async function HomePage() {
           )}
         </div>
       )}
+
+      <DisappearedCandidatesNotice candidates={disappearedCandidates} />
     </section>
   );
 }

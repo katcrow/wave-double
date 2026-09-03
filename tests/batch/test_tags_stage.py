@@ -63,15 +63,24 @@ class FakeStrategyClient:
 
 
 class FakeTagsRepository:
-    def __init__(self, fail=False):
+    def __init__(self, fail=False, *, sync_vanished_fail=False, vanished_count=0):
         self.fail = fail
+        self.sync_vanished_fail = sync_vanished_fail
+        self.vanished_count = vanished_count
         self.saved: list[CandidateTag] = []
+        self.sync_vanished_calls: list[str] = []
 
     def upsert_tags(self, tags):
         if self.fail:
             raise RuntimeError("supabase upsert failed")
         self.saved.extend(tags)
         return len(tags)
+
+    def sync_vanished(self, run_id):
+        self.sync_vanished_calls.append(run_id)
+        if self.sync_vanished_fail:
+            raise RuntimeError("sync_vanished_tags rpc failed")
+        return {"vanished_count": self.vanished_count}
 
 
 def _frame(n: int = 3, *, last_signal_at_minus2: bool = False) -> pd.DataFrame:
@@ -313,3 +322,67 @@ def test_signal_date_reflects_second_to_last_bar():
 
     assert result.tagged_candidates[0].signal_date == idx[-2].date()
     assert tags_repo.saved[0].signal_date == idx[-2].date()
+
+
+# --- Story 2.8: sync_vanished 통합 ------------------------------------------
+
+
+def test_sync_vanished_is_called_after_upsert_and_vanished_count_is_recorded():
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    tags_repo = FakeTagsRepository(vanished_count=2)
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "success"
+    assert result.result_code == "OK"
+    assert result.vanished_count == 2
+    assert len(tags_repo.sync_vanished_calls) == 1
+    write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
+    assert write_stage_calls[-1][1]["p_result"]["vanished_count"] == 2
+
+
+def test_sync_vanished_failure_with_no_tagging_errors_records_partial_vanished_sync_failed():
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    tags_repo = FakeTagsRepository(sync_vanished_fail=True)
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "partial"
+    assert result.result_code == "VANISHED_SYNC_FAILED"
+    assert result.vanished_count == 0
+    assert result.vanished_sync_failed is True
+    # active 태깅은 유실 없이 이미 저장되어 있다.
+    assert len(tags_repo.saved) == 1
+    write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
+    assert write_stage_calls[-1][1]["p_status"] == "partial"
+    assert write_stage_calls[-1][1]["p_result"]["result_code"] == "VANISHED_SYNC_FAILED"
+    assert write_stage_calls[-1][1]["p_unprocessed_count"] == 1
+
+
+def test_sync_vanished_failure_alongside_tagging_error_keeps_partial_tagging_code():
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
+    loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
+    strategy = FakeStrategyClient({
+        "005930": _error_result("005930"),
+        "000660": _ready_result("000660", 3, a_at_minus2=True),
+    })
+    tags_repo = FakeTagsRepository(sync_vanished_fail=True)
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "partial"
+    assert result.result_code == "PARTIAL_TAGGING"
+    assert result.error_count == 1
+    assert result.vanished_sync_failed is True
+    write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
+    assert write_stage_calls[-1][1]["p_result"]["vanished_sync_failed"] is True

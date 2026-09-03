@@ -415,6 +415,94 @@ a {
   cursor: default;
 }
 
+/* Story 2.8: 장중 시그널 유지·소멸 표시 */
+
+.intraday-label {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-caution);
+  border-radius: var(--radius-sm);
+  color: var(--color-caution);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+  width: fit-content;
+}
+
+.candidate-card--vanished {
+  border-color: var(--color-caution);
+}
+
+.candidate-card__badge {
+  margin: 0;
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-card__badge--vanished {
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-caution);
+  color: var(--color-caution);
+}
+
+.candidate-card__notice--vanished {
+  color: var(--color-ink-muted);
+}
+
+.disappeared-candidates {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.disappeared-candidates__heading {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-heading);
+  color: var(--color-ink-secondary);
+}
+
+.disappeared-candidates__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.disappeared-candidates__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-label);
+  color: var(--color-ink-secondary);
+}
+
+.disappeared-candidates__name {
+  color: var(--color-ink-primary);
+  font-weight: var(--font-weight-data);
+}
+
+.disappeared-candidates__ticker {
+  font-family: var(--font-family-data);
+  color: var(--color-ink-muted);
+}
+
+.disappeared-candidates__reason {
+  color: var(--color-caution);
+  font-weight: var(--font-weight-label);
+}
+
+.disappeared-candidates__strategies {
+  color: var(--color-ink-muted);
+}
+
 /* Loading skeleton */
 
 .skeleton-list {

@@ -63,9 +63,11 @@ class TagsStageResult:
     tagged_count: int = 0
     error_count: int = 0
     ineligible_count: int = 0
+    vanished_count: int = 0
     batch_kind: str = "close"
     tagged_candidates: list[TaggedCandidate] = field(default_factory=list)
     run_id: str | None = None
+    vanished_sync_failed: bool = False
 
 
 class DefaultStrategyClient:
@@ -192,24 +194,57 @@ def run_tags_stage(
             batch_kind=batch_kind, tagged_candidates=tagged_candidates, run_id=run_id_str,
         )
 
+    # Story 2.8: active 태그 upsert가 끝난 뒤 같은 attempt에 대해 소멸 태그를 동기화한다.
+    # 실패해도 이미 저장된 active 태그는 유지한다 -- 조용한 실패 금지를 위해 error_count==0이었던
+    # 경우(원래는 success였을 경우)에 한해 stage를 partial/VANISHED_SYNC_FAILED로 낮춘다.
+    vanished_count = 0
+    vanished_sync_failed = False
+    try:
+        sync_result = tags_repo.sync_vanished(run_id_str)
+        if isinstance(sync_result, dict):
+            vanished_count = int(sync_result.get("vanished_count", 0) or 0)
+    except Exception:
+        vanished_sync_failed = True
+
     result_common = {
         "tagged_count": saved_count,
         "candidate_count": len(candidates),
         "ineligible_count": ineligible_count,
+        "vanished_count": vanished_count,
         "batch_kind": batch_kind,
     }
 
+    if vanished_sync_failed and error_count == 0:
+        result = {"result_code": "VANISHED_SYNC_FAILED", **result_common}
+        gateway.write_stage(
+            run_uuid, Stage.TAGS, fence_int, lease_uuid,
+            StageStatus.RUNNING, StageStatus.PARTIAL,
+            result=result, unprocessed_count=1,
+        )
+        return TagsStageResult(
+            "partial", "VANISHED_SYNC_FAILED",
+            tagged_count=saved_count, error_count=error_count, ineligible_count=ineligible_count,
+            vanished_count=vanished_count, batch_kind=batch_kind,
+            tagged_candidates=tagged_candidates, run_id=run_id_str,
+            vanished_sync_failed=True,
+        )
+
     if error_count > 0:
-        result = {"result_code": "PARTIAL_TAGGING", **result_common}
+        result_code = "PARTIAL_TAGGING"
+        if vanished_sync_failed:
+            result_common["vanished_sync_failed"] = True
+        result = {"result_code": result_code, **result_common}
         gateway.write_stage(
             run_uuid, Stage.TAGS, fence_int, lease_uuid,
             StageStatus.RUNNING, StageStatus.PARTIAL,
             result=result, unprocessed_count=error_count,
         )
         return TagsStageResult(
-            "partial", "PARTIAL_TAGGING",
+            "partial", result_code,
             tagged_count=saved_count, error_count=error_count, ineligible_count=ineligible_count,
-            batch_kind=batch_kind, tagged_candidates=tagged_candidates, run_id=run_id_str,
+            vanished_count=vanished_count, batch_kind=batch_kind,
+            tagged_candidates=tagged_candidates, run_id=run_id_str,
+            vanished_sync_failed=vanished_sync_failed,
         )
 
     result = {"result_code": "OK", **result_common}
@@ -220,7 +255,7 @@ def run_tags_stage(
     )
     return TagsStageResult(
         "success", "OK",
-        tagged_count=saved_count, ineligible_count=ineligible_count,
+        tagged_count=saved_count, ineligible_count=ineligible_count, vanished_count=vanished_count,
         batch_kind=batch_kind, tagged_candidates=tagged_candidates, run_id=run_id_str,
     )
 

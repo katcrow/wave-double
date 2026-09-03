@@ -80,7 +80,7 @@ export interface RunRow {
 }
 
 /**
- * infra/supabase/migrations/202609022100_create_get_today_candidate_cards.sql의
+ * infra/supabase/migrations/202609031100_add_vanished_strategies_to_get_today_candidate_cards.sql의
  * get_today_candidate_cards(p_run_id) 반환 배열 원소 shape.
  */
 export interface TodayCandidateCardRow {
@@ -88,7 +88,30 @@ export interface TodayCandidateCardRow {
   ticker: string;
   name: string | null;
   strategies: string[];
+  /** Story 2.8: 이전 attempt에서 active였으나 현재 attempt에서 재태깅되지 않은 전략(status=vanished). */
+  vanished_strategies: string[];
   supply_partial_missing: boolean;
+}
+
+export type DisappearedReason = "population_dropout" | "collection_failure";
+
+/**
+ * infra/supabase/migrations/202609031200_create_get_today_disappeared_candidates.sql의
+ * get_today_disappeared_candidates(p_run_id) 반환 배열 원소 shape.
+ */
+export interface DisappearedCandidateRow {
+  ticker: string;
+  name: string | null;
+  reason: DisappearedReason;
+  strategies: string[];
+}
+
+/**
+ * UJ-2: 장중 배치(batch_kind !== 'close')로 만들어진 complete_snapshot인지 판정한다.
+ * complete_snapshot이 없으면(스냅샷 없음/실패 등) 장중 라벨을 표시하지 않는다.
+ */
+export function isIntradaySnapshot(snapshot: DashboardSnapshot): boolean {
+  return snapshot.complete_snapshot != null && snapshot.complete_snapshot.batch_kind !== "close";
 }
 
 /** infra/supabase/migrations/202609011600_create_run_lineage.sql의 logical_runs 테이블 컬럼. */

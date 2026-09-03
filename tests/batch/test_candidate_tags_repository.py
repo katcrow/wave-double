@@ -64,3 +64,34 @@ def test_upsert_tags_defaults_params_meta_to_empty_dict():
     repo.upsert_tags([tag])
     body = json.loads(seen[0].content)
     assert body[0]["params_meta"] == {}
+
+
+def test_sync_vanished_calls_rpc_endpoint_with_run_id_and_returns_count():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json={"vanished_count": 3})
+
+    repo = make_repo(handler)
+    result = repo.sync_vanished("run-1")
+
+    assert result == {"vanished_count": 3}
+    request = seen[0]
+    assert request.url.path == "/rest/v1/rpc/sync_vanished_tags"
+    body = json.loads(request.content)
+    assert body == {"p_run_id": "run-1"}
+    assert request.headers["apikey"] == "service-role-key"
+
+
+def test_sync_vanished_raises_on_http_error():
+    def handler(request):
+        return httpx.Response(500, json={"message": "boom"})
+
+    repo = make_repo(handler)
+    try:
+        repo.sync_vanished("run-1")
+    except httpx.HTTPStatusError:
+        pass
+    else:
+        raise AssertionError("expected HTTPStatusError to propagate")

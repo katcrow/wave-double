@@ -42,6 +42,8 @@ class TagsRepositoryProtocol(Protocol):
 
     def upsert_tags(self, tags: list[CandidateTag]) -> int: ...
 
+    def sync_vanished(self, run_id: str) -> dict[str, Any]: ...
+
 
 class SupabaseCandidateTagsRepository:
     """candidate_tags 테이블에 대한 PostgREST upsert adapter."""
@@ -84,6 +86,22 @@ class SupabaseCandidateTagsRepository:
         )
         response.raise_for_status()
         return len(payload)
+
+    def sync_vanished(self, run_id: str) -> dict[str, Any]:
+        """Story 2.8: ``sync_vanished_tags(p_run_id)`` RPC를 호출해 소멸 태그를 동기화한다.
+
+        upsert_tags 성공 직후 호출되어야 한다(같은 attempt의 active 태그가 이미 저장된 상태를
+        전제로 소멸 판정을 하기 때문). 반환값은 ``{"vanished_count": int}`` 형태의 RPC 응답이다.
+        """
+        response = self._http.post(
+            f"{self._base_url}/rest/v1/rpc/sync_vanished_tags",
+            headers=self._headers(),
+            json={"p_run_id": run_id},
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data if isinstance(data, dict) else {}
 
     def _headers(self) -> dict[str, str]:
         return {
