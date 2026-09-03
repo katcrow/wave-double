@@ -628,6 +628,14 @@ export type Database = {
         Args: { p_dispatch_request_id: string; p_run_id: string }
         Returns: Json
       }
+      record_outcome_observation: {
+        Args: {
+          p_evaluation_trading_day: string
+          p_outcome_id: string
+          p_ticker: string
+        }
+        Returns: Json
+      }
       request_manual_dispatch: {
         Args: {
           p_batch_kind: string

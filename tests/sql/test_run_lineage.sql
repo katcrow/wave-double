@@ -156,6 +156,125 @@ begin
   select count(*) into open_projection_count from public.candidate_outcome
     where (ticker, strategy) in (('ZZLIN1', 'A'), ('ZZLIN2', 'B')) and status = 'OPEN';
   if open_projection_count <> 2 then raise exception 'expected 2 OPEN candidate_outcome rows, got %', open_projection_count; end if;
+
+  -- Story 3.4: 방금 신규 OPEN된 두 outcome도 같은 트랜잭션에서 진입일 관찰이 함께 기록되어야 한다.
+  if not exists (
+    select 1 from public.outcome_observations oo
+      join public.candidate_outcome co on co.outcome_id = oo.outcome_id
+      where co.ticker = 'ZZLIN1' and co.strategy = 'A' and oo.evaluation_trading_day = date '2099-01-07'
+        and oo.high = 105 and oo.low = 99 and oo.close = 101 and oo.result_code = 'OK'
+  ) then
+    raise exception 'expected entry-day observation for ZZLIN1/A';
+  end if;
+  if not exists (
+    select 1 from public.outcome_observations oo
+      join public.candidate_outcome co on co.outcome_id = oo.outcome_id
+      where co.ticker = 'ZZLIN2' and co.strategy = 'B' and oo.evaluation_trading_day = date '2099-01-07'
+        and oo.high = 205 and oo.low = 199 and oo.close = 201 and oo.result_code = 'OK'
+  ) then
+    raise exception 'expected entry-day observation for ZZLIN2/B';
+  end if;
+end $$;
+
+-- Story 3.4: 일자별 판정 관찰 수집 -- 기존 OPEN outcome의 다음 거래일 관찰 추가, terminal 제외,
+-- 멱등 재시도, daily_ohlcv 결측 시 그 outcome만 건너뛰고 publish는 정상 커밋됨을 검증한다.
+do $$
+declare
+  key text := 'close:2099-01-10'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  outcome_a uuid; outcome_b uuid; outcome_tp uuid; outcome_invalid uuid;
+  obs_count integer;
+  direct_result jsonb;
+begin
+  -- ZZLIN1(strategy A)/ZZLIN2(strategy B)는 2099-01-07 close에서 이미 OPEN되었다.
+  -- 오늘(2099-01-10)은 ZZLIN1의 종가만 존재하고 ZZLIN2는 의도적으로 daily_ohlcv를 결측시킨다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN1', date '2099-01-10', 101, 110, 100, 108, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN7(strategy C)는 daily_ohlcv 행이 존재하지만 high/low/close 순서가 무효(low > high)한 상태다.
+  -- outcome_observations_high_low_close_order 제약을 건드리기 전에 record_outcome_observation이
+  -- 예외 없이 걸러내는지, 그리고 그 걸러냄이 publish_attempt 전체를 rollback시키지 않는지 검증한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN7', 'C', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN7', 'C', date '2099-01-01', 100, 'OPEN')
+    returning outcome_id into outcome_invalid;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN7', date '2099-01-10', 100, 95, 105, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  select outcome_id into outcome_a from public.candidate_outcome where ticker = 'ZZLIN1' and strategy = 'A';
+  select outcome_id into outcome_b from public.candidate_outcome where ticker = 'ZZLIN2' and strategy = 'B';
+  if outcome_a is null or outcome_b is null then raise exception 'expected prior OPEN outcomes from 2099-01-07 scenario'; end if;
+
+  -- terminal 상태(TP) outcome은 관찰 대상 조회에서 제외되어야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN6', 'C', 'OPEN', 'close:2099-01-07', jsonb_build_object('entry_date', date '2099-01-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct)
+    values ('ZZLIN6', 'C', date '2099-01-01', 100, 'TP', date '2099-01-02', 103, 2.9)
+    returning outcome_id into outcome_tp;
+
+  started := public.start_attempt(key, date '2099-01-10', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'close attempt with tracked outcomes but no active tags did not publish';
+  end if;
+  if (select stage_status->>'outcome_tracking' from public.runs where run_id = attempt_id) <> 'success' then
+    raise exception 'expected outcome_tracking=success for observation-only close publish';
+  end if;
+
+  -- ZZLIN1(outcome_a): daily_ohlcv 존재 -> 관찰 1행 신규 기록.
+  select count(*) into obs_count from public.outcome_observations
+    where outcome_id = outcome_a and evaluation_trading_day = date '2099-01-10';
+  if obs_count <> 1 then raise exception 'expected 1 observation row for outcome_a on 2099-01-10, got %', obs_count; end if;
+  if not exists (
+    select 1 from public.outcome_observations
+      where outcome_id = outcome_a and evaluation_trading_day = date '2099-01-10'
+        and high = 110 and low = 100 and close = 108 and result_code = 'OK'
+  ) then
+    raise exception 'observation values did not match daily_ohlcv for outcome_a';
+  end if;
+
+  -- ZZLIN2(outcome_b): daily_ohlcv 결측 -> 관찰 없이 건너뛰지만 publish는 정상 커밋되어야 한다(이미 위에서 확인).
+  if exists (select 1 from public.outcome_observations where outcome_id = outcome_b and evaluation_trading_day = date '2099-01-10') then
+    raise exception 'observation should not exist for outcome_b due to missing daily_ohlcv';
+  end if;
+
+  -- terminal(TP) outcome은 관찰 루프에서 제외된다.
+  if exists (select 1 from public.outcome_observations where outcome_id = outcome_tp and evaluation_trading_day = date '2099-01-10') then
+    raise exception 'terminal TP outcome should not receive a new observation';
+  end if;
+
+  -- 멱등 재시도: 동일 (outcome_id, evaluation_trading_day)에 대한 직접 RPC 재호출은 새 행을 만들지 않는다.
+  direct_result := public.record_outcome_observation(outcome_a, 'ZZLIN1', date '2099-01-10');
+  if (direct_result->>'replayed')::boolean is not true then raise exception 'expected replayed:true on idempotent retry'; end if;
+  if (direct_result->>'recorded')::boolean is not true then raise exception 'expected recorded:true on idempotent retry'; end if;
+  select count(*) into obs_count from public.outcome_observations
+    where outcome_id = outcome_a and evaluation_trading_day = date '2099-01-10';
+  if obs_count <> 1 then raise exception 'idempotent retry created a duplicate observation row, got %', obs_count; end if;
+
+  -- daily_ohlcv 결측에 대한 직접 RPC 반환값도 확인한다(예외 없이 recorded:false를 반환).
+  direct_result := public.record_outcome_observation(outcome_b, 'ZZLIN2', date '2099-01-10');
+  if (direct_result->>'recorded')::boolean is not false then raise exception 'expected recorded:false for missing daily_ohlcv'; end if;
+  if direct_result->>'reason' <> 'MISSING_DAILY_OHLCV' then raise exception 'expected reason MISSING_DAILY_OHLCV'; end if;
+
+  -- ZZLIN7(outcome_invalid): daily_ohlcv는 존재하지만 high/low/close 순서가 무효 -> 예외 없이 건너뛰고
+  -- publish_attempt는 위에서 이미 정상 커밋된 것으로 확인됨. 관찰 행도 생성되지 않아야 한다.
+  if exists (select 1 from public.outcome_observations where outcome_id = outcome_invalid and evaluation_trading_day = date '2099-01-10') then
+    raise exception 'observation should not exist for outcome_invalid due to invalid daily_ohlcv ordering';
+  end if;
+
+  -- 무효 daily_ohlcv 순서에 대한 직접 RPC 반환값도 확인한다(예외 없이 recorded:false, reason:INVALID_DAILY_OHLCV).
+  direct_result := public.record_outcome_observation(outcome_invalid, 'ZZLIN7', date '2099-01-10');
+  if (direct_result->>'recorded')::boolean is not false then raise exception 'expected recorded:false for invalid daily_ohlcv ordering'; end if;
+  if direct_result->>'reason' <> 'INVALID_DAILY_OHLCV' then raise exception 'expected reason INVALID_DAILY_OHLCV'; end if;
 end $$;
 
 -- Story 3.3: emit_open_command 실패(종가 데이터 없음)는 publish_attempt 전체를 rollback한다(AD-20).
