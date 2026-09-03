@@ -811,4 +811,260 @@ begin
   if event_count <> 1 then raise exception 'idempotent retry created a duplicate TP event, got %', event_count; end if;
 end $$;
 
+-- Story 3.7: TIMEOUT 컷오프 확정 & 추적 대상 유계화. 3.6의 TP/SL 판정 루프가 그대로 확장되어
+-- traded_days_since_entry(outcome_observations count, evaluation_trading_day>entry_date and
+-- result_code='OK')가 각 행의 cutoff_n 이상이면 오늘 종가 기준 실손익으로 TIMEOUT을 확정하는지,
+-- 컷오프 미도달/TP·TIMEOUT 동시충족/SL·TIMEOUT 동시충족/거래정지 기간 제외/커스텀 cutoff_n/
+-- 재시도 idempotency/TP 확정 시 holding_days 기록을 하나의 close 발행으로 검증한다.
+do $$
+declare
+  key text := 'close:2099-01-14'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  outcome_cutoff_hit uuid; outcome_cutoff_not_reached uuid; outcome_tp_over_timeout uuid;
+  outcome_sl_over_timeout uuid; outcome_suspension_gap uuid; outcome_custom_cutoff uuid;
+  outcome_tp_holding uuid;
+  event_count integer;
+begin
+  -- ZZLIN22/A: 컷오프 정확히 도달(29 기존 관측 + 오늘 = 30 = cutoff_n 기본값). TP/SL 미충족.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN22', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2098-11-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN22', 'A', date '2098-11-01', 100, 'OPEN')
+    returning outcome_id into outcome_cutoff_hit;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_cutoff_hit, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-11-02', date '2098-11-30', interval '1 day') as d;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN22', date '2099-01-14', 100, 101, 98, 98.5, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN23/A: 컷오프 미도달(28 기존 관측 + 오늘 = 29 < 30). TP/SL 미충족. OPEN 유지 기대.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN23', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2098-11-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN23', 'A', date '2098-11-01', 100, 'OPEN')
+    returning outcome_id into outcome_cutoff_not_reached;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_cutoff_not_reached, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-11-02', date '2098-11-29', interval '1 day') as d;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN23', date '2099-01-14', 100, 101, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN24/A: traded_days_since_entry>=30이고 오늘 고가 104(TP 충족)면 TP가 우선 확정(TIMEOUT 아님).
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN24', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2098-11-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN24', 'A', date '2098-11-01', 100, 'OPEN')
+    returning outcome_id into outcome_tp_over_timeout;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_tp_over_timeout, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-11-02', date '2098-11-30', interval '1 day') as d;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN24', date '2099-01-14', 100, 104, 99, 103.5, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN25/A: traded_days_since_entry>=30이고 오늘 저가 96.5(SL 충족)면 SL이 우선 확정(TIMEOUT 아님).
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN25', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2098-11-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN25', 'A', date '2098-11-01', 100, 'OPEN')
+    returning outcome_id into outcome_sl_over_timeout;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_sl_over_timeout, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-11-02', date '2098-11-30', interval '1 day') as d;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN25', date '2099-01-14', 100, 100.5, 96.5, 97, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN26/A: 진입 후 5거래일 관측 + 10일 거래정지(daily_ohlcv/관측 행 없음, 행 자체가 없어 카운트에서
+  -- 자동 제외) + 24거래일 추가 관측 = 29 + 오늘 = 30 = cutoff_n. 그 시점에 TIMEOUT 확정.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN26', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2098-10-01', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN26', 'A', date '2098-10-01', 100, 'OPEN')
+    returning outcome_id into outcome_suspension_gap;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_suspension_gap, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-10-02', date '2098-10-06', interval '1 day') as d; -- 5 거래일
+  -- 2098-10-07 ~ 2098-10-16(10일)은 거래정지로 유효 관측 행이 없다 -- 의도적으로 아무 행도 넣지 않는다.
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_suspension_gap, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-10-17', date '2098-11-09', interval '1 day') as d; -- 24 거래일
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN26', date '2099-01-14', 100, 101, 99, 99.2, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN27/A: cutoff_n=5(전역 기본값 30이 아닌 이 행에 저장된 값)으로 4개 기존 관측 + 오늘 = 5에서 TIMEOUT.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN27', 'A', 'OPEN', 'close:2099-01-05', jsonb_build_object('entry_date', date '2099-01-05', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, cutoff_n)
+    values ('ZZLIN27', 'A', date '2099-01-05', 100, 'OPEN', 5)
+    returning outcome_id into outcome_custom_cutoff;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_custom_cutoff, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2099-01-06', date '2099-01-09', interval '1 day') as d; -- 4 거래일
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN27', date '2099-01-14', 100, 99, 97.5, 98, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  -- ZZLIN28/A: 관측 10일차(9 기존 + 오늘)에 TP 조건 충족 -- status=TP와 함께 holding_days=10 기록.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN28', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2098-12-20', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZLIN28', 'A', date '2098-12-20', 100, 'OPEN')
+    returning outcome_id into outcome_tp_holding;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_tp_holding, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-12-21', date '2098-12-29', interval '1 day') as d; -- 9 거래일
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN28', date '2099-01-14', 100, 104, 99, 103.5, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-01-14', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'close attempt with TIMEOUT-candidate outcomes did not publish';
+  end if;
+
+  -- 컷오프 정확히 도달: TIMEOUT 확정, exit_price=오늘 종가, return_pct=실측 비용반영, holding_days=30.
+  if (select status from public.candidate_outcome where outcome_id = outcome_cutoff_hit) <> 'TIMEOUT' then
+    raise exception 'expected ZZLIN22/A to transition to TIMEOUT at cutoff_n';
+  end if;
+  if (select exit_price from public.candidate_outcome where outcome_id = outcome_cutoff_hit) <> 98.5 then
+    raise exception 'expected ZZLIN22/A exit_price to be today close 98.5';
+  end if;
+  if (select return_pct from public.candidate_outcome where outcome_id = outcome_cutoff_hit) <> -1.6 then
+    raise exception 'expected ZZLIN22/A return_pct to be (98.5/100-1)*100-0.1 = -1.6, got %', (select return_pct from public.candidate_outcome where outcome_id = outcome_cutoff_hit);
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_cutoff_hit) <> 30 then
+    raise exception 'expected ZZLIN22/A holding_days to be 30';
+  end if;
+  select count(*) into event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN22' and strategy = 'A' and command_type = 'TIMEOUT';
+  if event_count <> 1 then raise exception 'expected exactly 1 TIMEOUT event for ZZLIN22/A, got %', event_count; end if;
+
+  -- 컷오프 미도달: 판정 없음, OPEN 유지.
+  if (select status from public.candidate_outcome where outcome_id = outcome_cutoff_not_reached) <> 'OPEN' then
+    raise exception 'expected ZZLIN23/A to remain OPEN with traded_days_since_entry=29 < cutoff_n=30';
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_cutoff_not_reached) <> 0 then
+    raise exception 'expected ZZLIN23/A holding_days to remain untouched (0) while still OPEN';
+  end if;
+
+  -- TP·TIMEOUT 동시 충족: TP가 우선 확정.
+  if (select status from public.candidate_outcome where outcome_id = outcome_tp_over_timeout) <> 'TP' then
+    raise exception 'expected ZZLIN24/A to resolve to TP even though cutoff_n is also reached';
+  end if;
+  if (select return_pct from public.candidate_outcome where outcome_id = outcome_tp_over_timeout) <> 2.9 then
+    raise exception 'expected ZZLIN24/A return_pct to remain the fixed TP value 2.9, not a TIMEOUT actual';
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_tp_over_timeout) <> 30 then
+    raise exception 'expected ZZLIN24/A holding_days to be recorded as 30 on TP transition too';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN24' and strategy = 'A' and command_type = 'TIMEOUT') then
+    raise exception 'ZZLIN24/A must not also receive a TIMEOUT event when TP wins the same-day tie';
+  end if;
+
+  -- SL·TIMEOUT 동시 충족: SL이 우선 확정.
+  if (select status from public.candidate_outcome where outcome_id = outcome_sl_over_timeout) <> 'SL' then
+    raise exception 'expected ZZLIN25/A to resolve to SL even though cutoff_n is also reached';
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_sl_over_timeout) <> 30 then
+    raise exception 'expected ZZLIN25/A holding_days to be recorded as 30 on SL transition too';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN25' and strategy = 'A' and command_type = 'TIMEOUT') then
+    raise exception 'ZZLIN25/A must not also receive a TIMEOUT event when SL wins the same-day tie';
+  end if;
+
+  -- 거래정지 기간 존재: 그 기간은 traded_days_since_entry에서 제외되고, 5+24+오늘=30에서 TIMEOUT 확정.
+  if (select status from public.candidate_outcome where outcome_id = outcome_suspension_gap) <> 'TIMEOUT' then
+    raise exception 'expected ZZLIN26/A to transition to TIMEOUT once the 10-day suspension gap is excluded from the count';
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_suspension_gap) <> 30 then
+    raise exception 'expected ZZLIN26/A holding_days to be 30 (suspension gap excluded)';
+  end if;
+
+  -- 커스텀 cutoff_n: 전역 기본값(30)이 아니라 이 행에 저장된 cutoff_n=5가 그대로 판정에 쓰인다.
+  if (select status from public.candidate_outcome where outcome_id = outcome_custom_cutoff) <> 'TIMEOUT' then
+    raise exception 'expected ZZLIN27/A to transition to TIMEOUT at its own stored cutoff_n=5, not the global default 30';
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_custom_cutoff) <> 5 then
+    raise exception 'expected ZZLIN27/A holding_days to be 5';
+  end if;
+  if (select return_pct from public.candidate_outcome where outcome_id = outcome_custom_cutoff) <> -2.1 then
+    raise exception 'expected ZZLIN27/A return_pct to be (98/100-1)*100-0.1 = -2.1, got %', (select return_pct from public.candidate_outcome where outcome_id = outcome_custom_cutoff);
+  end if;
+
+  -- TP 확정 시 holding_days: 관측 10일차(9 기존 + 오늘)에 TP 조건 충족.
+  if (select status from public.candidate_outcome where outcome_id = outcome_tp_holding) <> 'TP' then
+    raise exception 'expected ZZLIN28/A to transition to TP on its 10th traded day';
+  end if;
+  if (select holding_days from public.candidate_outcome where outcome_id = outcome_tp_holding) <> 10 then
+    raise exception 'expected ZZLIN28/A holding_days to be 10, got %', (select holding_days from public.candidate_outcome where outcome_id = outcome_tp_holding);
+  end if;
+
+  -- 재시도(동일 attempt 재발행): 이미 (logical_run_key,ticker,strategy,'TIMEOUT') 이벤트가 있으므로
+  -- 직접 재호출해도 새 이벤트/전이 없이 재확인만 되어야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN22', 'A', 'TIMEOUT', key, jsonb_build_object('retry', true))
+    on conflict (logical_run_key, ticker, strategy, command_type) do nothing;
+  select count(*) into event_count from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZLIN22' and strategy = 'A' and command_type = 'TIMEOUT';
+  if event_count <> 1 then raise exception 'idempotent retry created a duplicate TIMEOUT event, got %', event_count; end if;
+
+  -- 이미 TIMEOUT으로 확정된 outcome은 후속 배치의 추적 대상 산출에서 기존 status not in (''TP'',''SL'',''TIMEOUT'') 필터로 자동 제외된다.
+  if exists (
+    select 1 from public.candidate_outcome
+    where outcome_id = outcome_cutoff_hit and status not in ('TP', 'SL', 'TIMEOUT')
+  ) then
+    raise exception 'expected ZZLIN22/A to be excluded from the open-tracking filter after TIMEOUT';
+  end if;
+end $$;
+
+-- Story 3.7 review patch: traded_days_since_entry는 evaluation_trading_day가 오늘(logical_row.
+-- trading_day)보다 나중인 outcome_observations 행을 카운트에서 제외해야 한다(edge-case-hunter
+-- 리뷰 발견). ZZLIN29/A: cutoff_n=7. 5개 과거 관측 + 미래로 잘못 선기록된 관측 1개(카운트되면 안 됨)
+-- + 오늘 = 패치 전이면 7(버그로 TIMEOUT), 패치 후면 6(<7, OPEN 유지)이어야 한다.
+do $$
+declare
+  key text := 'close:2099-01-15'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  outcome_future_row uuid;
+begin
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZLIN29', 'A', 'OPEN', 'close:2099-01-11', jsonb_build_object('entry_date', date '2099-01-05', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, cutoff_n)
+    values ('ZZLIN29', 'A', date '2099-01-05', 100, 'OPEN', 7)
+    returning outcome_id into outcome_future_row;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_future_row, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2099-01-06', date '2099-01-10', interval '1 day') as d; -- 5 거래일
+  -- 잘못 선기록된 미래(오늘 2099-01-15보다 나중) 관측 -- 카운트에서 제외되어야 한다.
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    values (outcome_future_row, date '2099-01-16', 101, 99, 100, 'OK');
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN29', date '2099-01-15', 100, 101, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-01-15', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.candidate_outcome where outcome_id = outcome_future_row) <> 'OPEN' then
+    raise exception 'expected ZZLIN29/A to remain OPEN (traded_days_since_entry=6 < cutoff_n=7 once the future-dated row is excluded), got %',
+      (select status from public.candidate_outcome where outcome_id = outcome_future_row);
+  end if;
+end $$;
+
 rollback;
