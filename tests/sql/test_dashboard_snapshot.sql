@@ -46,6 +46,14 @@ begin
   -- 트랜잭션 내내 now()가 고정되므로, 시나리오 간 started_at 동률로 latest_attempt 정렬이 우연에 기대지 않도록 명시 설정한다.
   update public.runs set started_at = timestamptz '2099-02-01 00:00:00+00' where run_id = attempt_id;
 
+  -- Story 3.3 review patch: premarket 발행은 outcome 생성 루프를 아예 타지 않으므로(AD-15), stage_status의
+  -- outcome_tracking 원시 컬럼이 'pending'으로 그대로 남아있는지 직접 확인한다(missing_sections를 통한 간접
+  -- 확인만으로는 이 raw 컬럼 값 자체를 증명하지 못한다).
+  if (select stage_status->>'outcome_tracking' from public.runs where run_id = attempt_id) <> 'pending' then
+    raise exception 'expected outcome_tracking to remain pending for a premarket publish, got %',
+      (select stage_status->>'outcome_tracking' from public.runs where run_id = attempt_id);
+  end if;
+
   snapshot := public.get_dashboard_snapshot();
   if (snapshot->>'no_snapshot')::boolean is not false then raise exception 'expected no_snapshot=false after publish'; end if;
   if snapshot->'complete_snapshot'->>'run_id' <> attempt_id::text then raise exception 'complete_snapshot did not point at published run'; end if;
@@ -151,5 +159,89 @@ begin
 end $$;
 
 reset role;
+
+-- 시나리오 6 (Story 3.3): close 발행 + 활성 태그 1건 -- complete_snapshot.sections.outcome_tracking이
+-- 채워지고 missing_sections에서 outcome_tracking이 빠진다.
+do $$
+declare
+  key text := 'close:2099-02-03'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_id uuid := gen_random_uuid();
+  snapshot jsonb;
+begin
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZSNAP1', date '2099-02-03', 100, 105, 99, 101, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-02-03', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(jsonb_build_object(
+      'candidate_id', candidate_id, 'ticker', 'ZZSNAP1', 'name', 'Snapshot Test', 'trading_value', 100,
+      'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('d', 64), 'original_count', 1, 'excluded_count', 0, 'truncated_count', 0, 'candidate_count', 1));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (candidate_id, attempt_id, 'A', date '2099-02-03');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
+  perform public.publish_attempt(attempt_id, fence, lease);
+  update public.runs set started_at = timestamptz '2099-02-03 00:00:00+00' where run_id = attempt_id;
+  -- 트랜잭션 내내 now()가 고정되어 시나리오 2의 published_at과 동률이 나므로, 이 시나리오가
+  -- 최신 complete_snapshot으로 선택되도록 published_at을 명시적으로 이후 시각으로 못박는다
+  -- (get_dashboard_snapshot()의 tie-break는 published_at desc, 다음 logical_run_key desc).
+  update public.logical_runs set published_at = timestamptz '2099-02-03 00:00:00+00' where logical_run_key = key;
+
+  snapshot := public.get_dashboard_snapshot();
+  if snapshot->'complete_snapshot'->>'run_id' <> attempt_id::text then raise exception 'complete_snapshot did not point at the close publish'; end if;
+  if (snapshot->'complete_snapshot'->'sections'->'outcome_tracking'->>'open_count')::integer <> 1 then
+    raise exception 'expected outcome_tracking.open_count=1 in complete_snapshot, got %', snapshot->'complete_snapshot'->'sections'->'outcome_tracking';
+  end if;
+  if snapshot->'available_partial_sections' <> '["candidates", "tags", "outcome_tracking"]'::jsonb then
+    raise exception 'expected available_partial_sections to include outcome_tracking, got %', snapshot->'available_partial_sections';
+  end if;
+  if snapshot->'missing_sections' <> '["supply_3day", "market_supply"]'::jsonb then
+    raise exception 'expected outcome_tracking to be excluded from missing_sections, got %', snapshot->'missing_sections';
+  end if;
+end $$;
+
+-- 시나리오 7 (Story 3.3 review patch): close 발행 + 활성 태그 0건 -- 빈 루프도 outcome_tracking='success'로
+-- 종결되므로(test_run_lineage.sql의 close:2099-01-02 패턴 참고), complete_snapshot.sections.outcome_tracking.open_count가
+-- null/누락이 아니라 명시적으로 0이어야 하고, 그럼에도 missing_sections에서는 제외되어야 한다.
+do $$
+declare
+  key text := 'close:2099-02-04'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  snapshot jsonb;
+begin
+  started := public.start_attempt(key, date '2099-02-04', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 0));
+  perform public.publish_attempt(attempt_id, fence, lease);
+  update public.runs set started_at = timestamptz '2099-02-04 00:00:00+00' where run_id = attempt_id;
+  -- 시나리오 6과 published_at 동률을 피해 이 시나리오가 최신 complete_snapshot으로 선택되게 한다.
+  update public.logical_runs set published_at = timestamptz '2099-02-04 00:00:00+00' where logical_run_key = key;
+
+  if (select stage_status->>'outcome_tracking' from public.runs where run_id = attempt_id) <> 'success' then
+    raise exception 'expected outcome_tracking=success for close publish with zero active tags';
+  end if;
+
+  snapshot := public.get_dashboard_snapshot();
+  if snapshot->'complete_snapshot'->>'run_id' <> attempt_id::text then raise exception 'complete_snapshot did not point at the tag-less close publish'; end if;
+  if not (snapshot->'complete_snapshot'->'sections'->'outcome_tracking' ? 'open_count') then
+    raise exception 'expected outcome_tracking.open_count key to be present, got %', snapshot->'complete_snapshot'->'sections'->'outcome_tracking';
+  end if;
+  if snapshot->'complete_snapshot'->'sections'->'outcome_tracking'->'open_count' = 'null'::jsonb then
+    raise exception 'expected outcome_tracking.open_count to be 0, not null';
+  end if;
+  if (snapshot->'complete_snapshot'->'sections'->'outcome_tracking'->>'open_count')::integer <> 0 then
+    raise exception 'expected outcome_tracking.open_count=0 for zero active tags, got %', snapshot->'complete_snapshot'->'sections'->'outcome_tracking';
+  end if;
+  if snapshot->'missing_sections' <> '["supply_3day", "market_supply"]'::jsonb then
+    raise exception 'expected outcome_tracking to be excluded from missing_sections even with zero active tags, got %', snapshot->'missing_sections';
+  end if;
+end $$;
 
 rollback;

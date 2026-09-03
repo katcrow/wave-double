@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-03-2026 10:00
+last_updated: 09-03-2026 14:00
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -64,7 +64,7 @@ development_status:
   epic-3: in-progress
   3-1-outcome-이벤트-관찰-projection-스키마: done
   3-2-idempotent-open-command-발행-로직: done
-  3-3-close-발행-트랜잭션-연결-재진입-금지: backlog
+  3-3-close-발행-트랜잭션-연결-재진입-금지: done
   3-4-일자별-판정-관찰-수집: backlog
   3-5-가격-조정-이상-감지-suspended-전이: backlog
   3-6-tp-sl-판정-비용-반영-손익률: backlog

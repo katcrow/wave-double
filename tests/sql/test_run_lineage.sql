@@ -23,6 +23,10 @@ begin
   perform public.publish_attempt(attempt_id, fence, lease);
    if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) <> attempt_id then raise exception 'close canonical pointer missing'; end if;
    if (select status from public.runs where runs.run_id = attempt_id) <> 'published' then raise exception 'not published'; end if;
+   -- Story 3.3: 활성 태그가 없는 close attempt도 outcome_tracking stage가 success로 종결되어야 한다(빈 루프).
+   if (select stage_status->>'outcome_tracking' from public.runs where runs.run_id = attempt_id) <> 'success' then
+     raise exception 'expected outcome_tracking=success for close publish with no active tags';
+   end if;
   begin
      perform public.write_stage(attempt_id, 'candidates', fence, lease, 'success', 'success');
   exception when others then caught := true;
@@ -105,6 +109,152 @@ begin
   exception when others then caught := true;
   end;
   if not caught then raise exception 'non-half-hour slot was accepted'; end if;
+end $$;
+
+-- Story 3.3: close 발행이 활성 태그 다수를 outcome OPEN으로 연결한다(AD-20).
+do $$
+declare
+  key text := 'close:2099-01-07'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_a uuid := gen_random_uuid();
+  candidate_b uuid := gen_random_uuid();
+  open_event_count integer;
+  open_projection_count integer;
+begin
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values
+      ('ZZLIN1', date '2099-01-07', 100, 105, 99, 101, 1000),
+      ('ZZLIN2', date '2099-01-07', 200, 205, 199, 201, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-01-07', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', candidate_a, 'ticker', 'ZZLIN1', 'name', 'Lineage Test 1', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', candidate_b, 'ticker', 'ZZLIN2', 'name', 'Lineage Test 2', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('b', 64), 'original_count', 2, 'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (candidate_a, attempt_id, 'A', date '2099-01-07'), (candidate_b, attempt_id, 'B', date '2099-01-07');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then raise exception 'close attempt with active tags did not publish'; end if;
+  if (select stage_status->>'outcome_tracking' from public.runs where run_id = attempt_id) <> 'success' then
+    raise exception 'expected outcome_tracking=success for close publish with active tags';
+  end if;
+
+  select count(*) into open_event_count from public.outcome_events
+    where logical_run_key = key and command_type = 'OPEN';
+  if open_event_count <> 2 then raise exception 'expected 2 OPEN events for 2 active (ticker,strategy) tags, got %', open_event_count; end if;
+
+  select count(*) into open_projection_count from public.candidate_outcome
+    where (ticker, strategy) in (('ZZLIN1', 'A'), ('ZZLIN2', 'B')) and status = 'OPEN';
+  if open_projection_count <> 2 then raise exception 'expected 2 OPEN candidate_outcome rows, got %', open_projection_count; end if;
+end $$;
+
+-- Story 3.3: emit_open_command 실패(종가 데이터 없음)는 publish_attempt 전체를 rollback한다(AD-20).
+do $$
+declare
+  key text := 'close:2099-01-08'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_c uuid := gen_random_uuid();
+  caught boolean := false;
+begin
+  -- 의도적으로 daily_ohlcv에 ZZLIN3의 2099-01-08 종가를 넣지 않는다.
+  started := public.start_attempt(key, date '2099-01-08', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(jsonb_build_object('candidate_id', candidate_c, 'ticker', 'ZZLIN3', 'name', 'Lineage Test 3', 'trading_value', 100,
+      'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('c', 64), 'original_count', 1, 'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (candidate_c, attempt_id, 'C', date '2099-01-08');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
+
+  begin
+    perform public.publish_attempt(attempt_id, fence, lease);
+  exception when others then
+    if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'publish_attempt did not propagate emit_open_command failure'; end if;
+
+  if (select status from public.runs where run_id = attempt_id) = 'published' then
+    raise exception 'candidate/tag publish was not rolled back after outcome generation failure';
+  end if;
+  if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) is not null then
+    raise exception 'canonical_success_run_id was set despite outcome generation failure';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key) then
+    raise exception 'outcome_events row leaked despite rollback';
+  end if;
+  if exists (select 1 from public.candidate_outcome where ticker = 'ZZLIN3' and strategy = 'C') then
+    raise exception 'candidate_outcome row leaked despite rollback';
+  end if;
+end $$;
+
+-- Story 3.3 review patch: 2개 이상의 활성 태그 중 하나는 emit_open_command가 성공할 수 있는 상태(종가 존재)이고
+-- 다른 하나는 실패하는 상태(종가 없음)일 때, 먼저 처리되어 성공했을 수도 있는 태그의 outcome 행도
+-- 함께 rollback되는지 검증한다 -- 단일 태그 실패만으로는 이 "부분 루프" unwind를 증명하지 못하기 때문이다(AD-20).
+do $$
+declare
+  key text := 'close:2099-01-09'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_d uuid := gen_random_uuid();
+  candidate_e uuid := gen_random_uuid();
+  caught boolean := false;
+begin
+  -- ZZLIN4는 종가가 존재해 emit_open_command가 성공할 수 있는 태그, ZZLIN5는 의도적으로 종가를 넣지 않아
+  -- emit_open_command가 실패하는 태그다. 루프의 실제 순회 순서와 무관하게, 예외 발생 후에는
+  -- ZZLIN4 태그가 먼저 처리되어 성공했더라도 그 outcome 행이 남아있으면 안 된다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values ('ZZLIN4', date '2099-01-09', 100, 105, 99, 101, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-01-09', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', candidate_d, 'ticker', 'ZZLIN4', 'name', 'Lineage Test 4', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', candidate_e, 'ticker', 'ZZLIN5', 'name', 'Lineage Test 5', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('e', 64), 'original_count', 2, 'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (candidate_d, attempt_id, 'A', date '2099-01-09'), (candidate_e, attempt_id, 'B', date '2099-01-09');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+
+  begin
+    perform public.publish_attempt(attempt_id, fence, lease);
+  exception when others then
+    if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'publish_attempt did not propagate emit_open_command failure for the second active tag'; end if;
+
+  if (select status from public.runs where run_id = attempt_id) = 'published' then
+    raise exception 'partial-loop failure did not roll back candidate/tag publish';
+  end if;
+  if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) is not null then
+    raise exception 'canonical_success_run_id was set despite partial-loop outcome generation failure';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key) then
+    raise exception 'outcome_events row leaked for any tag despite partial-loop rollback';
+  end if;
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN4') then
+    raise exception 'the first (would-have-succeeded) tag''s outcome_events row leaked despite rollback';
+  end if;
+  if exists (select 1 from public.candidate_outcome where (ticker, strategy) in (('ZZLIN4', 'A'), ('ZZLIN5', 'B'))) then
+    raise exception 'candidate_outcome rows leaked for the partial loop despite rollback';
+  end if;
 end $$;
 
 rollback;
