@@ -1269,4 +1269,103 @@ begin
   ) then raise exception 'apply_outcome_correction must be executable by service_role'; end if;
 end $$;
 
+-- Story 3.9: DELISTED correction 전이. apply_outcome_correction으로 OPEN outcome을
+-- 'DELISTED'로 전이하면 outcome_events에 CORRECTION(reason 포함)이 append되고 status가
+-- DELISTED로 바뀌며 version이 정확히 1 증가한다(3.8 메커니즘의 DELISTED 회귀).
+do $$
+declare
+  key text := 'close:2099-01-17';
+  outcome_delist uuid;
+  v_version integer;
+  correction_result jsonb;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+    values (key, date '2099-01-17', 'close')
+    on conflict (logical_run_key) do nothing;
+
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZDEL1', 'B', 'OPEN', key, jsonb_build_object('entry_date', date '2099-01-10', 'entry_price', 200));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZDEL1', 'B', date '2099-01-10', 200, 'OPEN')
+    returning outcome_id into outcome_delist;
+
+  select version into v_version from public.candidate_outcome where outcome_id = outcome_delist;
+  correction_result := public.apply_outcome_correction(key, outcome_delist, v_version, 'delisted from KRX', 'DELISTED');
+
+  if (correction_result->>'status') <> 'DELISTED' then raise exception 'expected DELISTED after correction, got %', correction_result; end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_delist) <> 'DELISTED' then
+    raise exception 'projection status was not updated to DELISTED';
+  end if;
+  if (select version from public.candidate_outcome where outcome_id = outcome_delist) <> v_version + 1 then
+    raise exception 'expected version to increment by exactly 1 on DELISTED correction';
+  end if;
+  if not exists (
+    select 1 from public.outcome_events
+    where logical_run_key = key and ticker = 'ZZDEL1' and strategy = 'B' and command_type = 'CORRECTION'
+      and payload->>'reason' = 'delisted from KRX'
+  ) then
+    raise exception 'expected CORRECTION event with reason to be recorded';
+  end if;
+end $$;
+
+-- Story 3.9: DELISTED 관찰 중단. DELISTED outcome은 다음 close publish_attempt의 관찰 수집
+-- 루프(status not in ('TP','SL','TIMEOUT','DELISTED'))에서 제외되어 outcome_observations에
+-- 새 행이 생기지 않아야 한다. 통제용 OPEN(ZZDEL2/C)은 같은 날 daily_ohlcv가 있으면 기존대로
+-- 관찰을 받아 루프가 여전히 동작함을 증명한다(DELISTED만 제외).
+do $$
+declare
+  key text := 'close:2099-01-18'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  outcome_delisted uuid; control_open uuid;
+begin
+  -- ZZDEL1/B는 위 Story 3.9 correction 시나리오에서 이미 DELISTED다.
+  select outcome_id into outcome_delisted from public.candidate_outcome where ticker = 'ZZDEL1' and strategy = 'B';
+  if outcome_delisted is null then raise exception 'expected ZZDEL1/B DELISTED outcome from prior scenario'; end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_delisted) <> 'DELISTED' then
+    raise exception 'expected ZZDEL1/B to be DELISTED before observation-collection exclusion check';
+  end if;
+
+  -- 통제용 OPEN outcome: ZZDEL2(strategy C)는 이전 거래일에 OPEN 상태로 진입해 두고, 오늘
+  -- daily_ohlcv를 두면 관찰 수집 루프가 기존대로 관찰을 받아야 한다.
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('ZZDEL2', 'C', 'OPEN', 'close:2099-01-10', jsonb_build_object('entry_date', date '2099-01-10', 'entry_price', 100));
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('ZZDEL2', 'C', date '2099-01-10', 100, 'OPEN')
+    returning outcome_id into control_open;
+
+  -- DELISTED(ZZDEL1)와 통제 OPEN(ZZDEL2) 둘 다 오늘 daily_ohlcv가 있으면 관찰이 가능한 상태다
+  -- -- DELISTED만 제외되어야 하므로, ZZDEL2는 관찰을 받고 ZZDEL1은 받지 않아야 한다.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+    values
+      ('ZZDEL1', date '2099-01-18', 100, 105, 99, 101, 1000),
+      ('ZZDEL2', date '2099-01-18', 100, 101, 99, 100, 1000)
+    on conflict (ticker, trading_day) do nothing;
+
+  started := public.start_attempt(key, date '2099-01-18', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'close attempt with a DELISTED outcome but no active tags did not publish';
+  end if;
+
+  -- DELISTED outcome(ZZDEL1/B): 같은 날 daily_ohlcv가 있어도 관찰 수집 루프에서 제외된다.
+  if exists (select 1 from public.outcome_observations where outcome_id = outcome_delisted and evaluation_trading_day = date '2099-01-18') then
+    raise exception 'DELISTED outcome must not receive a new observation from the collection loop';
+  end if;
+
+  -- 통제 OPEN outcome(ZZDEL2/C): 기존대로 관찰을 받아 루프가 여전히 동작함을 확인한다.
+  if not exists (
+    select 1 from public.outcome_observations
+    where outcome_id = control_open and evaluation_trading_day = date '2099-01-18'
+      and high = 101 and low = 99 and close = 100 and result_code = 'OK'
+  ) then
+    raise exception 'expected control OPEN outcome ZZDEL2/C to receive a new observation on 2099-01-18';
+  end if;
+end $$;
+
 rollback;

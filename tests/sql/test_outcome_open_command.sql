@@ -223,6 +223,46 @@ begin
     end if;
   end;
 
+  -- Scenario (Story 3.9): DELISTED 재태깅 -- (ticker,strategy)가 DELISTED 상태일 때 다음
+  -- close 배치가 같은 종목을 다시 태깅해도 신규 OPEN/candidate_outcome 중복 행이 생기지 않고
+  -- ALREADY_DELISTED로 skip해야 한다(진입일과 무관하게 항상 skip).
+  declare
+    v_delisted_outcome_id uuid;
+    v_result7 jsonb;
+  begin
+    -- emit_open_command checks daily_ohlcv for a close price before it reaches the reentry
+    -- guard, so ZZTEST6 needs a close-day row on 2099-07-02 too, else it would fail earlier
+    -- with MISSING_DAILY_OHLCV_CLOSE and never reach the ALREADY_DELISTED branch.
+    insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+      values ('ZZTEST6', date '2099-07-02', 60, 65, 59, 61, 1000)
+      on conflict (ticker, trading_day) do nothing;
+
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+      values ('ZZTEST6', 'A', 'OPEN', 'close:2099-07-01', jsonb_build_object('entry_date', date '2099-07-01', 'entry_price', 60));
+    insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+      values ('ZZTEST6', 'A', date '2099-07-01', 60, 'DELISTED')
+      returning outcome_id into v_delisted_outcome_id;
+
+    v_result7 := public.emit_open_command('close:2099-07-02', 'ZZTEST6', 'A');
+    if (v_result7->>'replayed')::boolean is distinct from false
+       or (v_result7->>'skipped')::boolean is distinct from true
+       or v_result7->>'reason' <> 'ALREADY_DELISTED'
+       or (v_result7->>'outcome_id')::uuid <> v_delisted_outcome_id then
+      raise exception 'DELISTED re-tagging skip result mismatch: %', v_result7;
+    end if;
+
+    select count(*) into v_event_count from public.outcome_events
+      where ticker = 'ZZTEST6' and strategy = 'A' and command_type = 'OPEN';
+    if v_event_count <> 1 then raise exception 'DELISTED re-tagging must not create a new OPEN event, got count %', v_event_count; end if;
+
+    select count(*) into v_outcome_count from public.candidate_outcome where ticker = 'ZZTEST6' and strategy = 'A';
+    if v_outcome_count <> 1 then raise exception 'DELISTED re-tagging must not create a duplicate candidate_outcome row, got count %', v_outcome_count; end if;
+
+    if (select status from public.candidate_outcome where outcome_id = v_delisted_outcome_id) <> 'DELISTED' then
+      raise exception 'DELISTED re-tagging must not change the projection status';
+    end if;
+  end;
+
   -- Grant/revoke: only service_role may execute.
   if exists (
     select 1
