@@ -625,3 +625,149 @@ def test_dispatch_receipt_failure_does_not_fail_the_batch(capsys):
 
     assert result.status == "success"
     assert "DISPATCH_RECEIPT_FAILED" in capsys.readouterr().out
+
+
+# --- Story 3.5 후속: close 배치 publish_attempt 배선 (deferred-work gap 해소) -------
+
+
+def _publish_attempt_calls(rpc):
+    return [call for call in rpc.calls if call[0] == "publish_attempt"]
+
+
+def test_close_success_publishes_after_tags_stage():
+    """close 배치가 candidates+tags success로 종결되면 publish_attempt를 실제 호출한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+    )
+
+    assert result.status == "success"
+    assert result.published is True
+    assert result.outcome_tracking_status == "success"
+    pub_calls = _publish_attempt_calls(rpc)
+    assert len(pub_calls) == 1
+    assert pub_calls[0][1] == {
+        "p_run_id": attempt["run_id"],
+        "p_fence_token": attempt["fence_token"],
+        "p_lease_token": attempt["lease_token"],
+    }
+
+
+def test_premarket_and_intraday_do_not_publish():
+    """publish_attempt는 close 배치에만 배선된다(premarket/intraday 미호출)."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+
+    for kind, moment in ((BatchKind.PREMARKET, datetime(2026, 9, 1, 8, 30)),
+                         (BatchKind.INTRADAY, datetime(2026, 9, 1, 9, 7))):
+        rpc = FakeRpc(attempt=attempt_payload())
+        gateway = RunStateGateway(rpc)
+        candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+        deps = tags_deps()
+        result = run_scheduled_batch(
+            kind, moment,
+            repo, FakeProvider(), gateway, candidate_client,
+            deps["ohlcv_provider"], deps["ohlcv_repository"],
+            deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+        )
+        assert result.status in ("success", "partial")
+        assert result.published is False
+        assert _publish_attempt_calls(rpc) == []
+
+
+def test_partial_candidates_stage_does_not_publish():
+    """candidates가 partial이면 publish_attempt를 호출하지 않는다(필수 stage success 보장 필요)."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload())
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(
+        LsResponse(data=[{"ticker": "005930", "trading_value": 1}], unprocessed_count=1)
+    )
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo, FakeProvider(), gateway, candidate_client,
+        deps["ohlcv_provider"], deps["ohlcv_repository"],
+        deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+    )
+
+    assert result.status == "partial"
+    assert result.published is False
+    assert _publish_attempt_calls(rpc) == []
+
+
+def test_tags_failure_does_not_publish():
+    """tags stage가 failed면 publish_attempt를 호출하지 않는다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload())
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+
+    class RaisingCandidateFetcher:
+        def fetch(self, run_id):
+            raise RuntimeError("boom")
+
+    deps = tags_deps()
+    deps["candidate_fetcher"] = RaisingCandidateFetcher()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo, FakeProvider(), gateway, candidate_client,
+        deps["ohlcv_provider"], deps["ohlcv_repository"],
+        deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+    )
+
+    assert result.status == "failed"
+    assert result.published is False
+    assert _publish_attempt_calls(rpc) == []
+
+
+def test_publish_failure_marks_outcome_tracking_failed_and_fails_batch():
+    """publish_attempt가 실패하면 outcome_tracking stage를 failed로 기록하고 배치를 failed로 보고한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt, raise_on={"publish_attempt"})
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo, FakeProvider(), gateway, candidate_client,
+        deps["ohlcv_provider"], deps["ohlcv_repository"],
+        deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+    )
+
+    assert result.status == "failed"
+    assert result.result_code == "OUTCOME_PUBLISH_FAILED"
+    assert result.published is False
+    assert result.outcome_tracking_status == "failed"
+    write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
+    outcome_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "outcome_tracking"]
+    # 성공 시 outcome_tracking success는 publish_attempt 내부(DB 트랜잭션)가 기록하므로,
+    # 오케스트레이터는 실패 시에만 failed로 기록한다(running 기록 없음).
+    assert [call[1]["p_status"] for call in outcome_calls] == ["failed"]

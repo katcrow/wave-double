@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from domain.calendar import CalendarStatus, floor_to_half_hour
-from domain.run_state import BatchKind, LogicalRunKey, Trigger
+from domain.run_state import BatchKind, LogicalRunKey, Stage, StageStatus, Trigger
 
 from .calendar import CalendarRepository, DailyBarProvider, resolve_for_schedule
 from .candidate_stage import CandidateClient, CandidateStageResult, run_candidate_stage
@@ -36,6 +36,8 @@ class SchedulerResult:
     logical_run_key: str | None = None
     tags_status: str | None = None
     tags_result_code: str | None = None
+    published: bool = False
+    outcome_tracking_status: str | None = None
 
 
 def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalRunKey:
@@ -47,13 +49,19 @@ def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalR
 
 
 def _from_candidate_result(
-    result: CandidateStageResult, tags_result: TagsStageResult | None = None
+    result: CandidateStageResult,
+    tags_result: TagsStageResult | None = None,
+    *,
+    published: bool = False,
 ) -> SchedulerResult:
     """candidates stage 결과와(있다면) tags stage 결과를 하나의 ``SchedulerResult``로 합친다.
 
     tags stage가 실행됐다면 그 결과가 조용히 버려지지 않도록 ``tags_status``/
     ``tags_result_code``로 노출하고, 전체 ``status``도 두 stage 중 더 나쁜 쪽을
     따르게 한다(tags가 failed면 배치 전체가 success로 보고되지 않는다).
+
+    ``published``는 close 배치에서 publish_attempt 호출이 성공했는지 여부다. 성공 시
+    outcome_tracking stage가 DB 단에서 'success'로 기록되므로 SchedulerResult에도 반영한다.
     """
     status = result.status
     tags_status: str | None = None
@@ -71,6 +79,8 @@ def _from_candidate_result(
         run_id=result.run_id,
         tags_status=tags_status,
         tags_result_code=tags_result_code,
+        published=published,
+        outcome_tracking_status="success" if published else None,
     )
 
 
@@ -167,7 +177,48 @@ def run_scheduled_batch(
             batch_kind=kind.value,
         )
 
-    return _from_candidate_result(result, tags_result)
+    # Story 3.5 후속 조치(deferred-work gap 해소): close 배치가 candidates+tags 둘 다
+    # success로 종결되고 fence/lease가 확정된 경우에만 publish_attempt를 실제 호출해
+    # outcome 발행(emit_open_command)과 일일 관찰·SUSPENDED/TP/SL/TIMEOUT 판정 루프를
+    # 배치 오케스트레이터 파이프라인에 배선한다. publish_attempt는 단일 transaction으로
+    # 발행까지 완결하므로(AD-20) 실패 시 runs는 ready_to_publish에 그대로 남고, 여기서
+    # outcome_tracking stage를 failed로 기록해 관측 가능하게 만든다.
+    published = False
+    if (
+        kind is BatchKind.CLOSE
+        and result.status == "success"
+        and result.fence_token is not None
+        and result.run_id is not None
+        and result.lease_token is not None
+        and tags_result is not None
+        and tags_result.status == "success"
+    ):
+        try:
+            gateway.publish(result.run_id, result.fence_token, result.lease_token)
+            published = True
+        except Exception as exc:  # noqa: BLE001 - 발행 실패를 구조화된 failed stage로 전환
+            gateway.write_stage(
+                result.run_id,
+                Stage.OUTCOME_TRACKING,
+                result.fence_token,
+                result.lease_token,
+                StageStatus.RUNNING,
+                StageStatus.FAILED,
+                result={"result_code": "OUTCOME_PUBLISH_FAILED", "message": str(exc)},
+            )
+            return SchedulerResult(
+                "failed",
+                "OUTCOME_PUBLISH_FAILED",
+                candidate_count=result.candidate_count,
+                fallback_used=result.fallback_used,
+                run_id=result.run_id,
+                tags_status=tags_result.status,
+                tags_result_code=tags_result.result_code,
+                published=False,
+                outcome_tracking_status="failed",
+            )
+
+    return _from_candidate_result(result, tags_result, published=published)
 
 
 __all__ = ["SchedulerResult", "run_scheduled_batch"]
