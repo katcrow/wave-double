@@ -82,6 +82,19 @@ def test_rsi_breakout_is_required_independently(monkeypatch: pytest.MonkeyPatch)
     frame, signal_position = _strategy_d_frame()
     assert compute_strategy_d(frame).iloc[signal_position]
 
+    # RSI를 제외한 세 조건은 이 행에서 계속 참이어야 한다.
+    assert frame["High"].iloc[signal_position] > frame["High"].iloc[
+        signal_position - CANDIDATE_A.breakout_window : signal_position
+    ].max()
+    volume_window = frame["Volume"].iloc[
+        signal_position - CANDIDATE_A.volume_window + 1 : signal_position + 1
+    ]
+    assert volume_window.iloc[-1] > 0
+    assert volume_window.iloc[-1] / volume_window.max() < CANDIDATE_A.volume_ratio_max
+    assert frame["Close"].iloc[signal_position] < strategy_d.sma(
+        frame["Close"], CANDIDATE_A.long_sma_window
+    ).iloc[signal_position]
+
     # 다른 세 조건을 만드는 OHLCV는 그대로 두고 RSI 상향돌파만 제거한다.
     monkeypatch.setattr(
         strategy_d,
@@ -271,6 +284,7 @@ def test_tp_or_sl_before_max_holding_wins(field: str, expected_reason: str) -> N
     )
     if field == "low":
         frame.iloc[2, frame.columns.get_loc("Low")] = 94.0
+        frame.iloc[2, frame.columns.get_loc("High")] = 101.0
     signal = SimpleSignal(
         "T", frame.index[1], 100.0, stop_price=95.0, take_profit_pct=3.0
     )

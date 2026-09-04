@@ -34,7 +34,7 @@ RSI(10)의 6일 SMA가 전일 42 미만에서 당일 42 이상(동시에 30 이�
 실행 명령:
 
 ```text
-uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_d
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_d --start 2020-08-03 --end 2026-08-27
 ```
 
 CLI 기본값은 `--start 2020-08-03 --end 2026-08-27`이며, runner가 이 경계를
@@ -42,9 +42,11 @@ CLI 기본값은 `--start 2020-08-03 --end 2026-08-27`이며, runner가 이 경�
 경계는 `--start YYYY-MM-DD --end YYYY-MM-DD`로 명시해 재현할 수 있다. 현재
 기준 parquet 104종목(`backtest/data/loader.py:25-48`)을 이 고정 관측창으로
 실행한 결과는 `backtest/results/indicator_opt/strategy_d_baseline.csv`에 저장된다.
-결과 CSV에는 파라미터·데이터 fingerprint를
-함께 기록한다. 이번 실행의 fingerprint는
-`d9c28ab5d01026b3ca9422a69bab301bd520af90547b4aac481056f42ef33e33`이다.
+실행 명령에 경계를 직접 써도 같은 결과를 얻는다. 결과 CSV에는 파라미터·데이터
+fingerprint와 입력 품질 제외 행 수를 함께 기록한다. OHLCV 계약에 맞지 않는
+244개 행은 baseline 계산에서 제외했으며, 직접 호출하는 전략 계산 함수는 이런
+입력을 계속 오류로 거부한다. 이번 실행의 fingerprint는
+`65909d5abd5edf8f7ca508567493b714d133743af80e2acd1a77493b7fb1780e`이다.
 
 | 전략 | 시그널 | 거래수 | 승 | 패 | 승률 | PF | 평균수익 | 평균보유 | max_hold | 월간 거래 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
