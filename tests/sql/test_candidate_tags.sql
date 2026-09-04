@@ -1,9 +1,10 @@
--- Supabase SQL fixture for Story 2.5.
--- 실행 전 202609021700_add_tags_to_publish_and_snapshot.sql까지의 모든 migration을 적용한다.
+-- Supabase SQL fixture for Stories 2.5 and 6.3.
+-- 실행 전 저장소의 모든 migration을 순서대로 적용한다.
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 begin;
 
 do $$
+<<candidate_tag_fixture>>
 declare
   key text := 'close:2099-04-01'; started jsonb; run_id uuid; fence bigint; lease uuid;
   candidate_id uuid := gen_random_uuid();
@@ -34,8 +35,22 @@ begin
   -- 다중 태그(A∩B 등): 같은 후보에 다른 전략은 허용된다.
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (candidate_id, run_id, 'B', date '2099-04-01');
-  if (select count(*) from public.candidate_tags where attempt_run_id = run_id) <> 2 then
-    raise exception 'expected two tags (A and B) for the same candidate';
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values
+      (candidate_id, run_id, 'C', date '2099-04-01'),
+      (candidate_id, run_id, 'D', date '2099-04-01'),
+      (candidate_id, run_id, 'E', date '2099-04-01');
+  if (select count(*) from public.candidate_tags where attempt_run_id = run_id) <> 5 then
+    raise exception 'expected five A/B/C/D/E tags for the same candidate';
+  end if;
+  if (select count(*) from public.candidate_tags where attempt_run_id = run_id and strategy in ('A', 'B', 'C')) <> 3 then
+    raise exception 'legacy A/B/C strategy filter semantics changed';
+  end if;
+  if (select count(*) from public.candidate_tags where attempt_run_id = run_id and strategy in ('D', 'E')) <> 2 then
+    raise exception 'expected D and E strategies to be accepted';
+  end if;
+  if (select count(*) from public.candidate_tags where attempt_run_id = run_id and strategy in ('D', 'E') and status = 'active') <> 2 then
+    raise exception 'expected D/E tags to receive status=active by default';
   end if;
 
   -- UNIQUE(candidate_id, strategy, attempt_run_id) 위반 거부.
@@ -45,6 +60,15 @@ begin
   exception when unique_violation then caught := true;
   end;
   if not caught then raise exception 'duplicate (candidate_id, strategy, attempt_run_id) was accepted'; end if;
+
+  -- 신규 전략에도 동일한 attempt-scoped UNIQUE가 적용된다.
+  caught := false;
+  begin
+    insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+      values (candidate_id, run_id, 'D', date '2099-04-01');
+  exception when unique_violation then caught := true;
+  end;
+  if not caught then raise exception 'duplicate D tag was accepted'; end if;
 
   -- FK(candidate_id, attempt_run_id) -> candidates 위반 거부: 존재하지 않는 attempt_run_id 조합.
   started := public.start_attempt('close:2099-04-02', date '2099-04-02', 'close', 'manual', 300);
@@ -57,11 +81,11 @@ begin
   end;
   if not caught then raise exception 'candidate_tags FK(candidate_id, attempt_run_id) was not enforced'; end if;
 
-  -- strategy는 A|B|C만 허용.
+  -- strategy는 A|B|C|D|E만 허용.
   caught := false;
   begin
     insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
-      values (candidate_id, run_id, 'D', date '2099-04-01');
+      values (candidate_id, run_id, 'F', date '2099-04-01');
   exception when check_violation then caught := true;
   end;
   if not caught then raise exception 'invalid strategy value was accepted'; end if;
@@ -70,8 +94,14 @@ begin
   if not (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = 'candidate_tags') then
     raise exception 'candidate_tags RLS must be enabled';
   end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'candidate_tags') then
+    raise exception 'candidate_tags deny-all RLS contract must not gain a policy';
+  end if;
 
-  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 5));
+  if (select (r.stage_results->'tags'->>'tagged_count')::integer from public.runs r where r.run_id = candidate_tag_fixture.run_id) <> 5 then
+    raise exception 'expected tags stage_result tagged_count=5';
+  end if;
 end $$;
 
 -- Story 2.5 코드 리뷰 발견(high) 수정 커버리지: tags stage가 failed로 종결되면
