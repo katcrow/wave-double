@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from numbers import Integral
+
 import numpy as np
 import pandas as pd
 
@@ -110,6 +112,107 @@ def obv_cross(close: pd.Series, volume: pd.Series, window: int = 20) -> pd.DataF
         {"obv": obv_series, "obv_ma": ma, "obv_bull": obv_series > ma, "obv_golden": golden},
         index=close.index,
     )
+
+
+# ── ADX ───────────────────────────────────────────────────────────────────
+
+
+def adx(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    window: int = 14,
+) -> pd.Series:
+    """Wilder ADX(평균 방향성 지수)를 계산한다.
+
+    첫 ``window``개 TR/DM의 평균을 Wilder seed로 사용하고 이후에는
+    ``(이전 평균 * (window - 1) + 현재값) / window``로 재귀 평활한다.
+    ADX도 첫 ``window``개 DX 평균을 seed로 사용한다. 이전 종가가 없는
+    첫 봉은 TR/DM seed에서 제외하므로 첫 유효 ADX는
+    ``2 * window - 1``번째 행이며, 그 전까지는 NaN이다.
+
+    +DI/-DI는 ADX 산출을 위한 중간값으로만 사용하며 반환값에는 방향성
+    교차 조건을 포함하지 않는다.
+    """
+    if isinstance(window, bool) or not isinstance(window, Integral) or window < 1:
+        raise ValueError("window은 1 이상의 정수여야 합니다")
+    window = int(window)
+
+    high_values = high.to_numpy(dtype=float)
+    low_values = low.to_numpy(dtype=float)
+    close_values = close.to_numpy(dtype=float)
+    n_rows = len(high_values)
+    output = np.full(n_rows, np.nan, dtype=float)
+    if n_rows == 0:
+        return pd.Series(output, index=high.index, dtype=float)
+
+    previous_close = np.roll(close_values, 1)
+    previous_close[0] = np.nan
+    true_range = np.maximum.reduce(
+        [
+            high_values - low_values,
+            np.abs(high_values - previous_close),
+            np.abs(low_values - previous_close),
+        ]
+    )
+    true_range[0] = np.nan
+
+    up_move = np.diff(high_values, prepend=np.nan)
+    down_move = -np.diff(low_values, prepend=np.nan)
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+    if n_rows <= window:
+        return pd.Series(output, index=high.index, dtype=float)
+
+    tr_average = np.full(n_rows, np.nan, dtype=float)
+    plus_average = np.full(n_rows, np.nan, dtype=float)
+    minus_average = np.full(n_rows, np.nan, dtype=float)
+    first_average = window
+    tr_average[first_average] = np.mean(true_range[1 : window + 1])
+    plus_average[first_average] = np.mean(plus_dm[1 : window + 1])
+    minus_average[first_average] = np.mean(minus_dm[1 : window + 1])
+    for position in range(first_average + 1, n_rows):
+        tr_average[position] = (
+            tr_average[position - 1] * (window - 1) + true_range[position]
+        ) / window
+        plus_average[position] = (
+            plus_average[position - 1] * (window - 1) + plus_dm[position]
+        ) / window
+        minus_average[position] = (
+            minus_average[position - 1] * (window - 1) + minus_dm[position]
+        ) / window
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        plus_di = np.divide(
+            100.0 * plus_average,
+            tr_average,
+            out=np.zeros(n_rows, dtype=float),
+            where=tr_average != 0,
+        )
+        minus_di = np.divide(
+            100.0 * minus_average,
+            tr_average,
+            out=np.zeros(n_rows, dtype=float),
+            where=tr_average != 0,
+        )
+        di_sum = plus_di + minus_di
+        dx = np.divide(
+            100.0 * np.abs(plus_di - minus_di),
+            di_sum,
+            out=np.zeros(n_rows, dtype=float),
+            where=di_sum != 0,
+        )
+
+    first_adx = 2 * window - 1
+    if first_adx >= n_rows:
+        return pd.Series(output, index=high.index, dtype=float)
+    output[first_adx] = np.mean(dx[first_average : first_adx + 1])
+    for position in range(first_adx + 1, n_rows):
+        output[position] = (
+            output[position - 1] * (window - 1) + dx[position]
+        ) / window
+    return pd.Series(output, index=high.index, dtype=float)
 
 
 # ── RSI ───────────────────────────────────────────────────────────────────

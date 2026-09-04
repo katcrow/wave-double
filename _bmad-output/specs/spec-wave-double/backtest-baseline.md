@@ -67,6 +67,52 @@ TP 15건은 비용 차감 후 +2.9%, SL 4건은 −5.1%로 기록되었다. 문�
 RSI는 2건/50.00%였다. 따라서 현재 저장소에서 확인 가능한 차이는 과거 스냅샷 또는
 보존되지 않은 원본 판정 구현의 차이로 남긴다.
 
+## 전략 E — 익절2%·고정 SL5% 기법
+
+전략 E는 `docs/익절2%_고정SL5%기법_추가.md:12-44`의 세 조건을 사용한다.
+`backtest/indicator_opt/strategy_e.py:28-46`에 SMA20/60, OBV20, Wilder
+ADX14≥20, 고정 TP2%·SL5%·최대보유30봉·편도 비용 0.0005를 상수 파라미터로
+고정했다. SMA20이 SMA60을 전일 이하에서 당일 초과로 상향 돌파하고, OBV가
+OBV20 SMA를 같은 방식으로 상향 돌파하며, ADX14가 20 이상인 행만 AND로
+선택한다(`strategy_e.py:225-250`). ADX는 `backtest/indicators/__init__.py:120-215`
+의 Wilder 평활값만 사용하며, 기존 `sig_adx()`의 +DI/-DI 상향 교차 조건은
+포함하지 않는다.
+
+고정 TP/SL 신호와 엔진 wiring은 `strategy_e.py:254-355`에 있다. 진입은
+신호 당일 종가이고, 단일 엔진이 진입 다음 봉부터 `high >= TP`, `low <= SL`을
+판정하며 같은 봉이면 SL을 우선한다(`engine.py:71-84, 124-167`). 엔진의
+왕복 비용 산식은 `cost_rate × 200`이고(`engine.py:177-178`), 성과 승률·PF는
+비용 차감 후 `return_pct`를 사용한다(`metrics/metrics.py:62-86`). 기준 parquet
+유니버스는 `data/loader.py:32-50`의 `load_all()`에서 로드한다.
+
+### 전략 E 재현 실행 결과
+
+실행 명령:
+
+```text
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_e --start 2020-08-03 --end 2026-08-27
+```
+
+`strategy_e.py:24-25,142-230,275-401`은 각 전체 parquet 프레임을 먼저
+검사·fingerprint하고, 유효 행의 연속 segment별로 워밍업·신호·엔진을 실행한
+뒤 관측창 안의 신호·거래만 집계한다. invalid 행은 계산 segment에서 제외하지만
+fingerprint와 품질 카운트에는 포함하며, ticker·거래 정렬로 결과를 결정적으로
+만든다. 현재 기준 parquet 104종목에서의 결과는
+`backtest/results/indicator_opt/strategy_e_baseline.csv`와 거래별
+`backtest/results/indicator_opt/strategy_e_baseline_trades.csv`에 저장된다.
+fingerprint는 `b2e027e0f8155d3fbabfd310f52c31e82afd1079722ed579e98207ca112e73a3`이다.
+
+| 전략 | 시그널 | 거래수 | 승 | 패 | 승률 | PF | 평균수익 | 평균보유 | max_hold | 월간 거래 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| E | 19 | 19 | 14 | 5 | 73.68% | 1.0431 | +0.0579% | 3.05봉 | 0 | 0.2603 |
+
+TP 14건은 비용 차감 후 +1.9%, SL 5건은 −5.1%로 기록되었다. 문서 원문
+기대치인 승률 78.2%·PF 1.34·78건(평균 +0.37%, 평균보유 3.6일)은 현재
+저장소의 기준 parquet와 위 canonical 판정 규칙에서 재현되지 않는다. 보존된
+과거 데이터 스냅샷이나 기대치를 만든 원본 판정 코드가 없으므로 차이의 단일
+원인은 확정할 수 없다. 따라서 기대치와 현재 관측치를 분리해 기록하며, 코드
+근거 없는 일치를 주장하지 않는다.
+
 ## 백테스트 기대치 (104종목, 73개월, TP+3%/SL−3%)
 
 | 전략 | 거래수 | 승 | 패 | 승률 | PF | 평균 보유 | 최대 보유 |
