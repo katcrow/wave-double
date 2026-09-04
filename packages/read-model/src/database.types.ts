@@ -25,9 +25,11 @@ export type Database = {
           holding_days: number
           outcome_id: string
           return_pct: number | null
+          sl_pct: number
           status: string
           strategy: string
           ticker: string
+          tp_pct: number
           version: number
         }
         Insert: {
@@ -39,9 +41,11 @@ export type Database = {
           holding_days?: number
           outcome_id?: string
           return_pct?: number | null
+          sl_pct?: number
           status: string
           strategy: string
           ticker: string
+          tp_pct?: number
           version?: number
         }
         Update: {
@@ -53,9 +57,11 @@ export type Database = {
           holding_days?: number
           outcome_id?: string
           return_pct?: number | null
+          sl_pct?: number
           status?: string
           strategy?: string
           ticker?: string
+          tp_pct?: number
           version?: number
         }
         Relationships: []
@@ -419,6 +425,30 @@ export type Database = {
           low?: number
           outcome_id?: string
           result_code?: string
+        }
+        Relationships: []
+      }
+      outcome_strategy_rules: {
+        Row: {
+          created_at: string
+          cutoff_n: number
+          sl_pct: number
+          strategy: string
+          tp_pct: number
+        }
+        Insert: {
+          created_at?: string
+          cutoff_n: number
+          sl_pct: number
+          strategy: string
+          tp_pct: number
+        }
+        Update: {
+          created_at?: string
+          cutoff_n?: number
+          sl_pct?: number
+          strategy?: string
+          tp_pct?: number
         }
         Relationships: []
       }

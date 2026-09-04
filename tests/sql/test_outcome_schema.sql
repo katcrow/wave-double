@@ -48,17 +48,35 @@ begin
     into v_columns
   from information_schema.columns
   where table_schema = 'public' and table_name = 'candidate_outcome';
-  -- Story 3.8 added the `version` column (optimistic concurrency for apply_outcome_correction).
-  if v_columns <> array['outcome_id','ticker','strategy','entry_date','entry_price','status','exit_date','exit_price','return_pct','cutoff_n','holding_days','version'] then
+  -- Story 3.8 added version; Story 6.5 appends the immutable exit-rule snapshot.
+  if v_columns <> array['outcome_id','ticker','strategy','entry_date','entry_price','status','exit_date','exit_price','return_pct','cutoff_n','holding_days','version','tp_pct','sl_pct'] then
     raise exception 'candidate_outcome columns mismatch: %', v_columns;
   end if;
   select array_agg(data_type::text order by ordinal_position)
     into v_column_types
   from information_schema.columns
   where table_schema = 'public' and table_name = 'candidate_outcome';
-  if v_column_types <> array['uuid','text','text','date','numeric','text','date','numeric','numeric','integer','integer','integer'] then
+  if v_column_types <> array['uuid','text','text','date','numeric','text','date','numeric','numeric','integer','integer','integer','numeric','numeric'] then
     raise exception 'candidate_outcome column types mismatch: %', v_column_types;
   end if;
+
+  if (select count(*) from public.outcome_strategy_rules) <> 5 then
+    raise exception 'outcome_strategy_rules must contain exactly A/B/C/D/E';
+  end if;
+  if exists (
+    select 1 from public.outcome_strategy_rules
+    where (strategy in ('A','B','C') and (tp_pct, sl_pct, cutoff_n) <> (3.0, 3.0, 30))
+       or (strategy = 'D' and (tp_pct, sl_pct, cutoff_n) <> (3.0, 5.0, 20))
+       or (strategy = 'E' and (tp_pct, sl_pct, cutoff_n) <> (2.0, 5.0, 30))
+  ) then raise exception 'outcome_strategy_rules values mismatch'; end if;
+
+  -- sl_pct의 rule 범위는 candidate_outcome.exit_price가 양수가 되는 범위와 일치해야 한다.
+  v_caught := false;
+  begin
+    update public.outcome_strategy_rules set sl_pct = 100 where strategy = 'D';
+  exception when check_violation then v_caught := true;
+  end;
+  if not v_caught then raise exception 'outcome_strategy_rules accepted sl_pct >= 100'; end if;
 
   if (
     select array_agg(kcu.column_name::text order by kcu.ordinal_position)
@@ -137,6 +155,8 @@ begin
     join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public' and c.relname in ('outcome_events','outcome_observations')
+      and t.tgname in ('outcome_events_append_only','outcome_events_append_only_truncate',
+                       'outcome_observations_append_only','outcome_observations_append_only_truncate')
       and not t.tgisinternal and t.tgenabled <> 'D'
   ) <> 4 then raise exception 'both ledgers must have active append-only UPDATE/DELETE and TRUNCATE triggers'; end if;
 
@@ -176,7 +196,62 @@ begin
   if not exists (
     select 1 from public.candidate_outcome
     where outcome_id = v_outcome_id and cutoff_n = 30 and holding_days = 0
+      and tp_pct = 3.0 and sl_pct = 3.0
   ) then raise exception 'candidate_outcome defaults mismatch'; end if;
+
+  -- Story 6.5 review patch: D/E direct projection writes cannot bypass the
+  -- strategy-specific snapshot contract.
+  v_caught := false;
+  begin
+    insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
+    values ('000006', 'D', date '2099-06-01', 1, 'OPEN');
+  exception when others then
+    if sqlerrm = 'OUTCOME_STRATEGY_SNAPSHOT_MISMATCH' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'D strategy snapshot mismatch was accepted'; end if;
+
+  v_caught := false;
+  begin
+    perform set_config('wave_double.outcome_rule_override_allowed', 'on', true);
+    insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+    values ('000006', 'D', date '2099-06-01', 1, 'OPEN', 3, 100, 20);
+  exception when others then
+    if sqlstate = '23514' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'SL percentage >= 100 was accepted'; end if;
+
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+  values ('000006', 'D', date '2099-06-02', 1, 'OPEN', 3, 5, 20);
+  v_caught := false;
+  begin
+    perform set_config('wave_double.outcome_mutation_allowed', 'on', true);
+    update public.candidate_outcome
+    set tp_pct = 2
+    where ticker = '000006' and strategy = 'D' and entry_date = date '2099-06-02';
+  exception when others then
+    if sqlerrm = 'OUTCOME_STRATEGY_SNAPSHOT_MISMATCH' then v_caught := true; else raise; end if;
+  end;
+  perform set_config('wave_double.outcome_mutation_allowed', 'off', true);
+  if not v_caught then raise exception 'direct candidate_outcome snapshot UPDATE was accepted'; end if;
+
+  -- A natural-key collision with an already-terminal projection must reject the
+  -- OPEN ledger insert instead of leaving an orphan OPEN event behind.
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+  values ('000007', date '2099-06-01', 1, 1.1, 0.9, 1, 1000)
+  on conflict (ticker, trading_day) do nothing;
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct)
+  values ('000007', 'B', date '2099-06-01', 1, 'TP', date '2099-06-02', 1.03, 2.9);
+  v_caught := false;
+  begin
+    perform public.emit_open_command('close:2099-06-01', '000007', 'B');
+  exception when others then
+    if sqlerrm = 'OUTCOME_PROJECTION_CONFLICT' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'terminal natural-key OPEN conflict was accepted'; end if;
+  if exists (
+    select 1 from public.outcome_events
+    where ticker = '000007' and strategy = 'B' and command_type = 'OPEN'
+  ) then raise exception 'terminal natural-key conflict left an orphan OPEN event'; end if;
 
   -- Ledger UPDATE and DELETE are both rejected without changing rows.
   v_caught := false;
@@ -248,7 +323,7 @@ begin
   v_caught := false;
   begin
     insert into public.outcome_events(ticker, strategy, command_type, logical_run_key)
-    values ('000001', 'D', 'OPEN', 'close:2099-06-01');
+    values ('000001', 'F', 'OPEN', 'close:2099-06-01');
   exception when check_violation then v_caught := true;
   end;
   if not v_caught then raise exception 'invalid event strategy was accepted'; end if;
@@ -304,7 +379,7 @@ begin
   v_caught := false;
   begin
     insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
-    values ('000002', 'D', date '2099-06-01', 1, 'OPEN');
+    values ('000002', 'F', date '2099-06-01', 1, 'OPEN');
   exception when check_violation then v_caught := true;
   end;
   if not v_caught then raise exception 'invalid projection strategy was accepted'; end if;
@@ -395,6 +470,24 @@ begin
   exception when sqlstate '55000' then v_caught := true;
   end;
   if not v_caught then raise exception 'outcome_observations TRUNCATE was accepted'; end if;
+
+  if exists (
+    select 1 from information_schema.role_routine_grants
+    where routine_schema = 'public'
+      and routine_name in ('emit_open_command', 'publish_attempt', 'rebuild_outcome_projection')
+      and grantee in ('PUBLIC', 'anon', 'authenticated')
+  ) then raise exception 'Story 6.5 outcome functions must not be executable by browser roles'; end if;
+  if (
+    select count(distinct routine_name) from information_schema.role_routine_grants
+    where routine_schema = 'public'
+      and routine_name in ('emit_open_command', 'publish_attempt', 'rebuild_outcome_projection')
+      and grantee = 'service_role' and privilege_type = 'EXECUTE'
+  ) <> 3 then raise exception 'Story 6.5 outcome functions must be executable by service_role'; end if;
+  if exists (
+    select 1 from information_schema.role_table_grants
+    where table_schema = 'public' and table_name = 'outcome_strategy_rules'
+      and grantee in ('PUBLIC', 'anon', 'authenticated')
+  ) then raise exception 'outcome_strategy_rules must not be readable by browser roles'; end if;
 
   -- daily_ohlcv 하드닝 선례와 동일하게 RLS enable + 정책 0개 catalog 검사로 anon/authenticated
   -- 접근 차단을 확인한다. 로컬 CI의 vanilla Postgres에는 anon/authenticated 역할 자체가

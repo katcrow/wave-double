@@ -13,6 +13,8 @@ declare
   v_outcome_count integer;
   v_result4 jsonb;
   v_result5 jsonb;
+  v_result8 jsonb;
+  v_result9 jsonb;
   v_preexisting_outcome_id uuid;
 begin
   insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
@@ -30,7 +32,9 @@ begin
     ('ZZTEST1', date '2099-07-01', 100, 105, 99, 101, 1000),
     ('ZZTEST1', date '2099-07-02', 100, 105, 99, 102, 1000),
     ('ZZTEST3', date '2099-07-01', 200, 205, 199, 201, 1000),
-    ('ZZTEST4', date '2099-07-01', 300, 305, 299, 301, 1000)
+    ('ZZTEST4', date '2099-07-01', 300, 305, 299, 301, 1000),
+    ('ZZTEST7', date '2099-07-01', 400, 405, 399, 401, 1000),
+    ('ZZTEST8', date '2099-07-01', 500, 505, 499, 501, 1000)
   on conflict (ticker, trading_day) do nothing;
 
   -- Scenario: 최초 발행.
@@ -55,6 +59,55 @@ begin
     where outcome_id = v_outcome_id and ticker = 'ZZTEST1' and strategy = 'A'
       and entry_date = date '2099-07-01' and entry_price = 101 and status = 'OPEN'
   ) then raise exception 'candidate_outcome projection row missing or mismatched after initial emit'; end if;
+  if not exists (
+    select 1 from public.outcome_events
+    where event_id = v_event_id and payload @> '{"tp_pct":3.0,"sl_pct":3.0,"cutoff_n":30}'::jsonb
+  ) then raise exception 'A OPEN payload strategy parameters were not snapshotted'; end if;
+
+  -- Story 6.5: D/E도 OPEN 시점의 전략별 청산 파라미터를 원장과 projection에 함께 고정한다.
+  v_result8 := public.emit_open_command('close:2099-07-01', 'ZZTEST7', 'D');
+  v_result9 := public.emit_open_command('close:2099-07-01', 'ZZTEST8', 'E');
+  if (v_result8->>'skipped')::boolean is distinct from false
+     or (v_result8->>'tp_pct')::numeric <> 3.0
+     or (v_result8->>'sl_pct')::numeric <> 5.0
+     or (v_result8->>'cutoff_n')::integer <> 20 then
+    raise exception 'D OPEN strategy parameters mismatch: %', v_result8;
+  end if;
+  if (v_result9->>'skipped')::boolean is distinct from false
+     or (v_result9->>'tp_pct')::numeric <> 2.0
+     or (v_result9->>'sl_pct')::numeric <> 5.0
+     or (v_result9->>'cutoff_n')::integer <> 30 then
+    raise exception 'E OPEN strategy parameters mismatch: %', v_result9;
+  end if;
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = 'ZZTEST7' and strategy = 'D' and tp_pct = 3.0 and sl_pct = 5.0 and cutoff_n = 20
+  ) or not exists (
+    select 1 from public.candidate_outcome
+    where ticker = 'ZZTEST8' and strategy = 'E' and tp_pct = 2.0 and sl_pct = 5.0 and cutoff_n = 30
+  ) then raise exception 'D/E candidate_outcome parameters were not snapshotted'; end if;
+  if not exists (
+    select 1 from public.outcome_events
+    where ticker = 'ZZTEST7' and strategy = 'D' and command_type = 'OPEN'
+      and payload @> '{"tp_pct":3.0,"sl_pct":5.0,"cutoff_n":20}'::jsonb
+  ) or not exists (
+    select 1 from public.outcome_events
+    where ticker = 'ZZTEST8' and strategy = 'E' and command_type = 'OPEN'
+      and payload @> '{"tp_pct":2.0,"sl_pct":5.0,"cutoff_n":30}'::jsonb
+  ) then raise exception 'D/E OPEN payload parameters were not snapshotted'; end if;
+
+  -- 기존 동일-key replay는 rule row가 일시적으로 없어도 저장된 snapshot을 반환한다.
+  delete from public.outcome_strategy_rules where strategy = 'D';
+  v_result8 := public.emit_open_command('close:2099-07-01', 'ZZTEST7', 'D');
+  if (v_result8->>'replayed')::boolean is distinct from true
+     or (v_result8->>'outcome_id')::uuid is null
+     or (v_result8->>'tp_pct')::numeric <> 3.0
+     or (v_result8->>'sl_pct')::numeric <> 5.0
+     or (v_result8->>'cutoff_n')::integer <> 20 then
+    raise exception 'D replay must return stored snapshot without rule lookup: %', v_result8;
+  end if;
+  insert into public.outcome_strategy_rules(strategy, tp_pct, sl_pct, cutoff_n)
+  values ('D', 3.0, 5.0, 20);
 
   -- Mutate daily_ohlcv after publication to prove entry_price is fixed at OPEN time,
   -- not recomputed on replay.
@@ -111,10 +164,10 @@ begin
   end;
   if not v_caught then raise exception 'missing daily_ohlcv close was accepted'; end if;
 
-  -- Scenario: 미지원 전략.
+  -- Scenario: 미지원 전략. D/E는 Epic 6.5에서 지원되므로 F만 거부되어야 한다.
   v_caught := false;
   begin
-    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'D');
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'F');
   exception when others then
     if sqlerrm = 'INVALID_STRATEGY' then v_caught := true; else raise; end if;
   end;

@@ -107,7 +107,7 @@ begin
     where ticker = '100001' and strategy = 'A' and entry_date = date '2099-06-01'
       and status = 'OPEN' and entry_price = 100
       and exit_date is null and exit_price is null and return_pct is null
-      and cutoff_n = 30 and holding_days = 0
+      and cutoff_n = 30 and holding_days = 0 and tp_pct = 3 and sl_pct = 3
   ) then raise exception 'REBUILD[100001/A]: OPEN-only mismatch'; end if;
 
   -- 100002/B (SL terminal)
@@ -116,7 +116,7 @@ begin
     where ticker = '100002' and strategy = 'B' and entry_date = date '2099-06-01'
       and status = 'SL' and entry_price = 200
       and exit_date = date '2099-06-02' and exit_price = 194 and return_pct = -3.1
-      and cutoff_n = 30 and holding_days = 1
+      and cutoff_n = 30 and holding_days = 1 and tp_pct = 3 and sl_pct = 3
   ) then raise exception 'REBUILD[100002/B]: SL terminal mismatch'; end if;
 
   -- 100003/C (TP terminal)
@@ -125,7 +125,7 @@ begin
     where ticker = '100003' and strategy = 'C' and entry_date = date '2099-06-01'
       and status = 'TP' and entry_price = 300
       and exit_date = date '2099-06-02' and exit_price = 309 and return_pct = 2.9
-      and cutoff_n = 30 and holding_days = 1
+      and cutoff_n = 30 and holding_days = 1 and tp_pct = 3 and sl_pct = 3
   ) then raise exception 'REBUILD[100003/C]: TP terminal mismatch'; end if;
 
   -- 100004/A (두 번째 OPEN-only)
@@ -187,6 +187,154 @@ begin
       and return_pct = 1.9 and cutoff_n = 30 and holding_days = 30
   ) then raise exception 'idempotent rebuild: DELISTED row drifted'; end if;
 
+end $$;
+
+-- Story 6.5: OPEN payload의 D/E 스냅샷은 rebuild에서도 판정 없이 그대로 보존되고,
+-- 스냅샷이 없는 구형 D/E OPEN은 legacy 값으로 조용히 복구하지 않는다.
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-08-01', date '2099-08-01', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100009', 'D', 'OPEN', 'close:2099-08-01', '{"entry_date":"2099-08-01","entry_price":700}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload missing strategy rules%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'legacy D OPEN without a parameter snapshot was accepted'; end if;
+end $$;
+
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-08-04', date '2099-08-04', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100011', 'D', 'OPEN', 'close:2099-08-04',
+      '{"entry_date":"2099-08-04","entry_price":700,"tp_pct":3}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload partial strategy rule snapshot%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'partial D OPEN snapshot was silently defaulted'; end if;
+end $$;
+
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-08-05', date '2099-08-05', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100012', 'A', 'OPEN', 'close:2099-08-05',
+      '{"entry_date":"not-a-date","entry_price":700}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload invalid entry_date%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'malformed OPEN date was not rejected clearly'; end if;
+end $$;
+
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-08-06', date '2099-08-06', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100013', 'E', 'OPEN', 'close:2099-08-06',
+      '{"entry_date":"2099-08-06","entry_price":700,"tp_pct":2,"sl_pct":"oops","cutoff_n":30}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload invalid sl_pct%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'malformed OPEN rule value was not rejected clearly'; end if;
+end $$;
+
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-08-07', date '2099-08-07', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values
+      ('100014', 'A', 'OPEN', 'close:2099-08-07',
+        '{"entry_date":"2099-08-07","entry_price":700}'::jsonb),
+      ('100014', 'A', 'TP', 'close:2099-08-07',
+        '{"exit_price":721,"return_pct":2.9}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: TP payload missing trading_day%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'terminal payload without trading_day was accepted'; end if;
+end $$;
+
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-08-08', date '2099-08-08', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values
+      ('100015', 'A', 'OPEN', 'close:2099-08-08',
+        '{"entry_date":"2099-08-08","entry_price":700}'::jsonb),
+      ('100015', 'A', 'SL', 'close:2099-08-08',
+        '{"trading_day":"2099-08-08","exit_price":"oops","return_pct":-3.1}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: SL payload invalid exit_price%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'malformed terminal price was not rejected clearly'; end if;
+end $$;
+
+do $$
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values
+    ('close:2099-08-02', date '2099-08-02', 'close'),
+    ('close:2099-08-03', date '2099-08-03', 'close')
+  on conflict (logical_run_key) do nothing;
+  insert into public.outcome_events(event_id, ticker, strategy, command_type, logical_run_key, payload)
+  values
+    ('10000000-0000-0000-0000-00000000000d', '100009', 'D', 'OPEN', 'close:2099-08-02',
+      '{"entry_date":"2099-08-02","entry_price":700,"tp_pct":3,"sl_pct":5,"cutoff_n":20}'::jsonb),
+    ('10000000-0000-0000-0000-00000000000e', '100009', 'D', 'SL', 'close:2099-08-03',
+      '{"trading_day":"2099-08-03","exit_price":665,"return_pct":-5.1,"holding_days":1}'::jsonb),
+    ('10000000-0000-0000-0000-00000000000f', '100010', 'E', 'OPEN', 'close:2099-08-02',
+      '{"entry_date":"2099-08-02","entry_price":800,"tp_pct":2,"sl_pct":5,"cutoff_n":30}'::jsonb);
+
+  perform public.rebuild_outcome_projection();
+
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = '100009' and strategy = 'D' and status = 'SL'
+      and entry_price = 700 and tp_pct = 3 and sl_pct = 5 and cutoff_n = 20
+      and exit_date = date '2099-08-03' and exit_price = 665 and return_pct = -5.1
+      and holding_days = 1
+  ) then raise exception 'REBUILD[D]: strategy parameter snapshot or terminal payload drifted'; end if;
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = '100010' and strategy = 'E' and status = 'OPEN'
+      and entry_price = 800 and tp_pct = 2 and sl_pct = 5 and cutoff_n = 30
+      and exit_date is null and return_pct is null
+  ) then raise exception 'REBUILD[E]: OPEN strategy parameter snapshot was not preserved'; end if;
 end $$;
 
 select 'outcome_rebuild_contract' as fixture, 'pass' as result;

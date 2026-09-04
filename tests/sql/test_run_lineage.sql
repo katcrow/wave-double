@@ -176,6 +176,43 @@ begin
   end if;
 end $$;
 
+-- Story 6.5 review patch: active D/E tags must reach publish_attempt, not only
+-- direct emit/judgement fixtures.
+do $$
+declare
+  key text := 'close:2099-02-02'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
+  candidate_d uuid := gen_random_uuid(); candidate_e uuid := gen_random_uuid();
+begin
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+  values ('ZZ6TAGD', date '2099-02-02', 100, 101, 99, 100, 1000),
+         ('ZZ6TAGE', date '2099-02-02', 200, 201, 199, 200, 1000);
+  started := public.start_attempt(key, date '2099-02-02', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(attempt_id, fence, lease,
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', candidate_d, 'ticker', 'ZZ6TAGD', 'name', 'D tag integration', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', candidate_e, 'ticker', 'ZZ6TAGE', 'name', 'E tag integration', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('d', 64), 'original_count', 2, 'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+  values (candidate_d, attempt_id, 'D', date '2099-02-02'), (candidate_e, attempt_id, 'E', date '2099-02-02');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = 'ZZ6TAGD' and strategy = 'D' and tp_pct = 3 and sl_pct = 5 and cutoff_n = 20 and status = 'OPEN'
+  ) then raise exception 'active D tag did not create strategy snapshot'; end if;
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = 'ZZ6TAGE' and strategy = 'E' and tp_pct = 2 and sl_pct = 5 and cutoff_n = 30 and status = 'OPEN'
+  ) then raise exception 'active E tag did not create strategy snapshot'; end if;
+end $$;
+
 -- Story 3.4: 일자별 판정 관찰 수집 -- 기존 OPEN outcome의 다음 거래일 관찰 추가, terminal 제외,
 -- 멱등 재시도, daily_ohlcv 결측 시 그 outcome만 건너뛰고 publish는 정상 커밋됨을 검증한다.
 do $$
@@ -1365,6 +1402,132 @@ begin
       and high = 101 and low = 99 and close = 100 and result_code = 'OK'
   ) then
     raise exception 'expected control OPEN outcome ZZDEL2/C to receive a new observation on 2099-01-18';
+  end if;
+end $$;
+
+-- Story 6.5: 전략별 TP/SL/TIMEOUT 판정. 같은 publish_attempt에서 D(3/5/20)와
+-- E(2/5/30)를 함께 처리해 행별 스냅샷, SL 우선, 비용 0.1%, cutoff_n을 명시적으로 검증한다.
+do $$
+declare
+  key text := 'close:2099-02-01';
+  started jsonb;
+  attempt_id uuid;
+  fence bigint;
+  lease uuid;
+  outcome_d_tp uuid;
+  outcome_e_sl uuid;
+  outcome_d_timeout uuid;
+  outcome_e_timeout uuid;
+  seed_started jsonb;
+  seed_attempt_id uuid;
+  seed_fence bigint;
+  seed_lease uuid;
+  seed_d_candidate uuid := gen_random_uuid();
+  seed_e_candidate uuid := gen_random_uuid();
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values
+    (key, date '2099-02-01', 'close'),
+    ('close:2099-01-31', date '2099-01-31', 'close'),
+    ('close:2099-01-30', date '2099-01-30', 'close')
+  on conflict (logical_run_key) do nothing;
+
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+  values
+    ('ZZ6DTO', 'D', 'OPEN', 'close:2099-01-30', '{"entry_date":"2098-01-01","entry_price":100,"tp_pct":3,"sl_pct":5,"cutoff_n":20}'::jsonb),
+    ('ZZ6ETO', 'E', 'OPEN', 'close:2099-01-30', '{"entry_date":"2098-02-01","entry_price":100,"tp_pct":2,"sl_pct":5,"cutoff_n":30}'::jsonb);
+
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+  values
+    ('ZZ6DTO', 'D', date '2098-01-01', 100, 'OPEN', 3, 5, 20),
+    ('ZZ6ETO', 'E', date '2098-02-01', 100, 'OPEN', 2, 5, 30);
+  select outcome_id into outcome_d_timeout from public.candidate_outcome where ticker = 'ZZ6DTO' and strategy = 'D';
+  select outcome_id into outcome_e_timeout from public.candidate_outcome where ticker = 'ZZ6ETO' and strategy = 'E';
+
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_d_timeout, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-01-02', date '2098-01-20', interval '1 day') d;
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    select outcome_e_timeout, d::date, 101, 99, 100, 'OK'
+    from generate_series(date '2098-02-02', date '2098-03-02', interval '1 day') d;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
+  values
+    ('ZZ6DTP', date '2099-01-31', 100, 101, 99, 100, 1000),
+    ('ZZ6ESL', date '2099-01-31', 100, 101, 99, 100, 1000),
+    ('ZZ6DTP', date '2099-02-01', 100, 104, 99, 103, 1000),
+    ('ZZ6ESL', date '2099-02-01', 100, 110, 94, 98, 1000),
+    ('ZZ6DTO', date '2099-02-01', 100, 101, 97, 98, 1000),
+    ('ZZ6ETO', date '2099-02-01', 100, 101, 97, 98, 1000)
+  on conflict (ticker, trading_day) do nothing;
+
+  -- 실제 active candidate_tags -> publish_attempt -> emit_open_command 경로로
+  -- D/E OPEN snapshot을 생성한다. 이후 다음 close publish에서 판정을 수행한다.
+  seed_started := public.start_attempt('close:2099-01-31', date '2099-01-31', 'close', 'manual', 300);
+  seed_attempt_id := (seed_started->>'run_id')::uuid;
+  seed_fence := (seed_started->>'fence_token')::bigint;
+  seed_lease := (seed_started->>'lease_token')::uuid;
+  perform public.write_stage(seed_attempt_id, 'candidates', seed_fence, seed_lease, 'pending', 'running');
+  perform public.write_candidates(seed_attempt_id, seed_fence, seed_lease,
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', seed_d_candidate, 'ticker', 'ZZ6DTP', 'name', 'Story 6.5 D TP', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', seed_e_candidate, 'ticker', 'ZZ6ESL', 'name', 'Story 6.5 E SL', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
+    ),
+    jsonb_build_object('selection_input_hash', repeat('6', 64), 'original_count', 2, 'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(seed_attempt_id, 'candidates', seed_fence, seed_lease, 'running', 'success');
+  perform public.write_stage(seed_attempt_id, 'tags', seed_fence, seed_lease, 'pending', 'running');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+  values
+    (seed_d_candidate, seed_attempt_id, 'D', date '2099-01-31'),
+    (seed_e_candidate, seed_attempt_id, 'E', date '2099-01-31');
+  perform public.write_stage(seed_attempt_id, 'tags', seed_fence, seed_lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+  perform public.publish_attempt(seed_attempt_id, seed_fence, seed_lease);
+
+  select outcome_id into outcome_d_tp from public.candidate_outcome where ticker = 'ZZ6DTP' and strategy = 'D';
+  select outcome_id into outcome_e_sl from public.candidate_outcome where ticker = 'ZZ6ESL' and strategy = 'E';
+  if outcome_d_tp is null or outcome_e_sl is null then
+    raise exception 'active D/E candidate_tags did not create OPEN outcome projections';
+  end if;
+  if not exists (
+    select 1 from public.outcome_events
+    where ticker = 'ZZ6DTP' and strategy = 'D' and command_type = 'OPEN'
+      and payload @> '{"tp_pct":3,"sl_pct":5,"cutoff_n":20}'::jsonb
+  ) or not exists (
+    select 1 from public.outcome_events
+    where ticker = 'ZZ6ESL' and strategy = 'E' and command_type = 'OPEN'
+      and payload @> '{"tp_pct":2,"sl_pct":5,"cutoff_n":30}'::jsonb
+  ) then raise exception 'active D/E candidate_tags OPEN payload snapshot missing'; end if;
+
+  started := public.start_attempt(key, date '2099-02-01', 'close', 'manual', 300);
+  attempt_id := (started->>'run_id')::uuid;
+  fence := (started->>'fence_token')::bigint;
+  lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.publish_attempt(attempt_id, fence, lease);
+
+  if (select status from public.candidate_outcome where outcome_id = outcome_d_tp) <> 'TP'
+     or (select exit_price from public.candidate_outcome where outcome_id = outcome_d_tp) <> 103
+     or (select return_pct from public.candidate_outcome where outcome_id = outcome_d_tp) <> 2.9 then
+    raise exception 'D TP rule mismatch';
+  end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_e_sl) <> 'SL'
+     or (select exit_price from public.candidate_outcome where outcome_id = outcome_e_sl) <> 95
+     or (select return_pct from public.candidate_outcome where outcome_id = outcome_e_sl) <> -5.1 then
+    raise exception 'E SL rule/cost mismatch';
+  end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_d_timeout) <> 'TIMEOUT'
+     or (select holding_days from public.candidate_outcome where outcome_id = outcome_d_timeout) <> 20
+     or (select return_pct from public.candidate_outcome where outcome_id = outcome_d_timeout) <> -2.1 then
+    raise exception 'D TIMEOUT cutoff/cost mismatch';
+  end if;
+  if (select status from public.candidate_outcome where outcome_id = outcome_e_timeout) <> 'TIMEOUT'
+     or (select holding_days from public.candidate_outcome where outcome_id = outcome_e_timeout) <> 30
+     or (select return_pct from public.candidate_outcome where outcome_id = outcome_e_timeout) <> -2.1 then
+    raise exception 'E TIMEOUT cutoff/cost mismatch';
   end if;
 end $$;
 
