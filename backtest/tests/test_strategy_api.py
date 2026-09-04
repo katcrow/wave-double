@@ -12,6 +12,8 @@ from backtest.strategy_api import (
     StrategyResult,
     compute_abc,
 )
+from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
+from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
 
 
 def _make_df(n: int = 200, *, close_nan: int | None = None) -> pd.DataFrame:
@@ -30,6 +32,8 @@ def _make_df(n: int = 200, *, close_nan: int | None = None) -> pd.DataFrame:
         },
         index=dates,
     )
+    df["High"] = df[["High", "Open", "Close"]].max(axis=1)
+    df["Low"] = df[["Low", "Open", "Close"]].min(axis=1)
     return df
 
 
@@ -45,6 +49,15 @@ class TestInsufficientHistory:
         assert result.status == "INELIGIBLE_INSUFFICIENT_HISTORY"
         assert result.signals == {}
         assert result.error is None
+
+    def test_malformed_short_frame_is_error(self) -> None:
+        df = _make_df(n=50).drop(columns="Volume")
+
+        result = compute_abc(df, ticker="T")
+
+        assert result.status == "ERROR"
+        assert result.error is not None
+        assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
 
 
 class TestNonFiniteInput:
@@ -66,6 +79,25 @@ class TestNonFiniteInput:
         df = _make_df(n=200)
         df.loc[df.index[100], "Close"] = np.inf
         result = compute_abc(df, ticker="T")
+        assert result.status == "ERROR"
+        assert result.error is not None
+        assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
+
+
+class TestInvalidInputStructure:
+    def test_missing_ohlcv_column_is_typed_error(self) -> None:
+        df = _make_df(n=200).drop(columns="Volume")
+        result = compute_abc(df, ticker="T")
+
+        assert result.status == "ERROR"
+        assert result.signals == {}
+        assert result.error is not None
+        assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
+        assert "OHLCV 컬럼" in result.error.message
+
+    def test_non_dataframe_is_typed_error(self) -> None:
+        result = compute_abc(None, ticker="T")  # type: ignore[arg-type]
+
         assert result.status == "ERROR"
         assert result.error is not None
         assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
@@ -113,6 +145,24 @@ class TestLastBarDiscarded:
         assert not result.signals["B"].any()
         assert not result.signals["C"].any()
 
+    def test_last_bar_is_discarded_for_d_and_e(self) -> None:
+        df = _make_df(n=200)
+        last_bar = pd.Series(False, index=df.index)
+        last_bar.iloc[-1] = True
+
+        with patch(
+            "backtest.strategy_api.build_signals",
+            return_value=(last_bar.copy(), last_bar.copy(), last_bar.copy()),
+        ), patch(
+            "backtest.strategy_api.compute_strategy_d", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_e", return_value=last_bar.copy()
+        ):
+            result = compute_abc(df, ticker="T")
+
+        assert result.status == "READY"
+        assert all(not result.signals[key].any() for key in ("A", "B", "C", "D", "E"))
+
 
 class TestATRFilter:
     def test_signal_on_zero_atr_row_excluded(self) -> None:
@@ -157,16 +207,131 @@ class TestNormalCompute:
         assert result.ticker == "T"
         assert result.status == "READY"
         assert result.error is None
-        assert "A" in result.signals
-        assert "B" in result.signals
-        assert "C" in result.signals
-        assert result.signals["A"].dtype == bool
-        assert result.signals["B"].dtype == bool
-        assert result.signals["C"].dtype == bool
-        assert len(result.signals["A"]) == 200
+        assert set(result.signals) == {"A", "B", "C", "D", "E"}
+        for key in ("A", "B", "C", "D", "E"):
+            assert result.signals[key].index.equals(df.index)
+            assert result.signals[key].dtype == bool
+            assert len(result.signals[key]) == 200
         assert not result.signals["A"].iloc[-1]
         assert not result.signals["B"].iloc[-1]
         assert not result.signals["C"].iloc[-1]
+        assert result.params_meta["D"] == STRATEGY_D_PARAMS.as_dict()
+        assert result.params_meta["E"] == STRATEGY_E_PARAMS.as_dict()
+        assert set(result.params_meta) == {"A", "B", "C", "D", "E"}
+        for key in ("A", "B", "C"):
+            assert result.params_meta[key] == {
+                "atr_window": 14,
+                "take_profit_pct": 3.0,
+                "stop_loss_pct": 3.0,
+                "max_holding_bars": 30,
+            }
+        assert result.strategy_params is result.params_meta
+
+
+class TestInvalidOhlcSegments:
+    def test_no_valid_ohlc_segment_is_typed_error(self) -> None:
+        df = _make_df(n=200)
+        df["High"] = df["Low"] - 1.0
+
+        result = compute_abc(df, ticker="T")
+
+        assert result.status == "ERROR"
+        assert result.signals == {}
+        assert result.error is not None
+        assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
+        assert "유효한 OHLCV 구간" in result.error.message
+
+    def test_invalid_relationship_row_is_excluded_without_connecting_segments(self) -> None:
+        df = _make_df(n=200)
+        df["Open"] = df["Close"]
+        df["High"] = df["Close"] + 1.0
+        df["Low"] = df["Close"] - 1.0
+        invalid = 100
+        df.iloc[invalid, df.columns.get_loc("High")] = 1.0
+        segment_masks: list[pd.Index] = []
+        d_e_segments: list[pd.Index] = []
+
+        def fake_build(frame, *_args, **_kwargs):
+            segment_masks.append(frame.index)
+            mask = pd.Series(False, index=frame.index)
+            mask.iloc[-1] = True
+            return mask.copy(), mask.copy(), mask.copy()
+
+        def fake_d_e(frame, *_args, **_kwargs):
+            d_e_segments.append(frame.index)
+            mask = pd.Series(False, index=frame.index)
+            mask.iloc[-1] = True
+            return mask
+
+        with patch("backtest.strategy_api.build_signals", side_effect=fake_build), patch(
+            "backtest.strategy_api.compute_strategy_d", side_effect=fake_d_e
+        ), patch(
+            "backtest.strategy_api.compute_strategy_e", side_effect=fake_d_e
+        ):
+            result = compute_abc(df, ticker="T")
+
+        assert result.status == "READY"
+        assert len(segment_masks) == 1
+        assert segment_masks[0].equals(df.index)
+        assert len(d_e_segments) == 4
+        assert all(result.signals[key].dtype == bool for key in result.signals)
+        assert all(not result.signals[key].iloc[invalid] for key in result.signals)
+        # A/B/C preserve full-frame calculation; D/E terminal segment bars are filtered.
+        assert not result.signals["D"].iloc[invalid - 1]
+        assert not result.signals["E"].iloc[invalid - 1]
+
+    @pytest.mark.parametrize(
+        ("calculator", "strategy"),
+        [
+            ("compute_strategy_d", "D"),
+            ("compute_strategy_e", "E"),
+        ],
+    )
+    def test_d_or_e_failure_is_typed_and_names_strategy(
+        self, calculator: str, strategy: str
+    ) -> None:
+        df = _make_df(n=200)
+        with patch(
+            f"backtest.strategy_api.{calculator}",
+            side_effect=RuntimeError("계산기 오류"),
+        ):
+            result = compute_abc(df, ticker="T")
+
+        assert result.status == "ERROR"
+        assert result.signals == {}
+        assert result.error is not None
+        assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
+        assert result.error.strategy == strategy
+        assert "계산기 오류" in result.error.message
+
+    def test_calculator_contract_violation_is_typed_error(self) -> None:
+        df = _make_df(n=200)
+        invalid_mask = pd.Series(1, index=df.index, dtype="int64")
+
+        with patch("backtest.strategy_api.compute_strategy_d", return_value=invalid_mask):
+            result = compute_abc(df, ticker="T")
+
+        assert result.status == "ERROR"
+        assert result.signals == {}
+        assert result.error is not None
+        assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
+        assert result.error.strategy == "D"
+
+    def test_d_and_e_positive_masks_are_returned(self) -> None:
+        df = _make_df(n=200)
+        positive = pd.Series(False, index=df.index)
+        positive.iloc[100] = True
+
+        with patch(
+            "backtest.strategy_api.compute_strategy_d", return_value=positive.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_e", return_value=positive.copy()
+        ):
+            result = compute_abc(df, ticker="T")
+
+        assert result.status == "READY"
+        assert result.signals["D"].iloc[100]
+        assert result.signals["E"].iloc[100]
 
 
 class TestBuildSignalsDefaultSwallows:

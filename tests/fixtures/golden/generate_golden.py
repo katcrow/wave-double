@@ -1,10 +1,10 @@
-"""골든 픽스처 결정적 재생성 도구 (Story 2.4 개발 유틸).
+"""골든 픽스처 결정적 재생성 도구 (Story 6.4 개발 유틸).
 
 ``backtest/data/raw/*.parquet`` 원본에서 다음 3파일을 결정적으로 재생성한다.
 
 - ``golden_day.json`` — 고정 거래일·universe
 - ``ohlcv_raw.json.gz`` — universe 별 전체 일봉 원본(수정주가 ``sujung=Y``) gzip 압축
-- ``golden_signals.json`` — 참조 시그널 집합(A/B/C)
+- ``golden_signals.json`` — 참조 시그널 집합(A/B/C/D/E)
 
 판정 기준은 완전 일치가 아닌 통계적 유사도(**전략별 Jaccard ≥ 0.9**)이며, backtest
 (yfinance 배당조정)와 운영(LS ``sujung``)의 조정-방식론 동등성이 별도 단발성
@@ -25,6 +25,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 # 저장소 루트를 import 경로에 추가: backtest(루트)와 domain(packages/domain) 모두
 # 스크립트 실행 환경(PYTHONPATH=packages/domain 등)에서 로드되도록 한다.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -36,6 +37,9 @@ import pandas as pd
 
 from backtest.data.loader import DATA_DIR, list_tickers, load_ticker
 from backtest.indicator_opt.combine_strategies import build_signals
+from backtest.indicator_opt.strategy_d import compute_strategy_d
+from backtest.indicator_opt.strategy_e import compute_strategy_e
+from backtest.indicators import atr
 from backtest.strategy_api import compute_abc
 from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS
 
@@ -47,7 +51,30 @@ WINDOW_START = "2026-01-01"
 TP_PCT = 3.0
 SL_PCT = 3.0
 JACCARD_GATE = 0.9  # 통계적 유사도 기준(AD-5 조정-방식론 동등성 선행조건)
-_GOLDEN_KEYS = ("A", "B", "C")
+_GOLDEN_KEYS = ("A", "B", "C", "D", "E")
+_OHLCV_COLS = ("Open", "High", "Low", "Close", "Volume")
+
+
+def _valid_segments(frame: pd.DataFrame) -> list[pd.DataFrame]:
+    """참조 계산에서도 invalid 봉을 인접한 정상 봉과 연결하지 않는다."""
+
+    values = frame.loc[:, _OHLCV_COLS]
+    prices = values.loc[:, ("Open", "High", "Low", "Close")]
+    valid = (
+        np.isfinite(values.to_numpy(dtype=float)).all(axis=1)
+        & (prices > 0).all(axis=1).to_numpy()
+        & (values["Volume"] >= 0).to_numpy()
+        & (values["High"] >= values["Low"]).to_numpy()
+        & (values["High"] >= values["Open"]).to_numpy()
+        & (values["High"] >= values["Close"]).to_numpy()
+        & (values["Low"] <= values["Open"]).to_numpy()
+        & (values["Low"] <= values["Close"]).to_numpy()
+    )
+    positions = np.flatnonzero(valid)
+    if len(positions) == 0:
+        return []
+    split_points = np.flatnonzero(np.diff(positions) > 1) + 1
+    return [frame.iloc[group[0] : group[-1] + 1] for group in np.split(positions, split_points)]
 
 
 def _round_hist(hist: pd.DataFrame) -> pd.DataFrame:
@@ -79,12 +106,56 @@ def build_universe(trading_day: str, data_dir: Path = DATA_DIR) -> list[str]:
 def compute_reference(
     universe: list[str], frame_fn, start_ts: pd.Timestamp
 ) -> dict[str, dict[str, bool]]:
-    """build_signals(비엄격 기본 호출) 기반 참조 시그널. 매 전략 bool 매핑 반환."""
+    """전용 참조 계산기로 다섯 전략의 bool 시그널을 재계산한다."""
     ref: dict[str, dict[str, bool]] = {}
     for ticker in universe:
         frame = frame_fn(ticker)
-        a, b, c = build_signals(frame, TP_PCT, SL_PCT, ticker)
-        masks = {"A": a, "B": b, "C": c}
+        a, b, c = build_signals(frame, TP_PCT, SL_PCT, ticker, strict=True)
+        masks = {
+            "A": a.reindex(frame.index).fillna(False).astype(bool),
+            "B": b.reindex(frame.index).fillna(False).astype(bool),
+            "C": c.reindex(frame.index).fillna(False).astype(bool),
+            "D": pd.Series(False, index=frame.index, dtype=bool),
+            "E": pd.Series(False, index=frame.index, dtype=bool),
+        }
+        for segment in _valid_segments(frame):
+            segment_masks = {
+                "D": compute_strategy_d(segment),
+                "E": compute_strategy_e(segment),
+            }
+            for key, mask in segment_masks.items():
+                masks[key].loc[segment.index] = (
+                    mask.reindex(segment.index).fillna(False).astype(bool).to_numpy()
+                )
+        atr_series = atr(frame["High"], frame["Low"], frame["Close"], window=14)
+        for key in ("A", "B", "C"):
+            masks[key].iloc[-1] = False
+            masks[key] = (masks[key] & atr_series.notna() & (atr_series > 0)).astype(bool)
+        segmented_atr = pd.Series(float("nan"), index=frame.index, dtype=float)
+        for segment in _valid_segments(frame):
+            segmented_atr.loc[segment.index] = atr(
+                segment["High"], segment["Low"], segment["Close"], window=14
+            ).reindex(segment.index).to_numpy()
+        terminal_indices = [segment.index[-1] for segment in _valid_segments(frame)]
+        for key in ("D", "E"):
+            masks[key].loc[terminal_indices] = False
+            masks[key] = (masks[key] & segmented_atr.notna() & (segmented_atr > 0)).astype(bool)
+        values = frame.loc[:, _OHLCV_COLS]
+        prices = values.loc[:, ("Open", "High", "Low", "Close")]
+        valid_rows = pd.Series(
+            np.isfinite(values.to_numpy(dtype=float)).all(axis=1)
+            & (prices > 0).all(axis=1).to_numpy()
+            & (values["Volume"] >= 0).to_numpy()
+            & (values["High"] >= values["Low"]).to_numpy()
+            & (values["High"] >= values["Open"]).to_numpy()
+            & (values["High"] >= values["Close"]).to_numpy()
+            & (values["Low"] <= values["Open"]).to_numpy()
+            & (values["Low"] <= values["Close"]).to_numpy(),
+            index=frame.index,
+            dtype=bool,
+        )
+        for key in _GOLDEN_KEYS:
+            masks[key] = (masks[key] & valid_rows).astype(bool)
         ref[ticker] = {k: _ref_signal(m, frame, start_ts) for k, m in masks.items()}
     return ref
 
@@ -183,6 +254,8 @@ def _assert_parity(universe, frame_fn, ref, start_ts, gday) -> None:
         raise SystemExit(f"non-READY 종목 존재: {sorted(non_ready)}")
     for k in _GOLDEN_KEYS:
         ref_set = {t for t in universe if ref[t][k]}
+        if not ref_set:
+            raise SystemExit(f"전략 {k} 참조 시그널이 비어 있음")
         new_set = {t for t in universe if new[t][k]}
         j = jaccard(ref_set, new_set)
         if j < JACCARD_GATE:

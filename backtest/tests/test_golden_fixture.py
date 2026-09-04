@@ -1,6 +1,6 @@
-"""골든 픽스처 회귀 테스트 (Story 2.4).
+"""골든 픽스처 회귀 테스트 (Story 6.4).
 
-운영 태깅(`compute_abc`)이 backtest(`screen_abc`)가 검증한 전략 A/B/C를 통계적으로
+운영 태깅(`compute_abc`)이 backtest 기준 구현이 검증한 전략 A/B/C/D/E를 통계적으로
 재현하는지 ``tests/fixtures/golden/``의 고정 픽스처로 대조하는 gate다. 판정 기준은
 완전 일치가 아닌 **전략별 Jaccard ≥ 0.9** (통계적 유사도)이며, backtest(yfinance
 배당조정)와 운영(LS ``sujung``)의 조정-방식론 동등성이 별도 단발성 검증으로
@@ -13,16 +13,20 @@ import gzip
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from backtest.indicator_opt.combine_strategies import build_signals
+from backtest.indicator_opt.strategy_d import compute_strategy_d
+from backtest.indicator_opt.strategy_e import compute_strategy_e
+from backtest.indicators import atr
 from backtest.strategy_api import compute_abc
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GOLDEN_DIR = REPO_ROOT / "tests" / "fixtures" / "golden"
 
-_GOLDEN_KEYS = ("A", "B", "C")
+_GOLDEN_KEYS = ("A", "B", "C", "D", "E")
 JACCARD_GATE = 0.9
 TP_PCT = 3.0
 SL_PCT = 3.0
@@ -64,13 +68,80 @@ def _windowed(mask: pd.Series, frame: pd.DataFrame, start_ts: pd.Timestamp) -> b
     return bool(mask.reindex(frame[frame.index >= start_ts].index).fillna(False).any())
 
 
+def _valid_segments(frame: pd.DataFrame) -> list[pd.DataFrame]:
+    """참조 계산에서도 invalid 봉을 인접한 정상 봉과 연결하지 않는다."""
+    values = frame.loc[:, ("Open", "High", "Low", "Close", "Volume")]
+    prices = values.loc[:, ("Open", "High", "Low", "Close")]
+    valid = (
+        np.isfinite(values.to_numpy(dtype=float)).all(axis=1)
+        & (prices > 0).all(axis=1).to_numpy()
+        & (values["Volume"] >= 0).to_numpy()
+        & (values["High"] >= values["Low"]).to_numpy()
+        & (values["High"] >= values["Open"]).to_numpy()
+        & (values["High"] >= values["Close"]).to_numpy()
+        & (values["Low"] <= values["Open"]).to_numpy()
+        & (values["Low"] <= values["Close"]).to_numpy()
+    )
+    positions = np.flatnonzero(valid)
+    if len(positions) == 0:
+        return []
+    split_points = np.flatnonzero(np.diff(positions) > 1) + 1
+    return [
+        frame.iloc[group[0] : group[-1] + 1]
+        for group in np.split(positions, split_points)
+    ]
+
+
 def _reference_signals(universe: list[str], ohlcv: dict, start_ts: pd.Timestamp) -> dict[str, set[str]]:
-    """build_signals(비엄격 기본 호출) 기반 참조 시그널 집합 재계산 (참조 재현성 검증용)."""
+    """유효 구간별 전용 계산기 기반 참조 시그널 집합을 재계산한다."""
     ref: dict[str, set[str]] = {k: set() for k in _GOLDEN_KEYS}
     for ticker in universe:
         frame = _frame_from_ohlcv(ticker, ohlcv)
-        a, b, c = build_signals(frame, TP_PCT, SL_PCT, ticker)
-        masks = {"A": a, "B": b, "C": c}
+        a, b, c = build_signals(frame, TP_PCT, SL_PCT, ticker, strict=True)
+        masks = {
+            "A": a.reindex(frame.index).fillna(False).astype(bool),
+            "B": b.reindex(frame.index).fillna(False).astype(bool),
+            "C": c.reindex(frame.index).fillna(False).astype(bool),
+            "D": pd.Series(False, index=frame.index, dtype=bool),
+            "E": pd.Series(False, index=frame.index, dtype=bool),
+        }
+        for segment in _valid_segments(frame):
+            segment_masks = {
+                "D": compute_strategy_d(segment),
+                "E": compute_strategy_e(segment),
+            }
+            for k, mask in segment_masks.items():
+                masks[k].loc[segment.index] = (
+                    mask.reindex(segment.index).fillna(False).astype(bool).to_numpy()
+                )
+        atr_series = atr(frame["High"], frame["Low"], frame["Close"], window=14)
+        for k in ("A", "B", "C"):
+            masks[k].iloc[-1] = False
+            masks[k] = (masks[k] & atr_series.notna() & (atr_series > 0)).astype(bool)
+        segmented_atr = pd.Series(float("nan"), index=frame.index, dtype=float)
+        for segment in _valid_segments(frame):
+            segmented_atr.loc[segment.index] = atr(
+                segment["High"], segment["Low"], segment["Close"], window=14
+            ).reindex(segment.index).to_numpy()
+        for k in ("D", "E"):
+            masks[k].loc[[segment.index[-1] for segment in _valid_segments(frame)]] = False
+            masks[k] = (masks[k] & segmented_atr.notna() & (segmented_atr > 0)).astype(bool)
+        values = frame.loc[:, ("Open", "High", "Low", "Close", "Volume")]
+        prices = values.loc[:, ("Open", "High", "Low", "Close")]
+        valid_rows = pd.Series(
+            np.isfinite(values.to_numpy(dtype=float)).all(axis=1)
+            & (prices > 0).all(axis=1).to_numpy()
+            & (values["Volume"] >= 0).to_numpy()
+            & (values["High"] >= values["Low"]).to_numpy()
+            & (values["High"] >= values["Open"]).to_numpy()
+            & (values["High"] >= values["Close"]).to_numpy()
+            & (values["Low"] <= values["Open"]).to_numpy()
+            & (values["Low"] <= values["Close"]).to_numpy(),
+            index=frame.index,
+            dtype=bool,
+        )
+        for k in _GOLDEN_KEYS:
+            masks[k] = (masks[k] & valid_rows).astype(bool)
         for k, m in masks.items():
             if _windowed(m, frame, start_ts):
                 ref[k].add(ticker)
@@ -131,7 +202,9 @@ class TestFixturesPresent:
         signals = golden_signals["strategy_signals"]
         assert set(signals.keys()) == set(_GOLDEN_KEYS)
         for k in _GOLDEN_KEYS:
-            assert isinstance(signals[k], list) and len(signals[k]) > 0, f"전략 {k} 시그널 비어 있음"
+            values = signals[k]
+            assert isinstance(values, list) and values, f"전략 {k} 시그널 비어 있음"
+            assert values == sorted(set(values)), f"전략 {k} 시그널이 정렬되지 않았거나 중복됨"
 
 
 class TestMembershipConsistency:
