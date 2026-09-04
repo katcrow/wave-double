@@ -89,6 +89,9 @@ jobs:
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
 
+      - name: Validate migration order contract
+        run: python tools/check_migration_order.py
+
       - name: Apply migrations
         env:
           PGPASSWORD: postgres

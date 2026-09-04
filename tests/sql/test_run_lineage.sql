@@ -1369,3 +1369,6 @@ begin
 end $$;
 
 rollback;
+
+-- rollback fixture는 마지막 결과셋이 비어도 실행 실패가 없었다는 사실을 명시적으로 남긴다.
+select 'run_lineage_contract' as fixture, 'pass' as result;
