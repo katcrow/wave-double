@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-04-2026 12:00
+last_updated: 09-04-2026 12:45
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -72,7 +72,7 @@ development_status:
   3-8-outcome-correction-이벤트-메커니즘: done
   3-9-상장폐지-delisted-종결: done
   3-10-outcome-projection-재구축-검증: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   epic-4: backlog
   4-1-t1702-종목별-가격-수급-수집: backlog
@@ -195,3 +195,38 @@ action_items:
     owner: "QA/프론트엔드"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md"
+  - id: "epic-3-retro-item-13-운영-supabase에-epic-3-migration을-순서대로-적용하고"
+    epic: 3
+    action: "운영 Supabase에 Epic 3 migration을 순서대로 적용하고 각 RPC/function grant 및 전체 outcome
+      SQL fixture를 production project에서 명시적 pass row로 검증한다."
+    owner: "운영/개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+  - id: "epic-3-retro-item-14-epic-3-5-3-9의-github-issue-알림-자동-deliste"
+    epic: 3
+    action: "Epic 3.5/3.9의 GitHub Issue 알림·자동 DELISTED 감지·14일 escalation을 구현할지, 아니면
+      Epic acceptance를 공식 변경할지 correct-course 결정으로 고정한다."
+    owner: "PM/개발/운영"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+  - id: "epic-3-retro-item-15-default-branch-배포-gate에-local-migration"
+    epic: 3
+    action: "default-branch 배포 gate에 local migration 목록과 production schema_migrations/RPC
+      grants parity 검사를 추가해 로컬 fixture pass와 운영 함수 부재의 불일치를 차단한다."
+    owner: "개발/운영"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+  - id: "epic-3-retro-item-16-correction-반복-충돌-정책-terminal-불변성-event-o"
+    epic: 3
+    action: "correction 반복/충돌 정책, terminal 불변성, event ordering, version 증가 및 동시성 경합을
+      명시적 SQL fixture로 추가하고 raw PostgreSQL 오류를 도메인 오류로 정규화할 범위를 결정한다."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+  - id: "epic-3-retro-item-17-daily_ohlcv-close-0-invariant와-rebuild-j"
+    epic: 3
+    action: "daily_ohlcv.close > 0 invariant와 rebuild JSON-SQL fixture drift 방지 및
+      fixture 자동 수집을 추가한다."
+    owner: "데이터/개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
