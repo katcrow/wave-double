@@ -14,6 +14,57 @@
 
 전략 파라미터 상수는 `backtest/indicator_opt/combine_strategies.py:24-27`(`STOCH_DB`, `DIV3`)과 `backtest/indicator_opt/union.py`(`TOP3`, `VOLUME`)에 고정되어 있다.
 
+## 전략 D — 돌파3%기법 후보 A
+
+전략 D는 `docs/돌파3%기법_추가.md`의 후보 A를 사용한다. 파라미터는
+`backtest/indicator_opt/strategy_d.py:26-41`의 `StrategyDParams`에 고정되어
+있으며, N=20 고점 돌파·W=3 거래량 비율 <0.95·종가<SMA240·Wilder
+RSI(10)의 6일 SMA가 전일 42 미만에서 당일 42 이상(동시에 30 이상)인 네
+조건을 AND로 결합한다(`strategy_d.py:86-113`). 고점 돌파는 설계 결정에 따라
+`High > 직전 20봉 High 최고값`으로 해석한다.
+
+고정 익절 3%와 고정 손절 5%는 `strategy_d.py:116-135`에서 진입 종가를
+기준으로 생성하고, 기존 단일 엔진에 왕복 0.1% 비용과 최대보유 20봉을
+전달한다(`strategy_d.py:138-168`). 엔진은 기본값 `max_holding_bars=None`일
+때 기존 동작을 유지하며, 옵션이 지정된 경우 TP/SL(SL 우선)을 먼저 판정한
+뒤 최대보유일 종가로 `max_hold` 청산한다(`engine.py:21-41, 140-170`).
+
+### 전략 D 재현 실행 결과
+
+실행 명령:
+
+```text
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_d
+```
+
+CLI 기본값은 `--start 2020-08-03 --end 2026-08-27`이며, runner가 이 경계를
+각 parquet 프레임에 적용한다(`strategy_d.py:26-27, 197-235, 267-276`). 같은
+경계는 `--start YYYY-MM-DD --end YYYY-MM-DD`로 명시해 재현할 수 있다. 현재
+기준 parquet 104종목(`backtest/data/loader.py:25-48`)을 이 고정 관측창으로
+실행한 결과는 `backtest/results/indicator_opt/strategy_d_baseline.csv`에 저장된다.
+결과 CSV에는 파라미터·데이터 fingerprint를
+함께 기록한다. 이번 실행의 fingerprint는
+`d9c28ab5d01026b3ca9422a69bab301bd520af90547b4aac481056f42ef33e33`이다.
+
+| 전략 | 시그널 | 거래수 | 승 | 패 | 승률 | PF | 평균수익 | 평균보유 | max_hold | 월간 거래 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| D 후보 A | 19 | 19 | 15 | 4 | 78.95% | 2.1324 | +1.2158% | 4.53봉 | 0 | 0.2603 |
+
+TP 15건은 비용 차감 후 +2.9%, SL 4건은 −5.1%로 기록되었다. 문서의
+83.1%·77건은 현재 저장소의 기준 parquet와 위 canonical 판정 규칙으로
+재현되지 않았다. 해당 수치를 만든 과거 데이터 스냅샷 또는 판정 코드가
+저장소에 없어 차이의 단일 원인을 확정할 수 없으므로, 이 구현은 문서
+기대치를 코드 근거로 주장하지 않고 관측값과 재현 조건을 함께 고정한다.
+개별 거래 감사 자료는 `backtest/results/indicator_opt/strategy_d_baseline_trades.csv`에
+저장되며, 이번 19건에는 거래량 0 봉 또는 |일간 등락| 25% 초과 봉이 포함된 거래가
+각각 0건이었다.
+
+동일 fingerprint·관측창에서 문서의 모호한 해석만 바꾼 통제 비교도 77건을 재현하지
+못했다. `High` 돌파·현재 포함 거래량 창·RSI 평활은 19건/78.95%, 거래량을 직전
+창과 비교하면 24건/83.33%, `Close` 돌파·현재 포함 창은 27건/66.67%, 평활 없는
+RSI는 2건/50.00%였다. 따라서 현재 저장소에서 확인 가능한 차이는 과거 스냅샷 또는
+보존되지 않은 원본 판정 구현의 차이로 남긴다.
+
 ## 백테스트 기대치 (104종목, 73개월, TP+3%/SL−3%)
 
 | 전략 | 거래수 | 승 | 패 | 승률 | PF | 평균 보유 | 최대 보유 |

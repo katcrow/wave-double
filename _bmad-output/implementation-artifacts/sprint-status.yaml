@@ -104,8 +104,8 @@ development_status:
   5-14-원천별-분리-조회-필터-ui: backlog
   epic-5-retrospective: optional
 
-  epic-6: backlog
-  6-1-전략-d-돌파3%기법-계산-로직-코드화-baseline-이식: backlog
+  epic-6: in-progress
+  6-1-전략-d-돌파3%기법-계산-로직-코드화-baseline-이식: done
   6-2-전략-e-익절2%_고정sl5%기법-계산-로직-코드화-baseline-이식: backlog
   6-3-candidate_tags-전략-제약-확장: backlog
   6-4-전략-계산-api-일반화-ad-5-확장: backlog

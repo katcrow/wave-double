@@ -1,16 +1,18 @@
-"""백테스트 엔진 — 진입 시그널 → ATR 기반 목표/손절 보유 → 청산
+"""백테스트 엔진 — 진입 시그널 → 목표/손절/최대보유 → 청산
 
 - 진입: 타점 봉 종가 (signal.price)
 - 목표가: entry + tp_atr * ATR(진입 봉)
 - 손절가: entry - sl_atr * ATR(진입 봉)
 - 같은 봉에 목표·손절 모두 닿으면 손절 우선 (보수적)
 - 종목당 동시 1포지션, 이전 청산 이후의 시그널만 진입
+- ``max_holding_bars``가 지정되면 해당 거래일의 종가로 시간 청산
 - 데이터 끝까지 청산되지 않으면 마지막 종가로 강제 청산 (reason="end")
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from numbers import Integral
 
 import numpy as np
 import pandas as pd
@@ -21,6 +23,7 @@ from .signals import EntrySignal
 EXIT_TP = "tp"
 EXIT_SL = "sl"
 EXIT_END = "end"
+EXIT_MAX_HOLD = "max_hold"
 
 
 @dataclass
@@ -29,6 +32,7 @@ class TradeParams:
     sl_atr: float = 2.0  # 손절가 = entry - m * ATR
     atr_window: int = 14
     cost_rate: float = 0.0005  # 편도 수수료+슬리피지
+    max_holding_bars: int | None = None  # None이면 데이터 끝까지 보유
 
     def as_dict(self) -> dict:
         return {
@@ -36,6 +40,7 @@ class TradeParams:
             "sl_atr": self.sl_atr,
             "atr_window": self.atr_window,
             "cost_rate": self.cost_rate,
+            "max_holding_bars": self.max_holding_bars,
         }
 
 
@@ -48,7 +53,7 @@ class Trade:
     exit_price: float
     return_pct: float  # 비용 차감 후 실제 수익률 (%)
     holding_bars: int
-    exit_reason: str  # tp / sl / end
+    exit_reason: str  # tp / sl / max_hold / end
 
     def to_dict(self) -> dict:
         return {
@@ -87,6 +92,14 @@ def run_backtest(
 ) -> list[Trade]:
     """한 종목의 백테스트 실행. df: index=DatetimeIndex, 컬럼 OHLCV."""
     trade_params = trade_params or TradeParams()
+    max_holding_bars = trade_params.max_holding_bars
+    if (
+        max_holding_bars is not None
+        and (isinstance(max_holding_bars, bool)
+             or not isinstance(max_holding_bars, Integral)
+             or max_holding_bars < 1)
+    ):
+        raise ValueError("max_holding_bars는 1 이상의 정수여야 합니다")
     if not signals or len(df) < 2:
         return []
 
@@ -134,12 +147,24 @@ def run_backtest(
         exit_reason = ""
         exit_idx = e
 
-        for t in range(e + 1, len(df)):
+        last_eval_idx = len(df) - 1
+        if max_holding_bars is not None:
+            last_eval_idx = min(last_eval_idx, e + max_holding_bars)
+
+        for t in range(e + 1, last_eval_idx + 1):
             px, reason = _exit_price_on_bar(
                 open_arr[t], high_arr[t], low_arr[t], close_arr[t], tp, sl
             )
             if reason:
                 exit_price, exit_reason = px, reason
+                exit_idx = t
+                break
+            if (
+                max_holding_bars is not None
+                and t - e >= max_holding_bars
+            ):
+                exit_price = close_arr[t]
+                exit_reason = EXIT_MAX_HOLD
                 exit_idx = t
                 break
 
