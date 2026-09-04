@@ -9,15 +9,9 @@
     },
     "supabase": {
       "type": "local",
-      "command": [
-        "cmd", "/c",
-        "npx", "-y", "@supabase/mcp-server-supabase@latest",
-        "--project-ref=qqhjeumlecaudsiqhhdu"
-      ],
-      "enabled": true,
-      "env": {
-        "SUPABASE_ACCESS_TOKEN": "{env:SUPABASE_ACCESS_TOKEN}"
-      }
+      "command": ["node", ".opencode/supabase-mcp.mjs"],
+      "cwd": ".",
+      "enabled": true
     }
   }
 }

@@ -107,6 +107,7 @@ UX-DR18: 상태 패턴 구현 — 정상 종가 확정/장중 참고/로딩(skel
 | FR8 | Epic 3 | 실전 사후 결과 자동 적재 |
 | FR4, FR5, FR7 | Epic 4 | 후보 근거(3일치 수급) · 시장 전체 수급 · 좋은 수급 힌트 |
 | FR9, FR10 | Epic 5 | 실전 성과 검증 화면 & 모집단 편향 |
+| FR3(확장) | Epic 6 | 전략 D/E 신규 후보 탐지 기법 통합 (2026-09-04 Correct Course) |
 
 ## Epic List
 
@@ -119,6 +120,7 @@ UX-DR18: 상태 패턴 구현 — 정상 종가 확정/장중 참고/로딩(skel
 | 3 | 실전 사후 결과 자동 적재 | FR8 |
 | 4 | 후보 근거(3일치 수급) · 시장 전체 수급 · 좋은 수급 힌트 | FR4, FR5, FR7 |
 | 5 | 실전 성과 검증 화면 & 모집단 편향 | FR9, FR10 |
+| 6 | 전략 확장 — 신규 후보 탐지 기법(D/E) 통합 | FR3(확장) |
 
 <!-- ============================================================ -->
 
@@ -1667,3 +1669,165 @@ So that 폴백 데이터가 지표를 왜곡하는지 확인할 수 있다.
 **Given** 두 원천을 혼합한 지표를 보는 경우
 **When** 화면을 확인하면
 **Then** 혼합 지표임이 화면에서 구분 표기된다(FR-1a).
+
+<!-- ============================================================ -->
+
+## Epic 6: 전략 확장 — 신규 후보 탐지 기법(D/E) 통합
+
+> **출처:** 2026-09-04 Correct Course (`sprint-change-proposal-2026-09-04.md`). Epic 2(done)의 `candidate_tags`/`compute_abc`/`StrategyTagList` 산출물을 재사용해 확장하며, Epic 2 자체는 재오픈하지 않는다.
+
+Neo가 기존 전략 A/B/C에 더해 전략 D(돌파3%기법)·E(익절2%_고정SL5%기법) 시그널도 같은 후보 모집단 위에서 OR로 계산·태깅되어, 다섯 전략 중 하나라도 매칭된 후보가 다중 배지와 함께 노출되는 것을 확인한다.
+
+**시퀀싱 노트:** 이 에픽은 Epic 4(Story 4.10 힌트 배지 통합 필터)와 Epic 5(Story 5.6 전략별 분리 view, 5.12 Metric comparison)보다 **먼저** 완료되어야 한다 — 그렇지 않으면 두 에픽이 3-전략 가정으로 구현된 뒤 재작업이 필요하다. Story 6.1/6.2(계산 로직 코드화)가 6.3~6.6의 선행 조건이다.
+
+**FRs covered:** FR3(확장)
+
+### Story 6.1: 전략 D(돌파3%기법) 계산 로직 코드화 & 백테스트 baseline 이식
+
+As a Neo,
+I want `docs/돌파3%기법_추가.md`의 후보 A 파라미터가 `backtest/` 코드로 이식되기를,
+So that 전략 D의 승률·PF 기대치가 PRD가 요구하는 "코드에서 확인된 값"이 된다.
+
+**Acceptance Criteria:**
+
+**Given** `docs/돌파3%기법_추가.md`의 후보 A(N=20, W=3, VMR=0.95, MA_long=240, RSI(10,6), RSI_thr=42, RSI_min=30, TP 3%/SL 5%, 최대보유 20일)가 채택된 경우
+**When** `backtest/indicator_opt/`에 전략 D 계산 함수를 구현하면
+**Then** 기존 A/B/C와 동일한 인터페이스(일봉 프레임 입력 → 시그널 종목 집합 출력)로 구현되고, 문서의 진입조건(고점돌파 AND 매집확인 AND 장기하단반전 AND RSI상향돌파) AND 청산조건(TP3%/SL5%/최대보유20일)을 그대로 반영한다.
+
+**Given** 계산 함수가 구현된 경우
+**When** 문서와 동일한 백테스트 데이터·기간으로 재실행하면
+**Then** 문서가 보고한 승률 83.1%·총거래 77건과 일치하거나(오차 시 원인 규명), `backtest-baseline.md`에 전략 D 절이 file:line 근거와 함께 추가된다.
+
+**Given** 전략 A/B/C의 재사용 경계 원칙(FR-3, "데이터 로더 교체, 지표 로직 무변경")이 있는 경우
+**When** 전략 D를 통합하면
+**Then** 동일 원칙이 적용되어, 신규 구현된 지표 로직은 운영/백테스트 공유 계산 함수(Story 6.4)에서 재사용된다.
+
+### Story 6.2: 전략 E(익절2%_고정SL5%기법) 계산 로직 코드화 & 백테스트 baseline 이식
+
+As a Neo,
+I want `docs/익절2%_고정SL5%기법_추가.md`의 파라미터가 `backtest/` 코드로 이식되기를,
+So that 전략 E의 기대치가 코드에서 확인된 값이 된다.
+
+**Acceptance Criteria:**
+
+**Given** 문서의 조합(SMA20×60 골든크로스 ∩ OBV20일MA 상향돌파 ∩ ADX(14)≥20, TP 2%/SL 5%(고정)/최대보유 30일, 수수료 0.1%)이 채택된 경우
+**When** `backtest/indicator_opt/`에 전략 E 계산 함수를 구현하면
+**Then** 문서의 진입·청산 조건을 그대로 반영하고 기존 전략들과 동일 인터페이스를 따른다.
+
+**Given** 계산 함수가 구현된 경우
+**When** 문서와 동일한 데이터·기간으로 재실행하면
+**Then** 문서가 보고한 승률 78.2%·PF 1.34·총거래 78건과 일치하거나 원인을 규명하며, `backtest-baseline.md`에 전략 E 절이 file:line 근거와 함께 추가된다.
+
+### Story 6.3: `candidate_tags` 전략 제약 확장
+
+As a Neo,
+I want DB가 전략 D/E 태그도 저장할 수 있기를,
+So that 태깅 stage가 다섯 전략 중 매칭된 것을 모두 기록할 수 있다.
+
+**Acceptance Criteria:**
+
+**Given** 기존 `candidate_tags.strategy` CHECK 제약이 `A|B|C`로 한정된 경우
+**When** forward-only migration을 적용하면(AD-14)
+**Then** 제약이 `A|B|C|D|E`로 확장되고, 기존 A/B/C 행·쿼리는 영향받지 않는다(N/N-1 호환성 검증 통과).
+
+**Given** 마이그레이션이 적용된 경우
+**When** clean DB reset CI 게이트(Story 1.1)를 실행하면
+**Then** 통과한다.
+
+### Story 6.4: 전략 계산 API 일반화 (AD-5 확장)
+
+As a Neo,
+I want 운영·백테스트가 공유하는 전략 계산 진입점이 5개 전략을 모두 반환하기를,
+So that 태깅 stage가 함수 하나만 호출해 A~E 시그널을 얻는다.
+
+**Acceptance Criteria:**
+
+**Given** 기존 `backtest.strategy_api.compute_abc(frame) -> StrategyResult`가 있는 경우
+**When** Story 6.1/6.2의 D/E 계산 함수를 통합하면
+**Then** 함수명은 유지하되(하위호환) `StrategyResult`가 A/B/C/D/E 5개 시그널 키를 모두 포함하도록 확장된다(ARCHITECTURE-SPINE.md AD-5 addendum).
+
+**Given** 골든 픽스처 회귀 테스트(Story 2.4)가 있는 경우
+**When** `golden_signals.json`에 D/E 키를 추가하면
+**Then** D/E도 A/B/C와 동일하게 Jaccard ≥ 0.9 기준으로 검증되며, 참조 구현은 Story 6.1/6.2에서 이식된 코드다(A/B/C의 `screen_abc.py`에 대응하는 D/E 전용 참조 스크립트).
+
+### Story 6.5: Outcome 판정 로직 전략별 파라미터화 (Epic 3 확장)
+
+As a Neo,
+I want TP/SL/최대보유 판정이 전략마다 다른 값을 쓸 수 있기를,
+So that 전략 D(TP3%/SL5%/20일)·E(TP2%/SL5%/30일)가 A/B/C(TP3%/SL3%/30일)와 섞여도 각자의 청산조건대로 정확히 판정된다.
+
+**선행 조건 확인 (2026-09-04 조사 결과):** `publish_attempt`의 TP/SL 판정 SQL(`infra/supabase/migrations/202609032101_fix_timeout_cutoff_review_patch.sql` 등)은 현재 `1.03`/`0.97`(±3%, 비용반영 −3.1/+2.9)을 **모든 전략에 공통 하드코딩**하고 있고, `emit_open_command`는 `candidate_outcome.cutoff_n`을 세팅하지 않아 컬럼 기본값 30이 전 전략에 일괄 적용된다. `candidate_tags.params_meta`에는 지표 파라미터만 있고 TP/SL/최대보유 필드가 없다. 이 스토리는 Epic 3(done)이 만든 판정 로직을 **forward-only migration으로 확장**하는 것이며, Epic 3의 완료 상태를 되돌리지 않는다(AD-14).
+
+**Acceptance Criteria:**
+
+**Given** 전략별 TP/SL/최대보유가 다른 경우(A/B/C: TP+3%/SL−3%/30일, D: TP+3%/SL−5%/20일, E: TP+2%/SL−5%/30일)
+**When** `emit_open_command`가 `candidate_outcome` 행을 생성하면
+**Then** 태깅된 전략에 대응하는 `tp_pct`/`sl_pct`/`cutoff_n`이 (신규 전략별 파라미터 테이블 또는 조회 함수로부터) 조회되어 행에 저장된다(하드코딩 `30` 기본값에 의존하지 않음).
+
+**Given** 판정 SQL이 실행되는 경우
+**When** TP/SL 도달 여부를 계산하면
+**Then** 리터럴 `1.03`/`0.97` 대신 해당 행의 `entry_price * (1 + tp_pct/100)` / `entry_price * (1 - sl_pct/100)`로 계산되며, 손익률(왕복 0.1% 비용 차감)도 전략별 TP/SL 값 기준으로 산출된다.
+
+**Given** 기존 A/B/C outcome 행(Epic 3에서 이미 적재된 done 데이터)이 있는 경우
+**When** 이 migration을 적용하면
+**Then** 기존 행의 TP/SL/최대보유 값(3%/3%/30일)이 그대로 유지되고 재계산·재판정되지 않는다(과거 데이터 불변, NFR-5).
+
+### Story 6.6: 후보 태깅 stage에 전략 D/E 반영
+
+As a Neo,
+I want 실제 태깅 stage가 전략 D/E 시그널도 계산·저장하기를,
+So that 오늘의 후보 화면에 다섯 전략 중 매칭된 것이 모두 배지로 노출된다.
+
+**Acceptance Criteria:**
+
+**Given** Story 6.3(스키마)·6.4(계산 API)가 완료된 경우
+**When** Story 2.5의 tagging stage가 실행되면
+**Then** 각 후보 종목에 대해 A/B/C/D/E 시그널을 모두 계산하고, 시그널이 발생한 모든 전략이 태그로 저장된다(다중 가능, 예 A∩D).
+
+**Given** Story 6.5가 완료되어 전략별 TP/SL/최대보유 조회가 가능한 경우
+**When** 이 태그가 Epic 3의 `emit_open_command`에 전달되면
+**Then** 진입가·TP/SL 판정에 전략별 청산조건이 정확히 적용된다(전략마다 고정 TP/SL이 아니라 태그된 전략의 파라미터를 사용).
+
+### Story 6.7: UI 확장 — 라벨·배지·라우트
+
+As a Neo,
+I want 대시보드가 전략 D/E도 A/B/C와 동일하게 배지로 표시하기를,
+So that 카드에서 다섯 전략 중 매칭된 것을 한눈에 구분한다.
+
+**Acceptance Criteria:**
+
+**Given** `apps/web/lib/strategy-labels.ts`의 `STRATEGY_LABEL`이 A/B/C로 한정된 경우
+**When** D/E 라벨을 추가하면
+**Then** `StrategyTagList.tsx`가 다섯 전략 모두를 UX-DR7 규칙(가로 나열, 좁은 폭에서 `+N` 접힘)대로 렌더링한다.
+
+**Given** `/strategies/[strategy]` 라우트가 A/B/C만 검증하는 경우
+**When** D/E 경로를 추가하면
+**Then** 각 전략 설명/성과 페이지가 정상 렌더링되고, 정의되지 않은 전략 코드는 여전히 404 처리된다.
+
+**Given** UX-DR9(Metric comparison)·UX-DR16(문구 가이드)이 "전략 A/B/C" 고정 표현을 쓰는 경우
+**When** 문구를 갱신하면
+**Then** 가변 개수 전략을 전제로 한 일반화된 표현으로 대체되고(`EXPERIENCE.md` 갱신), `전략 D · 전략 E 시그널`처럼 관찰 가능한 문구를 유지한다(확정적 표현 배제, UX-DR16).
+
+**Given** 배지 색상 체계에 D/E가 추가되는 경우
+**When** 접근성을 재확인하면
+**Then** 색상만으로 전략을 구분하지 않고(UX-DR14), 텍스트 라벨이 항상 함께 제공된다.
+
+### Story 6.7: OOS(워크포워드) 검증
+
+As a Neo,
+I want 전략 D/E가 프로덕션 반영 전에 표본 외 검증을 거치기를,
+So that 두 문서가 스스로 권고한 과적합 확인 절차 없이 실전에 투입되는 리스크를 줄인다.
+
+**Acceptance Criteria:**
+
+**Given** 전략 D/E가 Story 6.1/6.2로 코드화된 경우
+**When** OOS(워크포워드) 검증을 수행하면
+**Then** in-sample과 별도 기간/구간에서의 승률·PF가 기록되고, in-sample 대비 과도한 하락이 있는지 문서화된다(`backtest-baseline.md` D/E 절에 OOS 결과 병기).
+
+**Given** OOS 검증 결과가 in-sample 대비 크게 열화된 경우
+**When** Neo가 이를 검토하면
+**Then** 파라미터 재조정 또는 해당 전략 보류 여부를 결정하고 그 결정을 `backtest-baseline.md`에 기록한다.
+
+**Given** OOS 검증이 아직 완료되지 않은 상태에서 Story 6.5(태깅 stage 반영)를 먼저 진행해야 하는 경우(예: 일정상 병행)
+**When** 이 상태를 대시보드/문서에 반영하면
+**Then** "OOS 미검증" 상태임이 `sprint-change-proposal-2026-09-04.md`의 Open Risk로 추적되고, 이후 검증 완료 시 그 결과로 갱신된다.
