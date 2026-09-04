@@ -1,0 +1,74 @@
+[
+  {
+    "ticker": "100001",
+    "strategy": "A",
+    "entry_date": "2099-06-01",
+    "entry_price": 100,
+    "status": "OPEN",
+    "exit_date": null,
+    "exit_price": null,
+    "return_pct": null,
+    "cutoff_n": 30,
+    "holding_days": 0
+  },
+  {
+    "ticker": "100002",
+    "strategy": "B",
+    "entry_date": "2099-06-01",
+    "entry_price": 200,
+    "status": "SL",
+    "exit_date": "2099-06-02",
+    "exit_price": 194,
+    "return_pct": -3.1,
+    "cutoff_n": 30,
+    "holding_days": 1
+  },
+  {
+    "ticker": "100003",
+    "strategy": "C",
+    "entry_date": "2099-06-01",
+    "entry_price": 300,
+    "status": "TP",
+    "exit_date": "2099-06-02",
+    "exit_price": 309,
+    "return_pct": 2.9,
+    "cutoff_n": 30,
+    "holding_days": 1
+  },
+  {
+    "ticker": "100004",
+    "strategy": "A",
+    "entry_date": "2099-06-01",
+    "entry_price": 400,
+    "status": "OPEN",
+    "exit_date": null,
+    "exit_price": null,
+    "return_pct": null,
+    "cutoff_n": 30,
+    "holding_days": 0
+  },
+  {
+    "ticker": "100005",
+    "strategy": "B",
+    "entry_date": "2099-06-01",
+    "entry_price": 500,
+    "status": "OPEN",
+    "exit_date": null,
+    "exit_price": null,
+    "return_pct": null,
+    "cutoff_n": 15,
+    "holding_days": 0
+  },
+  {
+    "ticker": "100006",
+    "strategy": "C",
+    "entry_date": "2099-06-01",
+    "entry_price": 600,
+    "status": "DELISTED",
+    "exit_date": "2099-07-20",
+    "exit_price": 610,
+    "return_pct": 1.9,
+    "cutoff_n": 30,
+    "holding_days": 30
+  }
+]

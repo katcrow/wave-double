@@ -643,6 +643,7 @@ export type Database = {
             Returns: Json
           }
       reap_expired_attempts: { Args: { p_now?: string }; Returns: number }
+      rebuild_outcome_projection: { Args: never; Returns: Json }
       reconcile_dispatch_outbox: { Args: never; Returns: Json }
       record_dispatch_receipt: {
         Args: { p_dispatch_request_id: string; p_run_id: string }

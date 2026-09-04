@@ -1,0 +1,58 @@
+[
+  {
+    "outcome_id": "10000100-0000-0000-0000-000000000001",
+    "evaluation_trading_day": "2099-06-02",
+    "high": 101,
+    "low": 99,
+    "close": 100,
+    "result_code": "NO_HIT"
+  },
+  {
+    "outcome_id": "10000200-0000-0000-0000-000000000002",
+    "evaluation_trading_day": "2099-06-02",
+    "high": 205,
+    "low": 193,
+    "close": 194,
+    "result_code": "SL_HIT"
+  },
+  {
+    "outcome_id": "10000300-0000-0000-0000-000000000003",
+    "evaluation_trading_day": "2099-06-02",
+    "high": 310,
+    "low": 301,
+    "close": 305,
+    "result_code": "TP_HIT"
+  },
+  {
+    "outcome_id": "10000500-0000-0000-0000-000000000005",
+    "evaluation_trading_day": "2099-06-02",
+    "high": 510,
+    "low": 498,
+    "close": 500,
+    "result_code": "NO_HIT"
+  },
+  {
+    "outcome_id": "10000500-0000-0000-0000-000000000005",
+    "evaluation_trading_day": "2099-06-03",
+    "high": 512,
+    "low": 495,
+    "close": 502,
+    "result_code": "NO_HIT"
+  },
+  {
+    "outcome_id": "10000600-0000-0000-0000-000000000006",
+    "evaluation_trading_day": "2099-06-02",
+    "high": 601,
+    "low": 598,
+    "close": 599,
+    "result_code": "NO_HIT"
+  },
+  {
+    "outcome_id": "10000600-0000-0000-0000-000000000006",
+    "evaluation_trading_day": "2099-07-15",
+    "high": 615,
+    "low": 600,
+    "close": 612,
+    "result_code": "TIMEOUT"
+  }
+]

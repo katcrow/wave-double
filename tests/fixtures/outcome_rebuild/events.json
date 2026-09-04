@@ -1,0 +1,126 @@
+[
+  {
+    "event_id": "10000000-0000-0000-0000-000000000001",
+    "ticker": "100001",
+    "strategy": "A",
+    "command_type": "OPEN",
+    "logical_run_key": "close:2099-06-01",
+    "payload": {"entry_date": "2099-06-01", "entry_price": 100},
+    "created_at": "2099-06-01T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000002",
+    "ticker": "100002",
+    "strategy": "B",
+    "command_type": "OPEN",
+    "logical_run_key": "close:2099-06-01",
+    "payload": {"entry_date": "2099-06-01", "entry_price": 200},
+    "created_at": "2099-06-01T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000003",
+    "ticker": "100002",
+    "strategy": "B",
+    "command_type": "SL",
+    "logical_run_key": "close:2099-06-02",
+    "payload": {"trading_day": "2099-06-02", "exit_price": 194, "return_pct": -3.1, "holding_days": 1},
+    "created_at": "2099-06-02T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000004",
+    "ticker": "100003",
+    "strategy": "C",
+    "command_type": "OPEN",
+    "logical_run_key": "close:2099-06-01",
+    "payload": {"entry_date": "2099-06-01", "entry_price": 300},
+    "created_at": "2099-06-01T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000005",
+    "ticker": "100003",
+    "strategy": "C",
+    "command_type": "TP",
+    "logical_run_key": "close:2099-06-02",
+    "payload": {"trading_day": "2099-06-02", "exit_price": 309, "return_pct": 2.9, "holding_days": 1},
+    "created_at": "2099-06-02T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000006",
+    "ticker": "100004",
+    "strategy": "A",
+    "command_type": "OPEN",
+    "logical_run_key": "close:2099-06-01",
+    "payload": {"entry_date": "2099-06-01", "entry_price": 400},
+    "created_at": "2099-06-01T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000007",
+    "ticker": "100005",
+    "strategy": "B",
+    "command_type": "OPEN",
+    "logical_run_key": "close:2099-06-01",
+    "payload": {"entry_date": "2099-06-01", "entry_price": 500},
+    "created_at": "2099-06-01T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000008",
+    "ticker": "100005",
+    "strategy": "B",
+    "command_type": "SUSPENDED",
+    "logical_run_key": "close:2099-06-03",
+    "payload": {"trading_day": "2099-06-03", "via_pricechk": false, "gap_pct": 0.35},
+    "created_at": "2099-06-03T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-000000000009",
+    "ticker": "100005",
+    "strategy": "B",
+    "command_type": "CORRECTION",
+    "logical_run_key": "close:2099-06-04",
+    "payload": {
+      "reason": "일봉 재확인 후 가격 조정 오탐 해제",
+      "outcome_id": "50000000-0000-0000-0000-000000000005",
+      "previous_status": "SUSPENDED",
+      "new_status": "OPEN",
+      "previous_cutoff_n": 30,
+      "new_cutoff_n": 15
+    },
+    "created_at": "2099-06-04T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-00000000000a",
+    "ticker": "100006",
+    "strategy": "C",
+    "command_type": "OPEN",
+    "logical_run_key": "close:2099-06-01",
+    "payload": {"entry_date": "2099-06-01", "entry_price": 600},
+    "created_at": "2099-06-01T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-00000000000b",
+    "ticker": "100006",
+    "strategy": "C",
+    "command_type": "TIMEOUT",
+    "logical_run_key": "close:2099-07-15",
+    "payload": {"trading_day": "2099-07-15", "exit_price": 612, "return_pct": 1.9, "holding_days": 30},
+    "created_at": "2099-07-15T15:00:00+09:00"
+  },
+  {
+    "event_id": "10000000-0000-0000-0000-00000000000c",
+    "ticker": "100006",
+    "strategy": "C",
+    "command_type": "CORRECTION",
+    "logical_run_key": "close:2099-07-20",
+    "payload": {
+      "reason": "상장폐지 확정",
+      "outcome_id": "60000000-0000-0000-0000-000000000006",
+      "previous_status": "TIMEOUT",
+      "new_status": "DELISTED",
+      "previous_exit_date": "2099-07-15",
+      "new_exit_date": "2099-07-20",
+      "previous_exit_price": 612,
+      "new_exit_price": 610
+    },
+    "created_at": "2099-07-20T15:00:00+09:00"
+  }
+]
