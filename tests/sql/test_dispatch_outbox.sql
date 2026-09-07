@@ -148,6 +148,9 @@ begin
   -- Story 2.5: publish_attempt는 tags stage success도 게이트로 요구한다.
   perform public.write_stage(run_ok, 'tags', fence_ok, lease_ok, 'pending', 'running');
   perform public.write_stage(run_ok, 'tags', fence_ok, lease_ok, 'running', 'success');
+  -- Story 4.1: publish_attempt는 supply_3day stage success도 게이트로 요구한다.
+  perform public.write_stage(run_ok, 'supply_3day', fence_ok, lease_ok, 'pending', 'running');
+  perform public.write_stage(run_ok, 'supply_3day', fence_ok, lease_ok, 'running', 'success');
   perform public.publish_attempt(run_ok, fence_ok, lease_ok);
 
   -- 실패 종결: runs.status가 failed가 되면 outbox는 failed.

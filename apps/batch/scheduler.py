@@ -19,6 +19,8 @@ from .candidate_tags_repository import TagsRepositoryProtocol
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository, initialize_new_ticker_history, update_existing_ticker_history
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway, parse_attempt, safe_record_dispatch_receipt
+from .supply_3day_repository import Supply3DayRepositoryProtocol
+from .supply_stage import SupplyProviderProtocol, SupplyStageResult, TaggedCandidateFetcherProtocol, run_supply_stage
 from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, run_tags_stage
 
 # status를 "얼마나 나쁜가"로 정렬한다 -- candidates/tags 결과를 합칠 때 더 나쁜 쪽이 이긴다.
@@ -36,6 +38,8 @@ class SchedulerResult:
     logical_run_key: str | None = None
     tags_status: str | None = None
     tags_result_code: str | None = None
+    supply_status: str | None = None
+    supply_result_code: str | None = None
     published: bool = False
     outcome_tracking_status: str | None = None
 
@@ -51,14 +55,16 @@ def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalR
 def _from_candidate_result(
     result: CandidateStageResult,
     tags_result: TagsStageResult | None = None,
+    supply_result: SupplyStageResult | None = None,
     *,
     published: bool = False,
 ) -> SchedulerResult:
-    """candidates stage 결과와(있다면) tags stage 결과를 하나의 ``SchedulerResult``로 합친다.
+    """candidates stage 결과와(있다면) tags/supply stage 결과를 하나의 ``SchedulerResult``로 합친다.
 
-    tags stage가 실행됐다면 그 결과가 조용히 버려지지 않도록 ``tags_status``/
-    ``tags_result_code``로 노출하고, 전체 ``status``도 두 stage 중 더 나쁜 쪽을
-    따르게 한다(tags가 failed면 배치 전체가 success로 보고되지 않는다).
+    tags/supply stage가 실행됐다면 그 결과가 조용히 버려지지 않도록 ``tags_status``/
+    ``tags_result_code``, ``supply_status``/``supply_result_code``로 노출하고, 전체
+    ``status``도 세 stage 중 더 나쁜 쪽을 따르게 한다(하나라도 failed면 배치 전체가
+    success로 보고되지 않는다).
 
     ``published``는 close 배치에서 publish_attempt 호출이 성공했는지 여부다. 성공 시
     outcome_tracking stage가 DB 단에서 'success'로 기록되므로 SchedulerResult에도 반영한다.
@@ -71,6 +77,13 @@ def _from_candidate_result(
         tags_result_code = tags_result.result_code
         if _STATUS_SEVERITY.get(tags_result.status, 0) > _STATUS_SEVERITY.get(status, 0):
             status = tags_result.status
+    supply_status: str | None = None
+    supply_result_code: str | None = None
+    if supply_result is not None:
+        supply_status = supply_result.status
+        supply_result_code = supply_result.result_code
+        if _STATUS_SEVERITY.get(supply_result.status, 0) > _STATUS_SEVERITY.get(status, 0):
+            status = supply_result.status
     return SchedulerResult(
         status,
         result.result_code,
@@ -79,6 +92,8 @@ def _from_candidate_result(
         run_id=result.run_id,
         tags_status=tags_status,
         tags_result_code=tags_result_code,
+        supply_status=supply_status,
+        supply_result_code=supply_result_code,
         published=published,
         outcome_tracking_status="success" if published else None,
     )
@@ -96,6 +111,9 @@ def run_scheduled_batch(
     candidate_fetcher: CandidateFetcherProtocol,
     ohlcv_loader: OhlcvDbClient,
     tags_repository: TagsRepositoryProtocol,
+    tagged_candidate_fetcher: TaggedCandidateFetcherProtocol,
+    supply_provider: SupplyProviderProtocol,
+    supply_repository: Supply3DayRepositoryProtocol,
     *,
     query_index: str | None = None,
     lease_seconds: int = 300,
@@ -160,6 +178,7 @@ def run_scheduled_batch(
     # ohlcv 확보/갱신 후 tags stage를 실행한다. failed/skip(휴장)은 여기 도달하지 않거나
     # fence_token이 없어 자동으로 파이프라인을 건너뛴다.
     tags_result: TagsStageResult | None = None
+    supply_result: SupplyStageResult | None = None
     if result.status in ("success", "partial") and result.fence_token is not None:
         tickers = [candidate.ticker for candidate in result.selection.candidates] if result.selection else []
         initialize_new_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day)
@@ -176,6 +195,22 @@ def run_scheduled_batch(
             strategy_client=strategy_client,
             batch_kind=kind.value,
         )
+        # Story 4.1 review patch: close/intraday에서만 tags stage 직후 supply stage를 실행한다
+        # (Story 4.3 장중 D0 누적 전제). premarket은 당일(D0) 거래 데이터가 아직 없어 t1702
+        # 응답에 D0 날짜가 누락되므로, 실행하면 모든 태깅된 후보가 상시 error로 집계되어
+        # supply stage가 매 premarket 배치마다 partial로 보고되고 LS API 호출도 낭비된다.
+        if kind is not BatchKind.PREMARKET:
+            supply_result = run_supply_stage(
+                gateway,
+                tagged_candidate_fetcher,
+                calendar_repository,
+                supply_provider,
+                supply_repository,
+                result.run_id,
+                result.fence_token,
+                result.lease_token,
+                key.trading_day,
+            )
 
     # Story 3.5 후속 조치(deferred-work gap 해소): close 배치가 candidates+tags 둘 다
     # success로 종결되고 fence/lease가 확정된 경우에만 publish_attempt를 실제 호출해
@@ -192,6 +227,8 @@ def run_scheduled_batch(
         and result.lease_token is not None
         and tags_result is not None
         and tags_result.status == "success"
+        and supply_result is not None
+        and supply_result.status == "success"
     ):
         try:
             gateway.publish(result.run_id, result.fence_token, result.lease_token)
@@ -214,11 +251,13 @@ def run_scheduled_batch(
                 run_id=result.run_id,
                 tags_status=tags_result.status,
                 tags_result_code=tags_result.result_code,
+                supply_status=supply_result.status if supply_result is not None else None,
+                supply_result_code=supply_result.result_code if supply_result is not None else None,
                 published=False,
                 outcome_tracking_status="failed",
             )
 
-    return _from_candidate_result(result, tags_result, published=published)
+    return _from_candidate_result(result, tags_result, supply_result, published=published)
 
 
 __all__ = ["SchedulerResult", "run_scheduled_batch"]

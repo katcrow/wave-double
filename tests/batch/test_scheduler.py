@@ -25,9 +25,11 @@ class RaisingProvider:
 
 
 class FakeRepository:
-    def __init__(self, cached=None):
+    def __init__(self, cached=None, *, recent_open_days=None):
         self._cached = cached or {}
         self.saved = []
+        self._recent_open_days = recent_open_days
+        self.recent_open_days_calls = []
 
     def get(self, trading_day):
         return self._cached.get(trading_day)
@@ -36,6 +38,13 @@ class FakeRepository:
         self.saved.append(decision)
         if decision.entry is not None:
             self._cached[decision.entry.trading_day] = decision.entry
+
+    def recent_open_days(self, cutoff, count):
+        self.recent_open_days_calls.append((cutoff, count))
+        if self._recent_open_days is not None:
+            return self._recent_open_days
+        from datetime import timedelta
+        return [cutoff - timedelta(days=offset) for offset in range(count)]
 
 
 class FakeRpc:
@@ -138,14 +147,47 @@ class FakeTagsRepository:
         return {"vanished_count": 0}
 
 
-def tags_deps(*, candidate_rows=None, ohlcv_status=OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY):
-    """tags 파이프라인 배선에 필요한 신규 의존성 5종을 fresh하게 만들어 반환한다."""
+class FakeTaggedCandidateFetcher:
+    def __init__(self, rows=None):
+        self.rows = rows if rows is not None else []
+        self.calls = []
+
+    def fetch(self, run_id):
+        self.calls.append(run_id)
+        return self.rows
+
+
+class FakeSupplyProvider:
+    def __init__(self, by_ticker=None):
+        self.by_ticker = by_ticker or {}
+        self.calls = []
+
+    def fetch(self, ticker, fromdt, todt):
+        self.calls.append((ticker, fromdt, todt))
+        return self.by_ticker.get(ticker, [])
+
+
+class FakeSupplyRepository:
+    def __init__(self):
+        self.upsert_calls = []
+
+    def upsert_rows(self, rows):
+        self.upsert_calls.append(list(rows))
+        return len(rows)
+
+
+def tags_deps(*, candidate_rows=None, ohlcv_status=OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY,
+              tagged_candidate_rows=None, supply_by_ticker=None):
+    """tags/supply 파이프라인 배선에 필요한 신규 의존성을 fresh하게 만들어 반환한다."""
     return {
         "ohlcv_provider": FakeOhlcvProvider(),
         "ohlcv_repository": FakeOhlcvRepository(),
         "candidate_fetcher": FakeCandidateFetcher(candidate_rows),
         "ohlcv_loader": FakeOhlcvLoader(ohlcv_status),
         "tags_repository": FakeTagsRepository(),
+        "tagged_candidate_fetcher": FakeTaggedCandidateFetcher(tagged_candidate_rows),
+        "supply_provider": FakeSupplyProvider(supply_by_ticker),
+        "supply_repository": FakeSupplyRepository(),
     }
 
 
@@ -181,6 +223,7 @@ def test_holiday_skips_without_calling_candidate_client():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "skipped"
@@ -215,6 +258,7 @@ def test_open_day_delegates_to_candidate_stage_with_schedule_trigger():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "success"
@@ -245,6 +289,7 @@ def test_success_candidates_stage_wires_ohlcv_and_tags_pipeline():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "success"
@@ -256,6 +301,139 @@ def test_success_candidates_stage_wires_ohlcv_and_tags_pipeline():
     write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
     tags_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "tags"]
     assert [call[1]["p_status"] for call in tags_stage_calls] == ["running", "success"]
+    # Story 4.1: tags stage 직후 supply stage도 배선되어 태깅된 후보 조회 + write_stage가 발생한다.
+    supply_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "supply_3day"]
+    assert [call[1]["p_status"] for call in supply_stage_calls] == ["running", "success"]
+
+
+# --- Story 4.1: supply stage 배선 --------------------------------------------
+
+
+def test_supply_stage_runs_after_tags_with_tagged_candidates():
+    """태깅된 후보가 있으면 supply stage가 종목당 1콜로 t1702를 호출하고 행을 저장한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(
+        cached={date(2026, 9, 1): cached_open},
+        recent_open_days=[date(2026, 9, 1), date(2026, 8, 31), date(2026, 8, 28)],
+    )
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    from apps.batch.ls_supply_provider import SupplyBar
+
+    d2, d1, d0 = date(2026, 8, 28), date(2026, 8, 31), date(2026, 9, 1)
+    bars = [
+        SupplyBar(d2, 100.0, 1.0, 1000.0, -10.0, 20.0, 30.0),
+        SupplyBar(d1, 101.0, 1.5, 1100.0, -11.0, 21.0, 31.0),
+        SupplyBar(d0, 102.0, 2.0, 1200.0, -12.0, 22.0, 32.0),
+    ]
+    from collections import namedtuple
+
+    TaggedRow = namedtuple("TaggedRow", ["candidate_id", "ticker"])
+    deps = tags_deps(
+        tagged_candidate_rows=[TaggedRow("c1", "005930")],
+        supply_by_ticker={"005930": bars},
+    )
+    deps["ohlcv_repository"] = FakeOhlcvRepository()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
+    )
+
+    assert result.status == "success"
+    assert result.supply_status == "success"
+    assert deps["supply_provider"].calls == [("005930", d2, d0)]
+    assert len(deps["supply_repository"].upsert_calls[0]) == 3
+    write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
+    supply_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "supply_3day"]
+    assert [call[1]["p_status"] for call in supply_stage_calls] == ["running", "success"]
+
+
+def test_supply_stage_failure_surfaces_in_scheduler_result_and_blocks_publish():
+    """supply stage가 failed로 종결되면 배치 전체 결과도 failed여야 하고 publish_attempt는 호출되지 않는다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+
+    class RaisingTaggedCandidateFetcher:
+        def fetch(self, run_id):
+            raise RuntimeError("candidate_tags fetch boom")
+
+    deps = tags_deps()
+    deps["tagged_candidate_fetcher"] = RaisingTaggedCandidateFetcher()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
+    )
+
+    assert result.status == "failed"
+    assert result.supply_status == "failed"
+    assert result.supply_result_code == "TAGGED_CANDIDATE_FETCH_FAILED"
+    assert _publish_attempt_calls(rpc) == []
+
+
+def test_premarket_does_not_run_supply_stage():
+    """리뷰 patch: premarket 시점엔 당일(D0) 거래 데이터가 아직 없어 t1702가 D0을 누락시키고
+    모든 태깅된 후보가 상시 error(partial)로 집계된다 -- supply stage 자체를 호출하지 않아야 한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload())
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    from collections import namedtuple
+
+    TaggedRow = namedtuple("TaggedRow", ["candidate_id", "ticker"])
+    deps = tags_deps(tagged_candidate_rows=[TaggedRow("c1", "005930")])
+
+    result = run_scheduled_batch(
+        BatchKind.PREMARKET,
+        datetime(2026, 9, 1, 8, 30),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
+    )
+
+    assert result.status in ("success", "partial")
+    assert result.supply_status is None
+    assert result.supply_result_code is None
+    assert deps["tagged_candidate_fetcher"].calls == []
+    assert deps["supply_provider"].calls == []
+    write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
+    supply_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "supply_3day"]
+    assert supply_stage_calls == []
 
 
 def test_partial_candidates_stage_wires_ohlcv_and_tags_pipeline():
@@ -282,6 +460,7 @@ def test_partial_candidates_stage_wires_ohlcv_and_tags_pipeline():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "partial"
@@ -324,6 +503,7 @@ def test_tags_stage_failure_surfaces_in_scheduler_result_and_is_not_reported_as_
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     # candidates stage 자체는 success였지만, tags stage가 failed면 전체 배치 결과도 failed여야 한다
@@ -364,6 +544,7 @@ def test_tags_persist_failure_surfaces_as_failed_scheduler_result():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     # tags_stage는 all_tags가 비어도(후보 0건) upsert_tags를 호출하므로, upsert 자체가 예외를
@@ -395,6 +576,7 @@ def test_failed_candidates_stage_does_not_run_ohlcv_or_tags_pipeline():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "failed"
@@ -421,6 +603,7 @@ def test_calendar_unavailable_is_treated_as_open_and_proceeds():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "success"
@@ -447,6 +630,7 @@ def test_replayed_holiday_attempt_ends_without_skip_call():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "success"
@@ -475,6 +659,7 @@ def test_replayed_success_attempt_does_not_run_ohlcv_or_tags_pipeline():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "success"
@@ -504,6 +689,7 @@ def test_intraday_slot_uses_floor_to_half_hour():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     start_params = rpc.calls[0][1]
@@ -530,6 +716,7 @@ def test_manual_trigger_is_passed_through_to_start_attempt():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
         trigger=Trigger.MANUAL,
     )
 
@@ -559,6 +746,7 @@ def test_dispatch_receipt_recorded_after_open_day_success():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
         trigger=Trigger.MANUAL,
         dispatch_request_id="dispatch-1",
     )
@@ -590,6 +778,7 @@ def test_dispatch_receipt_recorded_on_holiday_skip():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
         dispatch_request_id="dispatch-holiday",
     )
 
@@ -619,6 +808,7 @@ def test_dispatch_receipt_failure_does_not_fail_the_batch(capsys):
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
         trigger=Trigger.MANUAL,
         dispatch_request_id="dispatch-fail",
     )
@@ -656,6 +846,7 @@ def test_close_success_publishes_after_tags_stage():
         deps["candidate_fetcher"],
         deps["ohlcv_loader"],
         deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "success"
@@ -686,6 +877,7 @@ def test_premarket_and_intraday_do_not_publish():
             repo, FakeProvider(), gateway, candidate_client,
             deps["ohlcv_provider"], deps["ohlcv_repository"],
             deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
         )
         assert result.status in ("success", "partial")
         assert result.published is False
@@ -709,6 +901,7 @@ def test_partial_candidates_stage_does_not_publish():
         repo, FakeProvider(), gateway, candidate_client,
         deps["ohlcv_provider"], deps["ohlcv_repository"],
         deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "partial"
@@ -737,6 +930,7 @@ def test_tags_failure_does_not_publish():
         repo, FakeProvider(), gateway, candidate_client,
         deps["ohlcv_provider"], deps["ohlcv_repository"],
         deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "failed"
@@ -760,6 +954,7 @@ def test_publish_failure_marks_outcome_tracking_failed_and_fails_batch():
         repo, FakeProvider(), gateway, candidate_client,
         deps["ohlcv_provider"], deps["ohlcv_repository"],
         deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"], deps["supply_repository"],
     )
 
     assert result.status == "failed"

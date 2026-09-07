@@ -104,3 +104,51 @@ def test_calendar_upsert_rejects_decision_without_entry():
         pass
     else:
         raise AssertionError("expected ValueError for entry-less decision")
+
+
+def test_recent_open_days_sends_expected_query_params():
+    def handler(request):
+        assert request.url.path == "/rest/v1/trading_calendar"
+        assert request.url.params["is_open"] == "eq.true"
+        assert request.url.params["trading_day"] == "lte.2026-09-01"
+        assert request.url.params["select"] == "trading_day"
+        assert request.url.params["order"] == "trading_day.desc"
+        assert request.url.params["limit"] == "3"
+        return httpx.Response(
+            200,
+            json=[
+                {"trading_day": "2026-09-01"},
+                {"trading_day": "2026-08-31"},
+                {"trading_day": "2026-08-28"},
+            ],
+        )
+
+    repo = make_calendar_repo(handler)
+    days = repo.recent_open_days(date(2026, 9, 1), 3)
+    assert days == [date(2026, 9, 1), date(2026, 8, 31), date(2026, 8, 28)]
+
+
+def test_recent_open_days_returns_fewer_than_count_when_calendar_is_short():
+    repo = make_calendar_repo(lambda request: httpx.Response(200, json=[{"trading_day": "2026-09-01"}]))
+    days = repo.recent_open_days(date(2026, 9, 1), 3)
+    assert days == [date(2026, 9, 1)]
+
+
+def test_recent_open_days_raises_on_non_list_response():
+    repo = make_calendar_repo(lambda request: httpx.Response(200, json={"unexpected": "shape"}))
+    try:
+        repo.recent_open_days(date(2026, 9, 1), 3)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for malformed (non-list) response")
+
+
+def test_recent_open_days_raises_on_http_error():
+    repo = make_calendar_repo(lambda request: httpx.Response(500, json={"message": "boom"}))
+    try:
+        repo.recent_open_days(date(2026, 9, 1), 3)
+    except httpx.HTTPStatusError:
+        pass
+    else:
+        raise AssertionError("expected HTTPStatusError to propagate")

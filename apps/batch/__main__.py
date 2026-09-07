@@ -21,11 +21,14 @@ from .candidate_tags_repository import SupabaseCandidateTagsRepository
 from .ls_auth import LsOAuthTokenProvider
 from .ls_client import LsClient, LsClientConfig
 from .ls_daily_bar import LsDailyBarProvider
+from .ls_supply_provider import LsSupplyProvider
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
 from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
 from .run_state import RunStateGateway
 from .scheduler import SchedulerResult, run_scheduled_batch
 from .supabase_client import SupabaseCalendarRepository, SupabaseRpcClient
+from .supply_3day_repository import SupabaseSupply3DayRepository
+from .tagged_candidate_fetcher import TaggedCandidateFetcher
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -78,6 +81,13 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
         tags_repository = stack.enter_context(
             contextlib.closing(SupabaseCandidateTagsRepository(supabase_url, service_role_key))
         )
+        tagged_candidate_fetcher = stack.enter_context(
+            contextlib.closing(TaggedCandidateFetcher(supabase_url, service_role_key))
+        )
+        supply_provider = LsSupplyProvider(ls_client)
+        supply_repository = stack.enter_context(
+            contextlib.closing(SupabaseSupply3DayRepository(supabase_url, service_role_key))
+        )
 
         moment = now_kst if now_kst is not None else datetime.now(KST)
 
@@ -93,6 +103,9 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             candidate_fetcher,
             ohlcv_loader,
             tags_repository,
+            tagged_candidate_fetcher,
+            supply_provider,
+            supply_repository,
             query_index=query_index,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,

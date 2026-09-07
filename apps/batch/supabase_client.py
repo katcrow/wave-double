@@ -142,6 +142,28 @@ class SupabaseCalendarRepository:
         )
         response.raise_for_status()
 
+    def recent_open_days(self, cutoff: date, count: int) -> list[date]:
+        """Story 4.1: ``is_open=true and trading_day<=cutoff``인 최근 거래일 ``count``건을
+        내림차순(최신일 먼저)으로 반환한다. supply stage가 D-2/D-1/D0 날짜를 확보하는 데 쓴다.
+        """
+        response = self._http.get(
+            f"{self._base_url}/rest/v1/trading_calendar",
+            headers=self._headers(),
+            params={
+                "is_open": "eq.true",
+                "trading_day": f"lte.{cutoff.isoformat()}",
+                "select": "trading_day",
+                "order": "trading_day.desc",
+                "limit": str(count),
+            },
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not isinstance(rows, list):
+            raise RuntimeError("Supabase trading_calendar response malformed: expected a list")
+        return [date.fromisoformat(str(row["trading_day"])) for row in rows]
+
     def _headers(self) -> dict[str, str]:
         return {
             "content-type": "application/json",

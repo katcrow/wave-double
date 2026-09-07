@@ -20,6 +20,9 @@ begin
    -- Story 2.5: publish_attempt는 tags stage success도 게이트로 요구한다.
    perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
    perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+   -- Story 4.1: publish_attempt는 supply_3day stage success도 게이트로 요구한다.
+   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
   perform public.publish_attempt(attempt_id, fence, lease);
    if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) <> attempt_id then raise exception 'close canonical pointer missing'; end if;
    if (select status from public.runs where runs.run_id = attempt_id) <> 'published' then raise exception 'not published'; end if;
@@ -141,6 +144,8 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (candidate_a, attempt_id, 'A', date '2099-01-07'), (candidate_b, attempt_id, 'B', date '2099-01-07');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   perform public.publish_attempt(attempt_id, fence, lease);
 
@@ -201,6 +206,8 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
   values (candidate_d, attempt_id, 'D', date '2099-02-02'), (candidate_e, attempt_id, 'E', date '2099-02-02');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if not exists (
@@ -257,6 +264,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   perform public.publish_attempt(attempt_id, fence, lease);
 
@@ -344,6 +353,8 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (candidate_c, attempt_id, 'C', date '2099-01-08');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   begin
     perform public.publish_attempt(attempt_id, fence, lease);
@@ -398,6 +409,8 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (candidate_d, attempt_id, 'A', date '2099-01-09'), (candidate_e, attempt_id, 'B', date '2099-01-09');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   begin
     perform public.publish_attempt(attempt_id, fence, lease);
@@ -502,6 +515,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   publish_result := public.publish_attempt(attempt_id, fence, lease);
 
@@ -605,6 +620,8 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (candidate_f, attempt_id, 'C', date '2099-01-12');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   perform public.publish_attempt(attempt_id, fence, lease);
 
@@ -738,6 +755,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   publish_result := public.publish_attempt(attempt_id, fence, lease);
 
@@ -963,6 +982,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   perform public.publish_attempt(attempt_id, fence, lease);
 
@@ -1095,6 +1116,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   perform public.publish_attempt(attempt_id, fence, lease);
 
@@ -1383,6 +1406,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
 
   perform public.publish_attempt(attempt_id, fence, lease);
 
@@ -1482,6 +1507,8 @@ begin
     (seed_d_candidate, seed_attempt_id, 'D', date '2099-01-31'),
     (seed_e_candidate, seed_attempt_id, 'E', date '2099-01-31');
   perform public.write_stage(seed_attempt_id, 'tags', seed_fence, seed_lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+  perform public.write_stage(seed_attempt_id, 'supply_3day', seed_fence, seed_lease, 'pending', 'running');
+  perform public.write_stage(seed_attempt_id, 'supply_3day', seed_fence, seed_lease, 'running', 'success');
   perform public.publish_attempt(seed_attempt_id, seed_fence, seed_lease);
 
   select outcome_id into outcome_d_tp from public.candidate_outcome where ticker = 'ZZ6DTP' and strategy = 'D';
@@ -1507,6 +1534,8 @@ begin
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.candidate_outcome where outcome_id = outcome_d_tp) <> 'TP'

@@ -53,7 +53,7 @@ begin
     raise exception 'expected missing row to be inserted';
   end if;
 
-  -- confirmed인데 일부 NULL: CHECK 위반으로 거부.
+  -- confirmed인데 foreign/institution/individual 중 하나라도 NULL: CHECK 위반으로 거부.
   caught := false;
   begin
     insert into public.supply_3day(
@@ -61,11 +61,29 @@ begin
       foreign_net, institution_net, individual_net, program_net, investor_net_status
     ) values (
       v_candidate_id, run_id, date '2099-05-02', 'D0', 73000, 1300000, 1.39,
-      1000, 2000, -3000, null, 'confirmed'
+      null, 2000, -3000, 500, 'confirmed'
     );
   exception when check_violation then caught := true;
   end;
-  if not caught then raise exception 'confirmed with a NULL investor column was accepted'; end if;
+  if not caught then raise exception 'confirmed with a NULL required investor column was accepted'; end if;
+
+  -- Story 4.1 (202609070901): program_net은 t1637(Story 4.2 범위)이라 confirmed 상태에서도
+  -- 독립적으로 NULL일 수 있다 -- t1702만 수집하는 이번 스토리의 쓰기 경로가 이 조합을 실제로
+  -- 만들어내므로(foreign/institution/individual은 채워지고 program_net만 비어있음), 더 이상
+  -- CHECK 위반이 아니어야 한다.
+  insert into public.supply_3day(
+    candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
+    foreign_net, institution_net, individual_net, program_net, investor_net_status
+  ) values (
+    v_candidate_id, run_id, date '2099-05-02', 'D0', 73000, 1300000, 1.39,
+    1000, 2000, -3000, null, 'confirmed'
+  );
+  if (
+    select investor_net_status from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-02'
+  ) <> 'confirmed' then
+    raise exception 'expected confirmed row with NULL program_net to be accepted (Story 4.1/4.2 split)';
+  end if;
 
   -- pending인데 일부 실값: CHECK 위반으로 거부.
   caught := false;

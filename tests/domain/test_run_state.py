@@ -42,12 +42,14 @@ def test_stage_transitions_are_forward_only_and_terminal_writes_are_idempotent()
         validate_stage_transition("success", "running")
 
 
-def test_both_candidates_and_tags_must_be_success_to_publish():
-    assert can_publish({"candidates": "success", "tags": "success"})
-    assert not can_publish({"candidates": "success", "tags": "pending"})
-    assert not can_publish({"candidates": "success", "tags": "partial"})
-    assert not can_publish({"candidates": "partial", "tags": "success"})
-    assert not can_publish({"candidates": "success"})
+def test_candidates_tags_and_supply_3day_must_all_be_success_to_publish():
+    assert can_publish({"candidates": "success", "tags": "success", "supply_3day": "success"})
+    assert not can_publish({"candidates": "success", "tags": "success", "supply_3day": "pending"})
+    assert not can_publish({"candidates": "success", "tags": "success", "supply_3day": "partial"})
+    assert not can_publish({"candidates": "success", "tags": "pending", "supply_3day": "success"})
+    assert not can_publish({"candidates": "success", "tags": "partial", "supply_3day": "success"})
+    assert not can_publish({"candidates": "partial", "tags": "success", "supply_3day": "success"})
+    assert not can_publish({"candidates": "success", "tags": "success"})
 
 
 def test_stage_registry_uses_run_id_and_stage_callable_contract():
