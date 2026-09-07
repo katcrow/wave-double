@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-04-2026
+last_updated: 09-07-2026 10:24
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -113,7 +113,7 @@ development_status:
   6-6-후보-태깅-stage에-전략-d-e-반영: done
   6-7-ui-확장-라벨-배지-라우트: done
   6-8-oos-워크포워드-검증: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
 action_items:
   - id: "epic-1-retro-item-1-루트-typescript-게이트를-웹-tsconfig와-일치시키고-ci에"
     epic: 1
@@ -236,11 +236,51 @@ action_items:
       감지를 구현한다."
     owner: "PM/개발/운영"
     status: open
+    ref: "_bmad-output/implementation-artifacts/spec-epic-3-acceptance-remediation.md"
   - id: "story-6-8-item-1-전략-e-oos-홀드아웃-거래-20건-누적-시-재평가"
     epic: 6
-    action: "전략 E의 OOS(holdout) 실전 거래가 20건 이상 누적되면 승률/PF 열화 여부를
-      재평가하고 유지/재조정/보류를 재결정한다."
+    action: "전략 E의 OOS(holdout) 실전 거래가 20건 이상 누적되면 승률/PF 열화 여부를 재평가하고 유지/재조정/보류를 재결정한다."
     owner: "Neo"
     status: open
     ref: "_bmad-output/specs/spec-wave-double/backtest-baseline.md"
-    ref: "_bmad-output/implementation-artifacts/spec-epic-3-acceptance-remediation.md"
+  - id: "epic-6-retro-item-20-strategy_d-py-러너를-strategy_e-py-수준으로-정렬한"
+    epic: 6
+    action: "strategy_d.py 러너를 strategy_e.py 수준으로 정렬한다(무효 구간 분리, order-invariant fingerprint,
+      tz bound 사전 검증, zero-trade CSV 헤더, CLI 테스트 소급)."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+  - id: "epic-6-retro-item-21-backtest-strategy_d-e_params-_strategy_p"
+    epic: 6
+    action: "backtest STRATEGY_D/E_PARAMS·_STRATEGY_PARAMS와 SQL outcome_strategy_rules를
+      연결하는 parity 검증을 추가한다."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+  - id: "epic-6-retro-item-22-epics-md의-story-6-7-중복-번호를-정리한다-ui-확장-6"
+    epic: 6
+    action: "epics.md의 Story 6.7 중복 번호를 정리한다(UI 확장=6.7, OOS=6.8)."
+    owner: "PM"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+  - id: "epic-6-retro-item-23-6-6-운영-migration-drift-재발-전례를-근거로-epic-3"
+    epic: 6
+    action: "6-6 운영 migration drift 재발 전례를 근거로 epic-3 item-15(parity gate)를 다음 스프린트에
+      착수한다."
+    owner: "PM/개발/운영"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+  - id: "epic-6-retro-item-24-6-5-review-patch-migration-051700-052100"
+    epic: 6
+    action: "6-5 review-patch migration(051700~052100)의 guard 재정의·의미 전환을 문서화하고, 리뷰
+      반복 migration squash/pin 정책을 검토한다."
+    owner: "개발 프로세스"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+  - id: "epic-6-retro-item-25-outcome_strategy_rules에-감사-가능한-수정-경로-ser"
+    epic: 6
+    action: "outcome_strategy_rules에 감사 가능한 수정 경로(service_role 전용 upsert RPC 또는 변경
+      이력 보존)를 설계한다."
+    owner: "운영/개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
