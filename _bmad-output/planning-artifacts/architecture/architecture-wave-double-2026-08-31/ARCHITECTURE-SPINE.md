@@ -138,11 +138,13 @@ flowchart TB
 
 ### AD-5 — 운영과 백테스트는 하나의 전략 API를 공유한다 [ADOPTED]
 
-- **Binds:** CAP-2/7, NFR-6, 전략 A/B/C/D/E
+- **Binds:** CAP-2/7, NFR-6, 전략 A/B/C/D/E/F
 - **Prevents:** 운영 수식이 백테스트와 따로 진화하거나 신규 종목 하나가 전체 tagging을 막는 것
 - **Rule:** `backtest.strategy_api.compute_abc(frame) -> StrategyResult`가 유일한 전략 entrypoint다. 기존 indicator/engine을 내부에서 재사용하되 exception과 비유한 입력을 typed error로 반환하며 무신호로 숨기지 않는다. backtest CLI와 운영 tagging이 모두 이 API를 호출한다. 동일 일봉에서 TP와 SL을 모두 통과하면 기존 `backtest.engine`과 같이 SL을 우선한다.
 
   **Addendum (2026-09-04 Correct Course, Epic 6):** 전략 D(돌파3%기법)·E(익절2%_고정SL5%기법) 추가 시 함수명 `compute_abc`는 하위호환을 위해 유지하되, 반환하는 `StrategyResult`가 A/B/C/D/E 5개 시그널 키를 모두 포함하도록 확장한다. D/E는 각각 고유한 청산조건(TP/SL/최대보유)을 가지므로, `StrategyResult`는 시그널 종목 집합뿐 아니라 전략별 청산 파라미터도 함께 노출해 Epic 3 outcome 적재가 전략마다 올바른 TP/SL을 적용할 수 있게 한다.
+
+  **Addendum 2 (2026-09-07 Correct Course, Epic 7):** 전략 F(각도 가속·이평선 쌍바닥 기법) 추가 시 `StrategyResult`가 A/B/C/D/E/F 6개 시그널 키를 모두 포함하도록 확장한다. F는 고유 청산조건(TP3%/SL4%/최대보유 없음)을 가지므로, Addendum(2026-09-04)이 도입한 전략별 청산 파라미터 노출 구조에 F 항목을 추가하는 것으로 족하다(신규 구조 도입 불필요).
 
   `ohlcv_cache`는 종목별로 `READY | INELIGIBLE_INSUFFICIENT_HISTORY | ERROR`를 반환한다. 정상적인 120거래일 미만은 해당 종목만 제외하고, API/저장 실패만 retryable stage error다. 기존 종목은 마지막 저장 거래일 다음부터 cutoff까지 모든 누락일을 채우고 corporate-action adjustment version 변경 시 영향 구간을 재구축한다. golden fixture는 비어 있지 않아야 하며 전략별 Jaccard가 0.9 미만이거나 typed error가 있으면 배포를 막는다. 이 게이트는 backtest(yfinance 배당조정)와 운영(LS `t8410`/`t8451`의 `sujung` 플래그, 액면분할 위주)의 조정 방식론이 신호 재현에 무시할 수 있는 수준으로 동등함을 별도 조정-방식론 동등성 검증(단발성)으로 확인한 뒤에만 유효하며, 미검증 상태에서는 Jaccard 통과를 신뢰하지 않는다.
 

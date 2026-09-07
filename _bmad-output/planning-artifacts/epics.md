@@ -108,6 +108,7 @@ UX-DR18: 상태 패턴 구현 — 정상 종가 확정/장중 참고/로딩(skel
 | FR4, FR5, FR7 | Epic 4 | 후보 근거(3일치 수급) · 시장 전체 수급 · 좋은 수급 힌트 |
 | FR9, FR10 | Epic 5 | 실전 성과 검증 화면 & 모집단 편향 |
 | FR3(확장) | Epic 6 | 전략 D/E 신규 후보 탐지 기법 통합 (2026-09-04 Correct Course) |
+| FR3(확장) | Epic 7 | 전략 F 신규 후보 탐지 기법 통합 (2026-09-07 Correct Course) |
 
 ## Epic List
 
@@ -1831,3 +1832,146 @@ So that 두 문서가 스스로 권고한 과적합 확인 절차 없이 실전�
 **Given** OOS 검증이 아직 완료되지 않은 상태에서 Story 6.5(태깅 stage 반영)를 먼저 진행해야 하는 경우(예: 일정상 병행)
 **When** 이 상태를 대시보드/문서에 반영하면
 **Then** "OOS 미검증" 상태임이 `sprint-change-proposal-2026-09-04.md`의 Open Risk로 추적되고, 이후 검증 완료 시 그 결과로 갱신된다.
+
+## Epic 7: 전략 확장 — 신규 후보 탐지 기법(F) 통합
+
+> **출처:** 2026-09-07 Correct Course (`sprint-change-proposal-2026-09-07.md`). Epic 6(done)의 `candidate_tags`/`compute_abc`/`StrategyTagList`/전략별 outcome 파라미터화 산출물을 재사용해 확장하며, Epic 6 자체는 재오픈하지 않는다.
+
+Neo가 기존 전략 A/B/C/D/E에 더해 전략 F(각도 가속·이평선 쌍바닥 기법) 시그널도 같은 후보 모집단 위에서 OR로 계산·태깅되어, 여섯 전략 중 하나라도 매칭된 후보가 다중 배지와 함께 노출되는 것을 확인한다.
+
+**시퀀싱 노트:** 이 에픽은 Epic 4(Story 4.10 힌트 배지 통합 필터)와 Epic 5(Story 5.6 전략별 분리 view, 5.12 Metric comparison)보다 **먼저** 완료되어야 한다 — 그렇지 않으면 두 에픽이 5-전략 가정으로 구현된 뒤 재작업이 필요하다. Story 7.1(계산 로직 코드화)이 7.2~7.6의 선행 조건이다.
+
+**FRs covered:** FR3(확장)
+
+### Story 7.1: 전략 F(각도 가속·이평선 쌍바닥 기법) 계산 로직 코드화 & 백테스트 baseline 이식
+
+As a Neo,
+I want `docs/각도가속_이평쌍바닥기법_추가.md`의 표본 확대형 파라미터가 `backtest/` 코드로 이식되기를,
+So that 전략 F의 승률·PF 기대치가 PRD가 요구하는 "코드에서 확인된 값"이 된다.
+
+**선행 완료 확인 (2026-09-07 Correct Course 착수 시점):** 이 스토리에 해당하는 작업은 이미 완료되어 있다 — `backtest/indicator_opt/strategy_f.py`(`StrategyFParams`: slope_window=30, accel_window=5, min_slope_delta=0.004, ma_db_window=16, TP 3%/SL 4%, tp_first=True, max_holding_bars=None, cost_rate=0.0005), `backtest/indicator_opt/_signals.py`의 범용 `_linreg_slope`/`_double_bottom_signal`, `backtest/tests/test_strategy_f.py`(13개 테스트 통과), `backtest-baseline.md`의 "전략 F" 절(fingerprint `b2e0...12e73a3`, 승률 70.10%·PF 1.6585·194건 거래·"결정: 유지"). 본 스토리의 남은 작업은 **커밋 및 최종 검토**뿐이다.
+
+**Acceptance Criteria:**
+
+**Given** `docs/각도가속_이평쌍바닥기법_추가.md`의 표본 확대형(slope_window=30, accel_window=5, min_slope_delta=0.0045 문서값/0.004 코드 재현값, ma_window=16, TP 3%/SL 4%)이 채택된 경우
+**When** `backtest/indicator_opt/strategy_f.py`를 검토하면
+**Then** 기존 A/B/C/D/E와 동일한 인터페이스(일봉 프레임 입력 → 시그널 종목 집합 출력)로 구현되어 있고, 문서의 진입조건(각도 가속 AND 이평선 쌍바닥 넥라인 돌파) AND 청산조건(TP3%/SL4%/tp_first/최대보유 없음)을 그대로 반영한다.
+**And** 문서 수치(승률 73.1%/PF 1.92/182건/월 2.8건)와 코드 재현 수치(70.10%/1.6585/194건/월 2.66건)의 차이는 `backtest-baseline.md` F절에 이미 사유와 함께 문서화되어 있으며, 코드 재현치가 authoritative 값으로 채택된다(승률>50%, PF>1 기준 충족, D/E와 동일 패턴).
+
+**Given** `backtest/tests/test_strategy_f.py`가 있는 경우
+**When** `uv run --with pandas --with numpy --with pyarrow --with pytest pytest backtest/tests/test_strategy_f.py`를 실행하면
+**Then** 13개 테스트가 모두 통과한다.
+
+**Given** 신규 구현된 `_linreg_slope`/`_double_bottom_signal`이 `_signals.py`에 있는 경우
+**When** 전략 F를 통합하면
+**Then** 이 함수들이 운영/백테스트 공유 계산 함수(Story 7.3)에서 재사용된다(전략 A/B/C/D/E의 재사용 경계 원칙과 동일 — "데이터 로더 교체, 지표 로직 무변경").
+
+### Story 7.2: `candidate_tags` 전략 제약 확장 (F)
+
+As a Neo,
+I want DB가 전략 F 태그도 저장할 수 있기를,
+So that 태깅 stage가 여섯 전략 중 매칭된 것을 모두 기록할 수 있다.
+
+**Acceptance Criteria:**
+
+**Given** 기존 `candidate_tags_strategy_check` 제약이 `A|B|C|D|E`로 한정된 경우(`202609051500_finalize_candidate_tags_strategy_contract.sql`)
+**When** forward-only migration을 적용하면(AD-14)
+**Then** 제약이 `A|B|C|D|E|F`로 확장되고, 기존 A/B/C/D/E 행·쿼리는 영향받지 않는다(N/N-1 호환성 검증 통과).
+
+**Given** 마이그레이션이 적용된 경우
+**When** clean DB reset CI 게이트(Story 1.1)를 실행하면
+**Then** 통과한다.
+
+### Story 7.3: 전략 계산 API 일반화 (AD-5 addendum 2 확장)
+
+As a Neo,
+I want 운영·백테스트가 공유하는 전략 계산 진입점이 여섯 전략을 모두 반환하기를,
+So that 태깅 stage가 함수 하나만 호출해 A~F 시그널을 얻는다.
+
+**Acceptance Criteria:**
+
+**Given** Epic 6이 확장한 `backtest.strategy_api.compute_abc(frame) -> StrategyResult`(A/B/C/D/E 5키)가 있는 경우
+**When** Story 7.1의 F 계산 함수(`strategy_f.py`)를 통합하면
+**Then** 함수명은 유지하되(하위호환) `StrategyResult`가 A/B/C/D/E/F 6개 시그널 키를 모두 포함하도록 확장된다(ARCHITECTURE-SPINE.md AD-5 Addendum 2).
+
+**Given** 골든 픽스처 회귀 테스트(Story 2.4/6.4)가 있는 경우
+**When** `golden_signals.json`에 F 키를 추가하면
+**Then** F도 A/B/C/D/E와 동일하게 Jaccard ≥ 0.9 기준으로 검증되며, 참조 구현은 Story 7.1에서 이식된 `strategy_f.py`다.
+
+### Story 7.4: Outcome 판정 로직 F 파라미터화 (Epic 3/6 확장)
+
+As a Neo,
+I want TP/SL/최대보유 판정이 전략 F 값(TP3%/SL4%/최대보유 없음)도 지원하기를,
+So that 전략 F가 A/B/C/D/E와 섞여도 각자의 청산조건대로 정확히 판정된다.
+
+**Acceptance Criteria:**
+
+**선행 확인 (2026-09-07 조사 결과):** `outcome_strategy_rules.cutoff_n`과 `candidate_outcome.cutoff_n`은 모두 `integer not null check (cutoff_n > 0)`으로 NULL을 허용하지 않는다(`202609031300_create_outcome_schema.sql:50`, `202609051600_parameterize_outcome_strategy_rules.sql:14`). F의 "최대보유 없음"(`max_holding_bars=None`)을 NULL로 저장하는 것은 스키마와 충돌하므로, NOT NULL 제약을 건드리는 스키마 변경 대신 **충분히 큰 sentinel 정수 값**(예: `999999` — 어떤 실제 보유 기간도 도달할 수 없는 값)으로 "무제한"을 표현한다. `publish_attempt`의 `v_traded_days >= tpsl_row.cutoff_n` 비교 로직은 그대로 재사용된다(Story 3.7의 유계화 로직 변경 불필요).
+
+**Given** Epic 6의 `outcome_strategy_rules`(`202609051600_parameterize_outcome_strategy_rules.sql`)가 전략별 TP/SL/최대보유를 조회하는 구조인 경우
+**When** forward-only migration으로 F 행(`tp_pct=3, sl_pct=4, cutoff_n=999999`, 최대보유 사실상 무제한)을 추가하면
+**Then** 태깅된 전략이 F인 `candidate_outcome` 행이 이 값을 조회해 저장한다(하드코딩 기본값에 의존하지 않음, NOT NULL 제약 위반 없음).
+
+**Given** F는 sentinel `cutoff_n=999999`를 쓰는 경우
+**When** 판정 SQL이 `v_traded_days >= cutoff_n`을 평가하면
+**Then** 현실적인 보유 기간 범위 내에서는 TIMEOUT이 발동하지 않고 TP/SL 도달까지 계속 추적된다.
+
+**Given** 기존 A/B/C/D/E outcome 행(이미 적재된 데이터)이 있는 경우
+**When** 이 migration을 적용하면
+**Then** 기존 행의 TP/SL/최대보유 값이 그대로 유지되고 재계산·재판정되지 않는다(과거 데이터 불변, NFR-5).
+
+### Story 7.5: 후보 태깅 stage에 전략 F 반영
+
+As a Neo,
+I want 실제 태깅 stage가 전략 F 시그널도 계산·저장하기를,
+So that 오늘의 후보 화면에 여섯 전략 중 매칭된 것이 모두 배지로 노출된다.
+
+**Acceptance Criteria:**
+
+**Given** Story 7.2(스키마)·7.3(계산 API)가 완료된 경우
+**When** Story 2.5/6.6의 tagging stage가 실행되면
+**Then** 각 후보 종목에 대해 A/B/C/D/E/F 시그널을 모두 계산하고, 시그널이 발생한 모든 전략이 태그로 저장된다(다중 가능, 예 A∩F).
+
+**Given** Story 7.4가 완료되어 전략별 TP/SL/최대보유 조회가 가능한 경우
+**When** 이 태그가 Epic 3의 `emit_open_command`에 전달되면
+**Then** 진입가·TP/SL 판정에 전략 F의 청산조건이 정확히 적용된다.
+
+### Story 7.6: UI 확장 — 라벨·배지·라우트 (F)
+
+As a Neo,
+I want 대시보드가 전략 F도 A/B/C/D/E와 동일하게 배지로 표시하기를,
+So that 카드에서 여섯 전략 중 매칭된 것을 한눈에 구분한다.
+
+**Acceptance Criteria:**
+
+**Given** `apps/web/lib/strategy-labels.ts`의 `STRATEGY_LABEL`이 A/B/C/D/E로 한정된 경우
+**When** F 라벨을 추가하면
+**Then** `StrategyTagList.tsx`가 여섯 전략 모두를 UX-DR7 규칙(가로 나열, 좁은 폭에서 `+N` 접힘)대로 렌더링한다.
+
+**Given** `/strategies/[strategy]` 라우트가 A/B/C/D/E만 검증하는 경우
+**When** F 경로를 추가하면
+**Then** 전략 설명/성과 페이지가 정상 렌더링되고, 정의되지 않은 전략 코드는 여전히 404 처리된다.
+
+**Given** 배지 색상 체계에 F가 추가되는 경우
+**When** 접근성을 재확인하면
+**Then** 색상만으로 전략을 구분하지 않고(UX-DR14), 텍스트 라벨이 항상 함께 제공된다.
+
+### Story 7.7: OOS(워크포워드) 검증 — 전략 F
+
+As a Neo,
+I want 전략 F가 프로덕션 반영 전에 표본 외 검증을 거치기를,
+So that 문서가 스스로 권고한 과적합 확인 절차 없이 실전에 투입되는 리스크를 줄인다.
+
+**Acceptance Criteria:**
+
+**Given** 전략 F가 Story 7.1로 코드화된 경우
+**When** OOS(워크포워드) 검증을 수행하면(D/E와 동일 방식: in-sample 2020-08-03~2024-08-27 / holdout 2024-08-28~2026-08-27)
+**Then** in-sample과 holdout 구간의 승률·PF가 기록되고, in-sample 대비 과도한 하락이 있는지 문서화된다(`backtest-baseline.md` F절에 OOS 결과 병기).
+
+**Given** OOS 검증 결과가 in-sample 대비 크게 열화된 경우
+**When** Neo가 이를 검토하면
+**Then** 파라미터 재조정 또는 전략 F 보류 여부를 결정하고 그 결정을 `backtest-baseline.md`에 기록한다.
+
+**Given** OOS 검증이 아직 완료되지 않은 상태에서 Story 7.5(태깅 stage 반영)를 먼저 진행해야 하는 경우(예: 일정상 병행)
+**When** 이 상태를 대시보드/문서에 반영하면
+**Then** "OOS 미검증" 상태임이 `sprint-change-proposal-2026-09-07.md`의 Open Risk로 추적되고, 이후 검증 완료 시 그 결과로 갱신된다.
