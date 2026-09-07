@@ -19,7 +19,7 @@ class CandidateTag:
     """candidate_tags 테이블에 저장할 단일 태그 행."""
 
     candidate_id: str
-    strategy: str  # "A" | "B" | "C"
+    strategy: str  # "A" | "B" | "C" | "D" | "E"
     signal_date: date
     attempt_run_id: str
     params_meta: dict[str, Any] | None = None

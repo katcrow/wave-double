@@ -1,7 +1,7 @@
-"""Story 2.5: 후보 태깅 stage 오케스트레이터.
+"""Story 2.5/6.6: 후보 태깅 stage 오케스트레이터.
 
-candidates stage(screen)가 성공/부분성공한 뒤, 후보 모집단 한정으로 전략 A/B/C
-시그널을 계산하고 ``candidate_tags``에 저장한다.
+candidates stage(screen)가 성공/부분성공한 뒤, 후보 모집단 한정으로 전략
+A/B/C/D/E 시그널을 계산하고 ``candidate_tags``에 저장한다.
 
 ``ineligible``(이력 부족)과 ``error``(로딩 실패/``SIGNAL_COMPUTE_ERROR``)를 명확히
 구분해 집계한다 -- 전자는 정상적으로 태깅 대상에서 제외된 것이고, 후자만 stage
@@ -29,7 +29,7 @@ from .candidate_tags_repository import CandidateTag, TagsRepositoryProtocol
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway
 
-_STRATEGY_KEYS = ("A", "B", "C")
+_STRATEGY_KEYS = ("A", "B", "C", "D", "E")
 
 
 class TagsClient(Protocol):
@@ -263,6 +263,8 @@ def run_tags_stage(
 def _build_params_meta(batch_kind: str) -> dict[str, Any]:
     """시그널 계산 파라미터 스냅샷을 생성한다(재현성 검증용)."""
     from backtest.indicator_opt.combine_strategies import DIV3, STOCH_DB
+    from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
+    from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
     from backtest.indicator_opt.union import TOP3, VOLUME
 
     return {
@@ -278,6 +280,8 @@ def _build_params_meta(batch_kind: str) -> dict[str, Any]:
         ],
         "strategy_b_stoch_db": STOCH_DB,
         "strategy_c_div3": DIV3,
+        "strategy_d_params": STRATEGY_D_PARAMS.as_dict(),
+        "strategy_e_params": STRATEGY_E_PARAMS.as_dict(),
         "min_history_days": MIN_HISTORY_TRADING_DAYS,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
