@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from ..indicators import angle_k, sma as _inds_sma
+
 
 @dataclass
 class SimpleSignal:
@@ -90,6 +92,53 @@ def sig_hma_turn(df, n=9):
     raw = 2 * _wma(df["Close"], half) - _wma(df["Close"], n)
     hma = _wma(raw, sqrtn)
     return _turn_up(hma)
+
+
+def _linreg_slope(series: pd.Series, window: int) -> pd.Series:
+    """최소제곱법 선형회귀 기울기 (rolling).
+
+    window 구간 내 시계열을 t=0..window-1 에 대해 회귀한 기울기 반환.
+    기울기 m = Σ(t-ᵗ̄)(y-ȳ) / Σ(t-ᵗ̄)² , 이동평균 대비 노이즈에 강건.
+    """
+    if window < 2:
+        window = 2
+    t = np.arange(window, dtype=float)
+    t_mean = t.mean()
+    t_centered = t - t_mean
+    denom = np.dot(t_centered, t_centered)
+    if denom == 0:
+        return pd.Series(np.nan, index=series.index)
+    return series.rolling(window, min_periods=window).apply(
+        lambda y: float(np.dot(y - y.mean(), t_centered) / denom), raw=True
+    )
+
+
+def sig_angle_accel(df, ma_window=20, k=5, accel_window=5, min_angle_delta=5.0):
+    """MA 각도 가속: 특정 기간 동안 상승 각도가 지정 도수 이상 가파라짐.
+
+    - angle = angle_k(SMA(ma_window), k)  (기존 angle_k 재사용, 2점식)
+    - 가속 정의: 현재 각도 >= accel_window봉 전 각도 + min_angle_delta
+      (예: 저번주 20° → 이번주 30° = min_angle_delta=10)
+    - 부호 유지: 양수 우상향 가속, 음수 우하향 가속, 0 횡보
+    """
+    ma = _inds_sma(df["Close"], ma_window)
+    angle = angle_k(ma, k)
+    prev = angle.shift(accel_window)
+    return (angle >= prev + min_angle_delta).fillna(False)
+
+
+def sig_angle_accel_ls(df, window=20, accel_window=5, min_slope_delta=0.005):
+    """최소제곱법 각도 가속: 로그가격 선형회귀 기울기가 가파라짐.
+
+    - slope = linreg_slope(log(Close), window)  (일별 로그수익률 스케일)
+    - 가속 정의: slope >= slope.shift(accel_window) + min_slope_delta
+    - 2점식(angle_k) 대비 노이즈에 강건한 최소제곱 기울기 사용
+    """
+    close = df["Close"].astype(float)
+    log_close = np.log(close.replace(0.0, np.nan)).ffill()
+    slope = _linreg_slope(log_close, window)
+    prev = slope.shift(accel_window)
+    return (slope >= prev + min_slope_delta).fillna(False)
 
 
 def sig_macd(df, fast=12, slow=26, signal=9, require_zero=False):
@@ -660,6 +709,29 @@ def label(name: str) -> str:
 
 
 _REGISTRY: dict[str, dict] = {
+    "angle_accel": {
+        "label": "MA 각도 가속",
+        "fn": sig_angle_accel,
+        "names": ["ma_window", "k", "accel_window", "min_angle_delta"],
+        "grid": [
+            {"ma_window": mw, "k": k, "accel_window": aw, "min_angle_delta": delta}
+            for mw in (5, 10, 20, 30)
+            for k in (3, 5, 10)
+            for aw in (3, 5, 10)
+            for delta in (1.0, 2.0, 3.0, 5.0, 10.0, 20.0)
+        ],
+    },
+    "angle_accel_ls": {
+        "label": "최소제곱 각도 가속",
+        "fn": sig_angle_accel_ls,
+        "names": ["window", "accel_window", "min_slope_delta"],
+        "grid": [
+            {"window": w, "accel_window": aw, "min_slope_delta": d}
+            for w in (10, 20, 30)
+            for aw in (3, 5, 10)
+            for d in (0.002, 0.005, 0.01, 0.02)
+        ],
+    },
     "sma_gc": {
         "label": "SMA 골든크로스",
         "fn": sig_sma_gc,

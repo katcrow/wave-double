@@ -33,6 +33,7 @@ class TradeParams:
     atr_window: int = 14
     cost_rate: float = 0.0005  # 편도 수수료+슬리피지
     max_holding_bars: int | None = None  # None이면 데이터 끝까지 보유
+    tp_first: bool = False  # 같은 봉에 TP·SL 모두 닿으면 TP(이익) 우선 (기본: SL 우선, 보수적)
 
     def as_dict(self) -> dict:
         return {
@@ -41,6 +42,7 @@ class TradeParams:
             "atr_window": self.atr_window,
             "cost_rate": self.cost_rate,
             "max_holding_bars": self.max_holding_bars,
+            "tp_first": self.tp_first,
         }
 
 
@@ -75,12 +77,23 @@ def _exit_price_on_bar(
     close: float,
     tp: float,
     sl: float,
+    tp_first: bool = False,
 ) -> tuple[float, str]:
-    """봉 안에서 목표/손절 도달 판단. 손절 우선 (보수적)."""
-    if low <= sl:
-        return sl, EXIT_SL
-    if high >= tp:
-        return tp, EXIT_TP
+    """봉 안에서 목표/손절 도달 판단.
+
+    tp_first=True이면 같은 봉에 둘 다 닿을 때 익절 우선 (낙관적),
+    False(기본)이면 손절 우선 (보수적).
+    """
+    if tp_first:
+        if high >= tp:
+            return tp, EXIT_TP
+        if low <= sl:
+            return sl, EXIT_SL
+    else:
+        if low <= sl:
+            return sl, EXIT_SL
+        if high >= tp:
+            return tp, EXIT_TP
     return close, ""  # 미도달
 
 
@@ -153,7 +166,8 @@ def run_backtest(
 
         for t in range(e + 1, last_eval_idx + 1):
             px, reason = _exit_price_on_bar(
-                open_arr[t], high_arr[t], low_arr[t], close_arr[t], tp, sl
+                open_arr[t], high_arr[t], low_arr[t], close_arr[t], tp, sl,
+                trade_params.tp_first,
             )
             if reason:
                 exit_price, exit_reason = px, reason

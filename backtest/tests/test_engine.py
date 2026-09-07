@@ -79,6 +79,20 @@ def test_same_bar_tp_and_sl_takes_sl():
     assert trades[0].exit_price == pytest.approx(90.0)
 
 
+def test_same_bar_tp_and_sl_takes_tp_when_tp_first():
+    df = _df_from(
+        [
+            (100, 100, 100, 100, 10000),
+            (100, 101, 99, 100, 10000),
+            (100, 115, 85, 100, 20000),  # TP(110)·SL(90) 동시 도달 → tp_first면 익절 우선
+        ]
+    )
+    p = TradeParams(tp_atr=5.0, sl_atr=5.0, atr_window=1, tp_first=True)
+    trades = run_backtest(df, [_sig(df, 1)], p, ticker="T")
+    assert trades[0].exit_reason == EXIT_TP
+    assert trades[0].exit_price == pytest.approx(110.0)
+
+
 def test_no_tp_sl_exit_at_end():
     df = _df_from(
         [
