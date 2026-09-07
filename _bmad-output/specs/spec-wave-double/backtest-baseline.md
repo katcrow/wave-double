@@ -67,6 +67,43 @@ TP 15건은 비용 차감 후 +2.9%, SL 4건은 −5.1%로 기록되었다. 문�
 RSI는 2건/50.00%였다. 따라서 현재 저장소에서 확인 가능한 차이는 과거 스냅샷 또는
 보존되지 않은 원본 판정 구현의 차이로 남긴다.
 
+### 전략 D — OOS(워크포워드) 검증 (Story 6.8, 2026-09-07)
+
+`docs/돌파3%기법_추가.md`가 자체적으로 권고한 워크포워드 검증이다. 파라미터·엔진은
+변경하지 않고(`strategy_d.py`/`engine.py` 그대로), 전체 관측창(2020-08-03~2026-08-27)을
+in-sample(앞 4년, 2020-08-03~2024-08-27)과 OOS/holdout(뒤 2년, 이후 미사용 구간,
+2024-08-28~2026-08-27)으로 시간순 분할해 각각 재실행했다. 파라미터가 이 저장소
+데이터로 재적합된 적이 없으므로, 이 분할은 데이터 누출 방지가 아니라 "다른 시기에도
+같은 규칙이 유지되는가"를 확인하는 목적이다.
+
+실행 명령:
+
+```text
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_d --start 2020-08-03 --end 2024-08-27 --output backtest/results/indicator_opt/strategy_d_oos_insample.csv
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_d --start 2024-08-28 --end 2026-08-27 --output backtest/results/indicator_opt/strategy_d_oos_holdout.csv
+```
+
+| 구간 | 관측창 | 종목수 | 시그널 | 거래수 | 승 | 패 | 승률 | PF | 평균수익 | 월간 거래 | data_fingerprint |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| in-sample | 2020-08-03~2024-08-27 | 98 | 13 | 13 | 10 | 3 | 76.92% | 1.8954 | +1.054% | 0.2653 | `a0af62663042e97e89b299f7623003fadf2893fc9dcc46927890630e8edb9de7` |
+| OOS(holdout) | 2024-08-28~2026-08-27 | 104 | 4 | 4 | 3 | 1 | 75.00% | 1.7059 | +0.900% | 0.1600 | `302476fe706a6378b32914d87029bc41bd22546b75bfb237771f00283752bda7` |
+
+결과 CSV: `backtest/results/indicator_opt/strategy_d_oos_insample.csv`(+`_trades.csv`),
+`backtest/results/indicator_opt/strategy_d_oos_holdout.csv`(+`_trades.csv`). D는
+`strategy_d.py`가 fingerprint를 **윈도우 적용 후 프레임**에서 계산하므로(구간별로
+필터링된 유효 행이 다름) 두 구간의 fingerprint가 서로 다르며, 종목수(98→104)는
+일부 종목이 in-sample 구간 이후에 상장해 뒤 구간에서만 유효 데이터를 갖기 때문이다
+(`backtest/data/loader.py:25-50`).
+
+**해석:** 승률(76.92%→75.00%, −1.92%p)과 PF(1.8954→1.7059, −0.1895)는 소폭
+하락했으나 방향과 크기 모두 완만해 뚜렷한 과적합 신호로 보기 어렵다. 다만 OOS
+거래수가 4건으로 매우 적어(월간 신호 빈도 0.26건 기준 2년 구간에 예상 가능한
+범위) 승률·PF 단독으로 결론을 과신하지 않는다.
+
+**결정: 유지.** in-sample 대비 OOS 열화가 작고 승률/PF 모두 실전 채택 기준(승률
+>50%, PF>1)을 유지하므로 파라미터 재조정이나 전략 보류 없이 현재 상태를 유지한다.
+표본이 4건뿐이라는 한계는 이후 실전 거래가 누적되며 자연히 보강될 것으로 본다.
+
 ## 전략 E — 익절2%·고정 SL5% 기법
 
 전략 E는 `docs/익절2%_고정SL5%기법_추가.md:12-44`의 세 조건을 사용한다.
@@ -112,6 +149,45 @@ TP 14건은 비용 차감 후 +1.9%, SL 5건은 −5.1%로 기록되었다. 문�
 과거 데이터 스냅샷이나 기대치를 만든 원본 판정 코드가 없으므로 차이의 단일
 원인은 확정할 수 없다. 따라서 기대치와 현재 관측치를 분리해 기록하며, 코드
 근거 없는 일치를 주장하지 않는다.
+
+### 전략 E — OOS(워크포워드) 검증 (Story 6.8, 2026-09-07)
+
+`docs/익절2%_고정SL5%기법_추가.md`가 자체적으로 권고한 워크포워드 검증이다.
+전략 D와 동일하게 파라미터·엔진 변경 없이 전체 관측창을 in-sample(2020-08-03~
+2024-08-27)/OOS(holdout, 2024-08-28~2026-08-27)로 시간순 분할해 각각 재실행했다.
+
+실행 명령:
+
+```text
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_e --start 2020-08-03 --end 2024-08-27 --output backtest/results/indicator_opt/strategy_e_oos_insample.csv
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_e --start 2024-08-28 --end 2026-08-27 --output backtest/results/indicator_opt/strategy_e_oos_holdout.csv
+```
+
+| 구간 | 관측창 | 종목수 | 시그널 | 거래수 | 승 | 패 | 승률 | PF | 평균수익 | 월간 거래 | data_fingerprint |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| in-sample | 2020-08-03~2024-08-27 | 98 | 15 | 15 | 12 | 3 | 80.00% | 1.4902 | +0.500% | 0.3061 | `b2e027e0f8155d3fbabfd310f52c31e82afd1079722ed579e98207ca112e73a3` |
+| OOS(holdout) | 2024-08-28~2026-08-27 | 104 | 4 | 4 | 2 | 2 | 50.00% | 0.3725 | −1.600% | 0.1600 | `b2e027e0f8155d3fbabfd310f52c31e82afd1079722ed579e98207ca112e73a3` |
+
+결과 CSV: `backtest/results/indicator_opt/strategy_e_oos_insample.csv`(+`_trades.csv`),
+`backtest/results/indicator_opt/strategy_e_oos_holdout.csv`(+`_trades.csv`). E는
+`strategy_e.py:296-310`이 fingerprint를 **윈도우 적용 전 원본 전체 프레임**에서
+계산하므로(구간 분할은 신호·거래 필터링에만 적용) in-sample/OOS 두 실행의
+fingerprint가 동일하다 — 같은 104종목 parquet 원본을 사용했다는 근거이며 결함이
+아니다. 종목수 차이(98→104)는 전략 D와 같은 사유(일부 종목의 늦은 상장)다.
+
+**해석 — DEGRADED_OOS.** 승률은 80.00%→50.00%(−30.00%p), PF는 1.4902→0.3725로
+in-sample 대비 뚜렷하게 열화했고 OOS 평균수익은 −1.600%로 순손실 구간이다.
+다만 OOS 거래수가 4건(2승 2패)에 불과해 이 열화가 구조적 과적합인지 표본 변동인지
+통계적으로 판별할 수 없다. 수치를 은폐하지 않고 그대로 기록한다.
+
+**결정: 조건부 유지(모니터링 강화), 파라미터 재조정은 하지 않음.** 이 스토리
+범위는 검증·기록이며 파라미터 재조정은 하지 않는다(Boundaries & Constraints).
+표본이 4건뿐이라 즉시 보류를 결정할 만한 통계적 근거는 부족하나, 방향과 크기
+(승률 −30%p, PF<1로 하락)가 커 리스크로 명시적으로 추적한다: (1) 실전 태깅된
+전략 E 후보의 실제 outcome을 Epic 5 성과 비교 화면에서 우선 관찰 대상으로
+표시하고, (2) OOS 표본이 20건 이상 누적되는 시점에 재평가해 유지/재조정/보류를
+재결정한다. 재조정이 필요하다고 판단될 경우 실제 파라미터 변경은 이 스토리
+범위 밖의 별도 스토리로 남긴다.
 
 ## 백테스트 기대치 (104종목, 73개월, TP+3%/SL−3%)
 
