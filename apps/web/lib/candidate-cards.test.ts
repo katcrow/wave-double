@@ -41,6 +41,32 @@ test("2태그: 임계값과 정확히 같으면 접히지 않는다", () => {
   assert.equal(vm.hiddenStrategyCount, 0);
 });
 
+// I/O 매트릭스: D/E 포함 조합 -- 전략 D/E가 A/B/C와 동일한 방식으로 취급된다
+test("D 단독 태그: 그대로 visibleStrategies에 담기고 접힘 없음", () => {
+  const [vm] = buildCandidateCardViewModels([row({ strategies: ["D"] })]);
+  assert.deepEqual(vm.visibleStrategies, ["D"]);
+  assert.equal(vm.hiddenStrategyCount, 0);
+});
+
+test("E 단독 태그: 그대로 visibleStrategies에 담기고 접힘 없음", () => {
+  const [vm] = buildCandidateCardViewModels([row({ strategies: ["E"] })]);
+  assert.deepEqual(vm.visibleStrategies, ["E"]);
+  assert.equal(vm.hiddenStrategyCount, 0);
+});
+
+test("A∩D 조합: 두 태그 모두 표시되고 접힘 없음", () => {
+  const [vm] = buildCandidateCardViewModels([row({ strategies: ["A", "D"] })]);
+  assert.deepEqual(vm.visibleStrategies, ["A", "D"]);
+  assert.equal(vm.hiddenStrategyCount, 0);
+});
+
+// I/O 매트릭스: MULTI_TAG_5 -- A/B/C/D/E 5개 태그 모두 존재 시 MAX_VISIBLE_TAGS까지 표시 후 "+3" 접힘
+test("5태그(A/B/C/D/E) 동시 존재: 앞 2개만 보이고 나머지 3개는 hiddenStrategyCount로 접힌다", () => {
+  const [vm] = buildCandidateCardViewModels([row({ strategies: ["A", "B", "C", "D", "E"] })]);
+  assert.deepEqual(vm.visibleStrategies, ["A", "B"]);
+  assert.equal(vm.hiddenStrategyCount, 3);
+});
+
 // I/O 매트릭스: 부분결측 -- D0 행 존재, investor_net_status pending/missing
 test("부분결측: supply_partial_missing=true가 그대로 전달된다", () => {
   const [vm] = buildCandidateCardViewModels([row({ supply_partial_missing: true })]);

@@ -1,8 +1,9 @@
 import type { TodayCandidateCardRow } from "./dashboard-types.ts";
 
 /**
- * Design Notes: 전략은 A/B/C 3종뿐이라 어떤 조합도 최소 지원 폭에서 한 줄에 들어간다.
- * 3태그 케이스에서만 `+1`이 나타나며, 반응형 폭 측정(ResizeObserver 등)은 쓰지 않는 고정 임계값이다.
+ * Design Notes: 전략은 A~E까지 가변 개수로 태깅될 수 있다(현재 최대 5종).
+ * MAX_VISIBLE_TAGS를 초과하는 나머지는 태그 개수와 무관하게 "+N" 배지로 접힌다
+ * (5태그 동시 존재 시 `+3`). 반응형 폭 측정(ResizeObserver 등)은 쓰지 않는 고정 임계값이다.
  */
 export const MAX_VISIBLE_TAGS = 2;
 
@@ -12,7 +13,7 @@ export interface CandidateCardViewModel {
   name: string | null;
   /** 렌더링용 표시 이름. name이 null이면 ticker로 대체(row.name ?? row.ticker). */
   displayName: string;
-  /** 정렬된(A/B/C) 태그 중 MAX_VISIBLE_TAGS개까지. */
+  /** 정렬된(A~E, 가변 개수) 태그 중 MAX_VISIBLE_TAGS개까지. */
   visibleStrategies: string[];
   /** visibleStrategies에서 접힌 나머지 태그 수. 0이면 "+N" 배지를 렌더링하지 않는다. */
   hiddenStrategyCount: number;
