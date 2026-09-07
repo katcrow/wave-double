@@ -81,11 +81,30 @@ begin
   end;
   if not caught then raise exception 'candidate_tags FK(candidate_id, attempt_run_id) was not enforced'; end if;
 
-  -- strategy는 A|B|C|D|E만 허용.
+  -- Story 7.2: strategy F도 허용된다.
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (candidate_id, run_id, 'F', date '2099-04-01');
+  if (select count(*) from public.candidate_tags where attempt_run_id = run_id) <> 6 then
+    raise exception 'expected six A/B/C/D/E/F tags for the same candidate';
+  end if;
+  if (select status from public.candidate_tags where attempt_run_id = run_id and strategy = 'F') <> 'active' then
+    raise exception 'expected F tag to receive status=active by default';
+  end if;
+
+  -- 신규 전략 F에도 동일한 attempt-scoped UNIQUE가 적용된다.
   caught := false;
   begin
     insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
       values (candidate_id, run_id, 'F', date '2099-04-01');
+  exception when unique_violation then caught := true;
+  end;
+  if not caught then raise exception 'duplicate F tag was accepted'; end if;
+
+  -- strategy는 A|B|C|D|E|F만 허용.
+  caught := false;
+  begin
+    insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+      values (candidate_id, run_id, 'G', date '2099-04-01');
   exception when check_violation then caught := true;
   end;
   if not caught then raise exception 'invalid strategy value was accepted'; end if;
