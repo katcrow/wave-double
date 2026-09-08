@@ -3,6 +3,7 @@ import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
 import { buildCandidateCardViewModels } from "@/lib/candidate-cards";
+import { isCandidateEvidenceRpcRow } from "@/lib/candidate-evidence";
 import type { CandidateEvidenceRpcRow } from "@/lib/dashboard-types";
 import { isIntradaySnapshot } from "@/lib/dashboard-types";
 import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
@@ -58,7 +59,7 @@ export default async function HomePage() {
     if (evidenceError) {
       candidateEvidenceFetchFailed = true;
       console.error("get_candidate_evidence failed", evidenceError);
-    } else if (Array.isArray(evidenceRows)) {
+    } else if (Array.isArray(evidenceRows) && evidenceRows.every(isCandidateEvidenceRpcRow)) {
       candidateEvidenceById = new Map(
         (evidenceRows as CandidateEvidenceRpcRow[]).map((row) => [row.candidate_id, row])
       );

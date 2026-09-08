@@ -3,7 +3,9 @@ import { test } from "node:test";
 import {
   formatEvidenceDateTime,
   formatEvidenceNumber,
+  formatEvidenceSummary,
   formatEvidenceValue,
+  isCandidateEvidenceRpcRow,
   normalizeCandidateEvidence,
 } from "./candidate-evidence.ts";
 import type { CandidateEvidenceRpcRow } from "./dashboard-types.ts";
@@ -50,6 +52,12 @@ test("pending과 missing은 숫자 0과 구분되는 상태 문구로 표시한�
   assert.equal(formatEvidenceValue(0, "missing"), "미수집");
 });
 
+test("pending/missing 슬롯은 하나의 부분결측 요약으로 함께 표시한다", () => {
+  assert.equal(formatEvidenceSummary(["D-2"], ["D-1"]), "부분결측 · 미수집 1행(D-2) · 미확정 1행(D-1)");
+  assert.equal(formatEvidenceSummary([], ["D0"]), "부분결측 · 미확정 1행(D0)");
+  assert.equal(formatEvidenceSummary([], []), "");
+});
+
 test("근거를 D0/D-1/D-2 세 슬롯으로 정규화하고 없는 슬롯을 missing으로 채운다", () => {
   const model = normalizeCandidateEvidence(evidence({ rows: [row({ slot: "D-1" })] }));
   assert.deepEqual(model.slots.map((slot) => [slot.slot, slot.status]), [
@@ -58,6 +66,7 @@ test("근거를 D0/D-1/D-2 세 슬롯으로 정규화하고 없는 슬롯을 mis
     ["D-2", "missing"],
   ]);
   assert.equal(model.missingSlotCount, 2);
+  assert.deepEqual(model.missingSlots, ["D0", "D-2"]);
   assert.equal(model.hasRows, true);
 });
 
@@ -89,4 +98,16 @@ test("행이 없으면 정상 데이터로 위장하지 않고 빈 상태로 표
   assert.equal(model.collectedAt, null);
   assert.equal(formatEvidenceNumber(null), "미수집");
   assert.equal(formatEvidenceDateTime(null), "시각 미상");
+});
+
+test("지원되지 않는 슬롯만 있으면 근거 행이 없는 것으로 처리한다", () => {
+  const model = normalizeCandidateEvidence(evidence({ rows: [{ ...row(), slot: "D3" as never }] }));
+  assert.equal(model.hasRows, false);
+  assert.equal(model.missingSlotCount, 3);
+});
+
+test("RPC 응답 shape가 깨지면 렌더 전에 거부한다", () => {
+  assert.equal(isCandidateEvidenceRpcRow(evidence()), true);
+  assert.equal(isCandidateEvidenceRpcRow({ ...evidence(), rows: null }), false);
+  assert.equal(isCandidateEvidenceRpcRow({ ...evidence(), rows: [{ ...row(), close: "70000" }] }), false);
 });

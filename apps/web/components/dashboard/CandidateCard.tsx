@@ -26,6 +26,15 @@ export default function CandidateCard({
 }) {
   const [open, setOpen] = useState(false);
   const panelId = `candidate-evidence-${candidate.candidateId}`;
+  const headingId = `${panelId}-heading`;
+
+  function handleCardClick(event: React.MouseEvent<HTMLLIElement>) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest("a, button, .candidate-evidence-panel")) {
+      return;
+    }
+    setOpen((current) => !current);
+  }
 
   return (
     <li
@@ -38,20 +47,26 @@ export default function CandidateCard({
           .filter(Boolean)
           .join(" ")
       }
+      onClick={handleCardClick}
     >
+      <div className="candidate-card__header">
+        <h2 id={headingId} className="candidate-card__name">{candidate.displayName}</h2>
+        <span className="candidate-card__ticker">{candidate.ticker}</span>
+      </div>
       <button
         type="button"
         className="candidate-card__toggle"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={`${candidate.displayName} 근거 패널 ${open ? "닫기" : "열기"}`}
-        onClick={() => setOpen((current) => !current)}
+        aria-labelledby={`${headingId} ${panelId}-toggle-label`}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((current) => !current);
+        }}
       >
-        <span className="candidate-card__header">
-          <span className="candidate-card__name">{candidate.displayName}</span>
-          <span className="candidate-card__ticker">{candidate.ticker}</span>
+        <span id={`${panelId}-toggle-label`} className="candidate-card__toggle-hint">
+          {open ? "근거 닫기" : "근거 보기"}
         </span>
-        <span className="candidate-card__toggle-hint">{open ? "근거 닫기" : "근거 보기"}</span>
       </button>
       {candidate.isFullyVanished && (
         <p className="candidate-card__badge candidate-card__badge--vanished">시그널 소멸</p>

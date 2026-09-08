@@ -40,7 +40,7 @@ begin
     candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
     foreign_net, institution_net, individual_net, program_net, investor_net_status, collected_at
   ) values
-    (first_candidate, first_run, date '2099-06-08', 'D-2', 68000, 100, 1, 0, 0, 0, 0, 'confirmed', timestamptz '2099-06-10 01:00:00+00'),
+    (first_candidate, first_run, date '2099-06-08', 'D-2', 68000, 100, 1, null, null, null, null, 'missing', timestamptz '2099-06-10 01:00:00+00'),
     (first_candidate, first_run, date '2099-06-09', 'D-1', 69000, 110, 1.4, null, null, null, null, 'pending', timestamptz '2099-06-10 02:00:00+00'),
     (first_candidate, first_run, date '2099-06-10', 'D0', 70000, 120, 1.45, 0, 200, -200, 0, 'confirmed', timestamptz '2099-06-10 03:00:00+00'),
     -- 같은 attempt의 과거 D0는 최신 슬롯 1행 선택에서 제외되어야 한다.
@@ -73,6 +73,10 @@ begin
      or (candidate_result->'rows'->1->>'foreign_net') is not null then
     raise exception 'pending status/null investor values were not preserved: %', candidate_result->'rows'->1;
   end if;
+  if candidate_result->'rows'->2->>'investor_net_status' <> 'missing'
+     or (candidate_result->'rows'->2->>'program_net') is not null then
+    raise exception 'missing status/null investor values were not preserved: %', candidate_result->'rows'->2;
+  end if;
 
   result := public.get_candidate_evidence(second_run);
   if jsonb_array_length(result) <> 1 or (result->0->>'candidate_id') <> second_candidate::text then
@@ -86,8 +90,27 @@ begin
   select e into candidate_result
   from jsonb_array_elements(result) e
   where e->>'candidate_id' = other_candidate::text;
+  if candidate_result is null then
+    raise exception 'fallback candidate was not returned: %', result;
+  end if;
   if candidate_result->'sources' <> '[]'::jsonb or candidate_result->'rows' <> '[]'::jsonb then
     raise exception 'fallback candidate shape was not empty-source/empty-rows: %', candidate_result;
+  end if;
+
+  if not has_function_privilege('anon', 'public.get_candidate_evidence(uuid)'::regprocedure, 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.get_candidate_evidence(uuid)'::regprocedure, 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.get_candidate_evidence(uuid)'::regprocedure, 'EXECUTE') then
+    raise exception 'anon/authenticated/service_role execute grants are incomplete';
+  end if;
+  if exists (
+    select 1
+    from information_schema.routine_privileges
+    where specific_schema = 'public'
+      and routine_name = 'get_candidate_evidence'
+      and grantee = 'PUBLIC'
+      and privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'PUBLIC must not retain execute on get_candidate_evidence';
   end if;
 end $$;
 

@@ -353,13 +353,14 @@ a {
 }
 
 .candidate-card__toggle {
-  display: block;
-  width: 100%;
-  padding: 0;
-  background: transparent;
-  border: 0;
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   color: inherit;
-  text-align: left;
+  font: inherit;
+  text-align: center;
   cursor: pointer;
 }
 
@@ -398,7 +399,6 @@ a {
 
 .candidate-card__toggle-hint {
   display: block;
-  margin-top: var(--space-2);
   color: var(--color-accent);
   font-size: var(--font-size-label);
   font-weight: var(--font-weight-label);

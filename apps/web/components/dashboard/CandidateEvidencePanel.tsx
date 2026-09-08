@@ -2,6 +2,7 @@ import {
   evidenceSlotLabel,
   formatEvidenceDateTime,
   formatEvidenceNumber,
+  formatEvidenceSummary,
   formatEvidenceValue,
   normalizeCandidateEvidence,
 } from "@/lib/candidate-evidence";
@@ -45,14 +46,16 @@ export default function CandidateEvidencePanel({
             생성: <span>{fetchFailed ? "시각 미상" : formatEvidenceDateTime(viewModel.collectedAt)}</span>
           </p>
         </div>
-        {!fetchFailed && viewModel.hasRows && viewModel.missingSlotCount > 0 && (
-          <span className="candidate-evidence-panel__summary" role="status">
-            부분결측 · {viewModel.missingSlotCount}행이 미수집
-          </span>
-        )}
-        {!fetchFailed && viewModel.hasRows && viewModel.pendingSlotCount > 0 && (
-          <span className="candidate-evidence-panel__summary candidate-evidence-panel__summary--pending" role="status">
-            {viewModel.pendingSlotCount}행이 미확정
+        {!fetchFailed && evidence && (viewModel.missingSlotCount > 0 || viewModel.pendingSlotCount > 0) && (
+          <span
+            className={
+              viewModel.missingSlotCount > 0
+                ? "candidate-evidence-panel__summary"
+                : "candidate-evidence-panel__summary candidate-evidence-panel__summary--pending"
+            }
+            role="status"
+          >
+            {formatEvidenceSummary(viewModel.missingSlots, viewModel.pendingSlots)}
           </span>
         )}
       </header>
@@ -61,7 +64,7 @@ export default function CandidateEvidencePanel({
         <p className="candidate-evidence-panel__state" role="alert">
           근거 데이터를 불러오지 못했습니다.
         </p>
-      ) : !viewModel.hasRows ? (
+      ) : !evidence ? (
         <p className="candidate-evidence-panel__state" role="status">
           근거 데이터가 없습니다.
         </p>
@@ -72,11 +75,11 @@ export default function CandidateEvidencePanel({
             <thead>
               <tr>
                 <th scope="col">일자</th>
-                <th scope="col">종가</th>
-                <th scope="col">거래량</th>
-                <th scope="col">등락률</th>
+                <th scope="col">종가(원)</th>
+                <th scope="col">거래량(주)</th>
+                <th scope="col">등락률(%)</th>
                 {INVESTOR_COLUMNS.map(([, label]) => (
-                  <th scope="col" key={label}>{label}</th>
+                  <th scope="col" key={label}>{label}(주)</th>
                 ))}
               </tr>
             </thead>

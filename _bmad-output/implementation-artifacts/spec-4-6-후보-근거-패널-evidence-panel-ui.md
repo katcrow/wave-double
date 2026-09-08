@@ -6,11 +6,18 @@ status: 'done'
 baseline_revision: '9b84cc2a09b6295da7572a717a11f13b635dba52'
 baseline_commit: '9b84cc2a09b6295da7572a717a11f13b635dba52'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - 'C:/dev/wave-double/_bmad-output/implementation-artifacts/epic-4-context.md'
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      인증 보호 홈에서 실제 후보 카드의 클릭·Enter/Space 토글과 태그 링크를 자동화하는 브라우저 fixture가 없다.
+    evidence: |-
+      현재 e2e/home.spec.ts는 인증 세션을 발급하지 못해 미인증 redirect만 검증한다. 보호 라우트의 후보 데이터는 운영 Supabase fixture와 세션이 함께 필요하며, 이를 이번 스토리에서 임의로 생성하면 운영 데이터/인증 경계를 침범한다.
+    location: >-
+      e2e/home.spec.ts
+    severity: low
 ---
 
 <intent-contract>
@@ -48,7 +55,7 @@ deferred: []
 - `apps/web/components/dashboard/StrategyTagList.tsx` -- 카드 내부 링크를 유지해야 하는 기존 interactive child.
 - `apps/web/app/globals.css` -- dark console 토큰과 카드 그리드 스타일. panel/table의 상태·반응형·포커스 스타일을 여기에 추가한다.
 - `infra/supabase/migrations/202609022000_create_supply_3day.sql`, `202609011700_create_candidates.sql` -- supply 컬럼/status와 candidate provenance의 read 계약. 기존 파일은 read-only다.
-- `infra/supabase/migrations/202609081200_create_get_candidate_evidence.sql` -- 새 `get_candidate_evidence(p_run_id uuid)` security-definer read RPC 및 role grant를 forward-only로 추가한다.
+- `infra/supabase/migrations/202609081200_create_get_candidate_evidence.sql`, `infra/supabase/migrations/202609081201_harden_get_candidate_evidence_attempt_scope.sql` -- 새 `get_candidate_evidence(p_run_id uuid)` security-definer read RPC와 attempt 복합 경계 보강, role grant를 forward-only로 추가한다.
 - `tests/sql/test_get_candidate_evidence.sql`, `.github/workflows/test.yml` -- active 후보·3행 순서·source fallback·pending/missing/null/attempt 격리 SQL 회귀를 실제 fixture로 실행한다.
 - `apps/web/lib/candidate-evidence.ts` 및 테스트 -- 슬롯 정규화, 상태 라벨, 숫자/시간 표시를 순수 함수로 분리해 UI 경계를 검증한다.
 - `e2e/home.spec.ts` -- 인증 세션 fixture가 가능할 때 카드 토글/키보드/태그 링크의 브라우저 검증 지점. 현재 저장소 인증 제약이면 기존 redirect와 함께 명시적으로 skip 사유를 남긴다.
@@ -56,7 +63,7 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `infra/supabase/migrations/202609081200_create_get_candidate_evidence.sql` -- 활성 후보별 provenance와 attempt-scoped supply rows를 D0 우선 JSON으로 반환하는 RPC, search_path 고정, public 실행권한 회수 및 허용 role grant를 추가한다.
+- [x] `infra/supabase/migrations/202609081200_create_get_candidate_evidence.sql`, `infra/supabase/migrations/202609081201_harden_get_candidate_evidence_attempt_scope.sql` -- 활성 후보별 provenance와 attempt-scoped supply rows를 D0 우선 JSON으로 반환하는 RPC, search_path 고정, public 실행권한 회수 및 허용 role grant를 추가한다.
 - [x] `apps/web/lib/dashboard-types.ts`, `packages/read-model/src/database.types.ts` -- evidence RPC의 후보/행 타입과 함수 시그니처를 추가한다.
 - [x] `apps/web/lib/candidate-evidence.ts` -- D0/D-1/D-2 정규화, missing/pending 상태와 partial 요약, 안전한 표시 포맷을 순수 함수로 구현한다.
 - [x] `apps/web/components/dashboard/CandidateEvidencePanel.tsx`, `CandidateCard.tsx` -- 접근 가능한 카드 토글과 source/collected-at 단일 헤더, 부분결측 배지, 근거 표를 구현한다.
@@ -77,6 +84,27 @@ deferred: []
 ## Review Triage Log
 
 - 2026-09-08: 자동 리뷰어 서브에이전트를 사용할 수 없는 런타임이라 수동 diff·경계 검토로 대체했으며, 확정된 finding은 0건이다.
+- 정정: 위 초기 기록과 달리 최종 review pass에서는 사용 가능한 4개 렌즈 서브에이전트의 결과를 수집했고, 수동 triage로 patch/defer/dismiss를 확정했다.
+
+### 2026-09-08 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 6 (medium 5, low 1)
+- defer: 1 (low 1)
+- dismissed:
+  - 공개 read RPC가 임의 run_id를 받을 수 있다는 주장 — 기존 get_today_candidate_cards/get_dashboard_snapshot과 동일한 publishable-key read 계약이며, 이 스토리의 명시 계약은 complete snapshot에서 받은 attempt의 데이터 격리이지 unpublished run 차단이 아니다.
+  - 동일 가중치 source의 표준 우선순위가 없다는 주장 — 후보 provenance 계약에는 가중치 내림차순과 source명 tie-break만 있고 t1859 우선 규칙은 존재하지 않아 현재 정렬은 결정적이다.
+  - 토글 accessible name에 전략·수급 상태까지 모두 넣어야 한다는 주장 — 토글은 후보명과 열림/닫힘 동작을 명시하고 전략·상태는 별도 형제 콘텐츠로 노출하며 해당 요구는 AC에 없다.
+  - 동일 candidate_id의 여러 attempt 오염을 fixture로 증명하지 못했다는 주장 — candidates.candidate_id가 전역 primary key라 동일 ID 재사용은 현재 스키마에서 삽입 불가능하고, 실제 SQL은 candidate_id+attempt_run_id 복합 조건을 모두 사용한다.
+  - 빈 근거 행이면 결측 표가 표시되지 않는다는 주장 — 현재 분기는 evidence 객체 부재와 rows=[]를 구분하며 rows=[]인 active 후보는 정규화된 3개 미수집 슬롯 표를 렌더한다.
+  - 동일 슬롯·거래일·수집시각 tie가 비결정적이라는 주장 — supply_3day의 (candidate_id, trading_day, attempt_run_id) unique 제약으로 동일 슬롯·거래일 중복이 불가능하고 RPC는 trading_day/collected_at로 결정적으로 최신 행을 고른다.
+- addressed_findings:
+  - `[medium]` `[patch]` 카드의 header만 클릭 가능해 카드 본문 클릭이 근거 패널을 열지 못함 — 카드 root의 비대화형 영역 클릭을 토글에 연결하고 태그 링크·패널·버튼 이벤트는 보호했다.
+  - `[medium]` `[patch]` 카드 종목명이 span으로 바뀌어 후보 목록의 h2 시맨틱이 사라짐 — h2를 복원하고 토글은 aria-labelledby로 후보명을 참조하도록 수정했다.
+  - `[medium]` `[patch]` malformed evidence RPC 응답이 unchecked cast 후 SSR 예외를 낼 수 있음 — RPC row 런타임 타입 가드와 실패 상태 연결을 추가했다.
+  - `[medium]` `[patch]` 부분결측 요약이 어느 슬롯인지 알려주지 않음 — 미수집/미확정 각각의 행 수와 D0/D-1/D-2 슬롯명을 함께 표시하도록 보강했다.
+  - `[medium]` `[patch]` SQL fixture가 explicit missing 상태와 함수 role ACL을 검증하지 않음 — missing null payload, anon/authenticated/service_role 허용 및 PUBLIC 거부 assertion을 추가했다.
+  - `[low]` `[patch]` attempt 복합 경계 보강 migration이 구현 명세 Code Map에 누락됨 — 202609081201 forward-only migration을 Code Map/Execution에 기록했다.
 
 ## Design Notes
 
@@ -103,6 +131,7 @@ deferred: []
 
 - active 후보만 provenance와 슬롯별 최신 행으로 반환하며 함수 search_path와 권한을 고정한다.
   [migration.sql:6](../../infra/supabase/migrations/202609081200_create_get_candidate_evidence.sql#L6)
+  [harden-migration.sql:6](../../infra/supabase/migrations/202609081201_harden_get_candidate_evidence_attempt_scope.sql#L6)
 
 **근거 정규화와 접근성 UI**
 
@@ -129,3 +158,11 @@ deferred: []
 - RPC 함수 시그니처와 브라우저 인증 제약의 검증 범위를 확인한다.
   [database.types.ts:691](../../packages/read-model/src/database.types.ts#L691)
   [home.spec.ts:10](../../e2e/home.spec.ts#L10)
+
+## Auto Run Result
+
+- implementation: 후보 카드에 attempt-scoped evidence RPC와 D0/D-1/D-2 패널을 연결하고, confirmed/pending/missing/0 표시·provenance·생성 시각·접근성 토글·반응형 다크 UI를 구현했다.
+- hardening: malformed RPC 응답 가드, 카드 본문 클릭과 키보드 토글, h2 시맨틱, 슬롯별 결측 요약, explicit missing 및 role ACL SQL 회귀, attempt 경계 보강 forward-only migration을 반영했다.
+- review: intent_gap 0, bad_spec 0, patch 6, defer 1 low, dismissed 6. deferred 항목은 인증 후보 fixture 부재로 보호 홈의 실제 후보 카드 상호작용을 자동화하지 못한 브라우저 검증이다.
+- verification: `npm test` 86 passed, `npm run typecheck` passed, `npm run build` passed, `npx playwright test e2e/home.spec.ts` 2 passed, Playwright MCP로 `/`, `/tracking`, `/runs` 렌더링 및 콘솔 error 0건을 확인했다. 운영 Supabase 프로젝트에 202609081201 migration을 적용하고 SQL fixture가 `story_4_6_candidate_evidence: pass`를 반환했으며 함수 ACL도 검증했다.
+- residual: Supabase advisor의 기존 `trading_calendar` RLS 경고와 의도된 read RPC SECURITY DEFINER 경고는 이번 스토리 범위 밖이라 변경하지 않았다.
