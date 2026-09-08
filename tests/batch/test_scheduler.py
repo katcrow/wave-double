@@ -391,6 +391,66 @@ def test_supply_stage_runs_after_tags_with_tagged_candidates():
     assert [call[1]["p_status"] for call in supply_stage_calls] == ["running", "success"]
 
 
+def test_intraday_scheduler_keeps_all_zero_d0_pending_and_retries_semantically():
+    """실제 intraday scheduler 경로가 batch kind를 전달해 D0 all-zero를 pending으로 저장한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    d2, d1, d0 = date(2026, 8, 28), date(2026, 8, 31), date(2026, 9, 1)
+    repo = FakeRepository(
+        cached={d0: cached_open},
+        recent_open_days=[d0, d1, d2],
+    )
+    attempt = attempt_payload("intraday:2026-09-01:09:30")
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    from collections import namedtuple
+    from apps.batch.ls_supply_provider import SupplyBar
+    from apps.batch.ls_program_supply_provider import ProgramSupplyBar
+
+    TaggedRow = namedtuple("TaggedRow", ["candidate_id", "ticker"])
+    zero_bars = [
+        SupplyBar(d2, 100.0, 1.0, 1000.0, -10.0, 20.0, 30.0),
+        SupplyBar(d1, 101.0, 1.5, 1100.0, -11.0, 21.0, 31.0),
+        SupplyBar(d0, 102.0, 2.0, 1200.0, 0.0, 0.0, 0.0),
+    ]
+    deps = tags_deps(
+        tagged_candidate_rows=[TaggedRow("c1", "005930")],
+        supply_by_ticker={"005930": zero_bars},
+    )
+    deps["program_supply_provider"] = FakeProgramSupplyProvider({
+        "005930": [
+            ProgramSupplyBar(d2, 10.0),
+            ProgramSupplyBar(d1, 20.0),
+            ProgramSupplyBar(d0, 0.0),
+        ]
+    })
+
+    result = run_scheduled_batch(
+        BatchKind.INTRADAY,
+        datetime(2026, 9, 1, 9, 30),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+    )
+
+    assert result.status == "success"
+    assert result.supply_status == "success"
+    assert deps["supply_provider"].calls == [("005930", d2, d0), ("005930", d2, d0)]
+    assert deps["program_supply_provider"].calls == [("005930", d2, d0), ("005930", d2, d0)]
+    rows = {row.slot: row for row in deps["supply_repository"].upsert_calls[0]}
+    assert rows["D0"].investor_net_status == "pending"
+    assert (rows["D0"].foreign_net, rows["D0"].institution_net,
+            rows["D0"].individual_net, rows["D0"].program_net) == (None, None, None, None)
+
+
 def test_supply_stage_failure_surfaces_in_scheduler_result_and_blocks_publish():
     """supply stage가 failed로 종결되면 배치 전체 결과도 failed여야 하고 publish_attempt는 호출되지 않는다."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))

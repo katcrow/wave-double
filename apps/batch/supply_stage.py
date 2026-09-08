@@ -75,7 +75,7 @@ def run_supply_stage(
     fence_token: int | str,
     lease_token: UUID | str,
     trading_day: date,
-    batch_kind: BatchKind | str = BatchKind.CLOSE,
+    batch_kind: BatchKind | str = BatchKind.INTRADAY,
 ) -> SupplyStageResult:
     """supply stage를 실행한다.
 
@@ -89,6 +89,8 @@ def run_supply_stage(
     fence_int = int(fence_token)
     run_id_str = str(run_id)
     kind = batch_kind if isinstance(batch_kind, BatchKind) else BatchKind(batch_kind)
+    if kind is BatchKind.PREMARKET:
+        raise ValueError("supply stage does not support premarket batches")
 
     gateway.write_stage(
         run_uuid, Stage.SUPPLY_3DAY, fence_int, lease_uuid,

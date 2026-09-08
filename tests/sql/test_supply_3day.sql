@@ -42,7 +42,7 @@ begin
     raise exception 'confirmed actual zero investor values were not preserved';
   end if;
 
-  -- 정상 pending 삽입: 4컬럼 전부 NULL + investor_net_status='pending'(장중 미확정).
+  -- 정상 pending 삽입: 기존 D-1 행도 보존해 누적 attempt fixture를 유지한다.
   insert into public.supply_3day(
     candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct, investor_net_status
   ) values (
@@ -53,24 +53,41 @@ begin
   end if;
   if exists (
     select 1 from public.supply_3day
-    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-04-30'
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-04-30' and slot = 'D-1'
       and (foreign_net is not null or institution_net is not null or individual_net is not null or program_net is not null)
   ) then
     raise exception 'pending row must keep all four investor values NULL';
+  end if;
+
+  -- Story 4.4 guard contract: D0 pending도 직접 검증한다.
+  insert into public.supply_3day(
+    candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct, investor_net_status
+  ) values (
+    v_candidate_id, run_id, date '2099-05-01', 'D0', 72000, 1100000, 1.43, 'pending'
+  );
+  if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 3 then
+    raise exception 'expected direct D0 pending row to be inserted';
+  end if;
+  if exists (
+    select 1 from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-01' and slot = 'D0'
+      and (foreign_net is not null or institution_net is not null or individual_net is not null or program_net is not null)
+  ) then
+    raise exception 'D0 pending row must keep all four investor values NULL';
   end if;
 
   -- 정상 missing 삽입: 4컬럼 전부 NULL + investor_net_status='missing'(미수집).
   insert into public.supply_3day(
     candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct, investor_net_status
   ) values (
-    v_candidate_id, run_id, date '2099-05-01', 'D0', 72000, 1200000, 1.41, 'missing'
+    v_candidate_id, run_id, date '2099-05-04', 'D0', 72000, 1200000, 1.41, 'missing'
   );
-  if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 3 then
+  if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 4 then
     raise exception 'expected missing row to be inserted';
   end if;
   if exists (
     select 1 from public.supply_3day
-    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-01'
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-04' and slot = 'D0'
       and (foreign_net is not null or institution_net is not null or individual_net is not null or program_net is not null)
   ) then
     raise exception 'missing row must keep all four investor values NULL';

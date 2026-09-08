@@ -144,7 +144,7 @@ def _program_bars(*, missing_day: date | None = None, d0_program: float = 30.0) 
 
 def _run(
     rpc, tagged_fetcher, calendar_client, supply_provider, supply_repo, program_provider=None,
-    *, batch_kind=BatchKind.CLOSE,
+    *, batch_kind=None,
 ):
     gateway = RunStateGateway(rpc)
     run_id = uuid4()
@@ -153,9 +153,10 @@ def _run(
         program_provider = FakeProgramSupplyProvider({
             candidate.ticker: _program_bars() for candidate in tagged_fetcher.rows
         })
+    call_kwargs = {} if batch_kind is None else {"batch_kind": batch_kind}
     return run_supply_stage(
         gateway, tagged_fetcher, calendar_client, supply_provider, program_provider, supply_repo,
-        run_id, 1, lease_token, D0, batch_kind=batch_kind,
+        run_id, 1, lease_token, D0, **call_kwargs,
     )
 
 
@@ -213,7 +214,6 @@ def test_d0_all_zero_after_intraday_retry_is_pending_with_all_four_values_null()
 
     result = _run(
         FakeRpc(), fetcher, calendar, provider, repo, program_provider,
-        batch_kind=BatchKind.INTRADAY,
     )
 
     assert result.status == "success"
@@ -233,12 +233,32 @@ def test_d0_all_zero_after_close_retry_is_confirmed_actual_zero():
     program_provider = SequencedProvider({"005930": [_program_bars(d0_program=0.0), _program_bars(d0_program=0.0)]})
     repo = FakeSupplyRepo()
 
-    result = _run(FakeRpc(), fetcher, calendar, provider, repo, program_provider)
+    result = _run(FakeRpc(), fetcher, calendar, provider, repo, program_provider, batch_kind=BatchKind.CLOSE)
 
     assert result.status == "success"
     d0 = next(row for row in repo.saved if row.slot == "D0")
     assert d0.investor_net_status == "confirmed"
     assert (d0.foreign_net, d0.institution_net, d0.individual_net, d0.program_net) == (0.0, 0.0, 0.0, 0.0)
+
+
+def test_premarket_direct_supply_stage_call_is_rejected_before_confirmed_write():
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930")])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    provider = FakeSupplyProvider({"005930": _zero_d0_bars()})
+    program_provider = FakeProgramSupplyProvider({"005930": _program_bars(d0_program=0.0)})
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    with pytest.raises(ValueError, match="does not support premarket"):
+        _run(
+            rpc, fetcher, calendar, provider, repo, program_provider,
+            batch_kind=BatchKind.PREMARKET,
+        )
+
+    assert rpc.calls == []
+    assert provider.calls == []
+    assert program_provider.calls == []
+    assert repo.saved == []
 
 
 def test_semantic_retry_replaces_zero_d0_with_measured_values_and_preserves_zero_fields():
@@ -259,6 +279,86 @@ def test_semantic_retry_replaces_zero_d0_with_measured_values_and_preserves_zero
     d0 = next(row for row in repo.saved if row.slot == "D0")
     assert d0.investor_net_status == "confirmed"
     assert (d0.foreign_net, d0.institution_net, d0.individual_net, d0.program_net) == (12.0, -7.0, 0.0, 4.0)
+
+
+def test_all_zero_candidate_does_not_disrupt_normal_candidate_or_error_isolation():
+    fetcher = FakeTaggedFetcher([
+        FakeCandidateRow("zero", "005930"),
+        FakeCandidateRow("normal", "000660"),
+        FakeCandidateRow("failed", "035720"),
+    ])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    provider = FakeSupplyProvider({
+        "005930": _zero_d0_bars(),
+        "000660": _bars("000660"),
+        "035720": RuntimeError("t1702 unavailable"),
+    })
+    program_provider = FakeProgramSupplyProvider({
+        "005930": _program_bars(d0_program=0.0),
+        "000660": _program_bars(),
+    })
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, calendar, provider, repo, program_provider)
+
+    assert result.status == "partial"
+    assert result.error_count == 1
+    assert result.row_count == 6
+    assert result.unprocessed_tickers == ("035720",)
+    zero_rows = [row for row in repo.saved if row.candidate_id == "zero"]
+    normal_rows = [row for row in repo.saved if row.candidate_id == "normal"]
+    assert len(zero_rows) == len(normal_rows) == 3
+    assert next(row for row in zero_rows if row.slot == "D0").investor_net_status == "pending"
+    assert all(row.investor_net_status == "confirmed" for row in normal_rows)
+    assert not [row for row in repo.saved if row.candidate_id == "failed"]
+    stage_call = [call for call in rpc.calls if call[0] == "write_stage"][-1]
+    assert stage_call[1]["p_status"] == "partial"
+    assert stage_call[1]["p_result"]["unprocessed_tickers"] == ["035720"]
+
+
+@pytest.mark.parametrize(
+    "retry_outcome",
+    [
+        pytest.param(RuntimeError("semantic retry unavailable"), id="retry-exception"),
+        pytest.param(_zero_d0_bars()[:-1], id="retry-malformed-response"),
+    ],
+)
+def test_semantic_retry_failure_preserves_initial_prices_as_missing(retry_outcome):
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930")])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    initial_bars = _zero_d0_bars()
+    provider = SequencedProvider({"005930": [initial_bars, retry_outcome]})
+    program_provider = SequencedProvider({
+        "005930": [_program_bars(d0_program=0.0), _program_bars(d0_program=0.0)],
+    })
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(
+        rpc, fetcher, calendar, provider, repo, program_provider,
+        batch_kind=BatchKind.INTRADAY,
+    )
+
+    assert result.status == "partial"
+    assert result.error_count == 1
+    assert result.row_count == 3
+    assert result.unprocessed_tickers == ("005930",)
+    rows = {row.slot: row for row in repo.saved}
+    expected_prices = {
+        "D-2": (100.0, 1000.0, 1.0),
+        "D-1": (101.0, 1100.0, 1.5),
+        "D0": (102.0, 1200.0, 2.0),
+    }
+    for slot, (close, volume, change_pct) in expected_prices.items():
+        row = rows[slot]
+        assert (row.close, row.volume, row.change_pct) == (close, volume, change_pct)
+        assert row.investor_net_status == "missing"
+        assert (row.foreign_net, row.institution_net, row.individual_net, row.program_net) == (None, None, None, None)
+    stage_call = [call for call in rpc.calls if call[0] == "write_stage"][-1]
+    assert stage_call[1]["p_status"] == "partial"
+    assert stage_call[1]["p_result"]["unprocessed_tickers"] == ["005930"]
+    assert "semantic retry" in stage_call[1]["p_result"]["errors"][0]["message"]
 
 
 def test_f_only_and_multi_tag_candidates_each_make_one_supply_call():
@@ -405,6 +505,14 @@ def test_program_api_failure_is_error_others_still_saved():
     c1_rows = [row for row in repo.saved if row.candidate_id == "c1"]
     assert len(c1_rows) == 3
     assert all(row.investor_net_status == "missing" for row in c1_rows)
+    assert {
+        row.slot: (row.close, row.volume, row.change_pct)
+        for row in c1_rows
+    } == {
+        "D-2": (100.0, 1000.0, 1.0),
+        "D-1": (101.0, 1100.0, 1.5),
+        "D0": (102.0, 1200.0, 2.0),
+    }
     assert all(
         value is None
         for row in c1_rows
@@ -416,7 +524,7 @@ def test_program_api_failure_is_error_others_still_saved():
     assert write_stage_calls[-1][1]["p_result"]["errors"][0]["message"].startswith("t1637:")
 
 
-def test_program_missing_or_duplicate_day_is_error_without_partial_rows():
+def test_program_missing_or_duplicate_day_saves_missing_rows_without_silent_overwrite():
     fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
     calendar = FakeCalendarClient([D0, D1, D2])
     supply_provider = FakeSupplyProvider({"005930": _bars("005930"), "000660": _bars("000660")})
