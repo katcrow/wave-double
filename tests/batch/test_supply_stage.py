@@ -177,14 +177,19 @@ def test_f_only_and_multi_tag_candidates_each_make_one_supply_call():
     ])
     calendar = FakeCalendarClient([D0, D1, D2])
     provider = FakeSupplyProvider({"005930": _bars("005930"), "000660": _bars("000660")})
+    program_provider = FakeProgramSupplyProvider({"005930": _program_bars(), "000660": _program_bars()})
     repo = FakeSupplyRepo()
     rpc = FakeRpc()
 
-    result = _run(rpc, fetcher, calendar, provider, repo)
+    result = _run(rpc, fetcher, calendar, provider, repo, program_provider)
 
     assert result.status == "success"
     assert len(repo.saved) == 6
     assert provider.calls == [
+        ("005930", D2, D0),
+        ("000660", D2, D0),
+    ]
+    assert program_provider.calls == [
         ("005930", D2, D0),
         ("000660", D2, D0),
     ]
@@ -237,16 +242,18 @@ def test_per_ticker_api_failure_is_error_others_still_saved():
         "005930": RuntimeError("LS t1702 lookup failed: HTTP_ERROR"),
         "000660": _bars("000660"),
     })
+    program_provider = FakeProgramSupplyProvider({"000660": _program_bars()})
     repo = FakeSupplyRepo()
     rpc = FakeRpc()
 
-    result = _run(rpc, fetcher, calendar, provider, repo)
+    result = _run(rpc, fetcher, calendar, provider, repo, program_provider)
 
     assert result.status == "partial"
     assert result.result_code == "PARTIAL_SUPPLY"
     assert result.error_count == 1
     assert result.row_count == 3
     assert len(repo.saved) == 3
+    assert program_provider.calls == [("000660", D2, D0)]
     write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
     assert write_stage_calls[-1][1]["p_status"] == "partial"
     assert write_stage_calls[-1][1]["p_unprocessed_count"] == 1
@@ -268,7 +275,11 @@ def test_program_api_failure_is_error_others_still_saved():
     assert result.status == "partial"
     assert result.error_count == 1
     assert result.row_count == 3
+    assert result.unprocessed_tickers == ("005930",)
     assert all(row.candidate_id == "c2" for row in repo.saved)
+    write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
+    assert write_stage_calls[-1][1]["p_result"]["unprocessed_tickers"] == ["005930"]
+    assert write_stage_calls[-1][1]["p_result"]["errors"][0]["message"].startswith("t1637:")
 
 
 def test_program_missing_or_duplicate_day_is_error_without_partial_rows():
@@ -421,6 +432,19 @@ def test_calendar_lookup_failure_records_failed_stage():
 def test_calendar_insufficient_trading_days_records_failed_stage():
     fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930")])
     calendar = FakeCalendarClient([D0, D1])  # only 2, not 3
+    provider = FakeSupplyProvider({})
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, calendar, provider, repo)
+
+    assert result.status == "failed"
+    assert result.result_code == "CALENDAR_INSUFFICIENT_TRADING_DAYS"
+
+
+def test_calendar_duplicate_trading_day_records_failed_stage():
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930")])
+    calendar = FakeCalendarClient([D0, D1, D1])
     provider = FakeSupplyProvider({})
     repo = FakeSupplyRepo()
     rpc = FakeRpc()

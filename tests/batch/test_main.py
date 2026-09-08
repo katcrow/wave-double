@@ -115,6 +115,9 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
         captured["batch_kind"] = batch_kind
+        captured["ls_client"] = ls_client
+        captured["supply_provider"] = supply_provider
+        captured["program_supply_provider"] = program_supply_provider
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
         return SchedulerResult("success", "OK")
@@ -128,6 +131,8 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     assert result.status == "success"
     assert captured["batch_kind"] == "close"
+    assert captured["supply_provider"]._client is captured["ls_client"]
+    assert captured["program_supply_provider"]._client is captured["ls_client"]
     assert captured["trigger"] == Trigger.MANUAL
     assert captured["dispatch_request_id"] == "req-1"
 

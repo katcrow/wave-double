@@ -96,6 +96,20 @@ def test_upsert_rows_serializes_multiple_rows_in_order():
     assert [row["slot"] for row in body] == ["D-2", "D-1", "D0"]
 
 
+def test_upsert_rows_preserves_non_null_program_net():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(201, json={})
+
+    repo = make_repo(handler)
+    assert repo.upsert_rows([_row(program_net=-1234.0)]) == 1
+
+    body = json.loads(seen[0].content)
+    assert body[0]["program_net"] == -1234.0
+
+
 def test_upsert_rows_raises_on_http_error():
     def handler(request):
         return httpx.Response(500, json={"message": "boom"})

@@ -60,6 +60,7 @@ class SupplyStageResult:
     error_count: int = 0
     candidate_count: int = 0
     run_id: str | None = None
+    unprocessed_tickers: tuple[str, ...] = ()
 
 
 def run_supply_stage(
@@ -116,7 +117,10 @@ def run_supply_stage(
             "CALENDAR_LOOKUP_FAILED", str(exc), run_id_str,
         )
 
-    if len(recent_days) != _EXPECTED_TRADING_DAY_COUNT:
+    if (
+        len(recent_days) != _EXPECTED_TRADING_DAY_COUNT
+        or len(set(recent_days)) != _EXPECTED_TRADING_DAY_COUNT
+    ):
         return _fail(
             gateway, run_uuid, fence_int, lease_uuid,
             "CALENDAR_INSUFFICIENT_TRADING_DAYS",
@@ -133,12 +137,20 @@ def run_supply_stage(
 
     all_rows: list[SupplyRow] = []
     error_count = 0
+    unprocessed_tickers: list[str] = []
+    error_details: list[dict[str, str]] = []
+
+    def record_candidate_error(ticker: str, reason: str) -> None:
+        nonlocal error_count
+        error_count += 1
+        unprocessed_tickers.append(ticker)
+        error_details.append({"ticker": ticker, "message": reason})
 
     for cand in candidates:
         try:
             bars = supply_provider.fetch(cand.ticker, d_minus_2, d0)
-        except Exception:
-            error_count += 1
+        except Exception as exc:
+            record_candidate_error(cand.ticker, f"t1702: {exc}")
             continue
 
         if len(bars) != len({bar.trading_day for bar in bars}) or {
@@ -147,25 +159,25 @@ def run_supply_stage(
             # 동일 trading_day의 중복 행 -- dict comprehension이 조용히 마지막 행으로
             # 덮어쓰지 않도록 error로 처리한다(조용한 덮어쓰기 금지). t1702도
             # 예상 거래일 외 응답을 저장하지 않는다.
-            error_count += 1
+            record_candidate_error(cand.ticker, "t1702: expected exactly three unique trading days")
             continue
 
         by_day = {bar.trading_day: bar for bar in bars}
         try:
             program_bars = program_supply_provider.fetch(cand.ticker, d_minus_2, d0)
-        except Exception:
-            error_count += 1
+        except Exception as exc:
+            record_candidate_error(cand.ticker, f"t1637: {exc}")
             continue
 
         if len(program_bars) != len({bar.trading_day for bar in program_bars}):
             # 같은 날짜의 프로그램 행도 조용히 덮어쓰지 않는다.
-            error_count += 1
+            record_candidate_error(cand.ticker, "t1637: duplicate trading day")
             continue
 
         program_by_day = {bar.trading_day: bar for bar in program_bars}
         if set(program_by_day) != set(ordered_days):
             # 예상 3거래일 중 일부가 없거나 범위 밖 행만 반환된 경우다.
-            error_count += 1
+            record_candidate_error(cand.ticker, "t1637: expected exactly three trading days")
             continue
 
         candidate_rows: list[SupplyRow] = []
@@ -198,6 +210,8 @@ def run_supply_stage(
             "row_count": 0,
             "error_count": error_count,
             "candidate_count": len(candidates),
+            "unprocessed_tickers": unprocessed_tickers,
+            "errors": error_details,
         }
         gateway.write_stage(
             run_uuid, Stage.SUPPLY_3DAY, fence_int, lease_uuid,
@@ -207,9 +221,15 @@ def run_supply_stage(
         return SupplyStageResult(
             "failed", "SUPPLY_PERSIST_FAILED",
             row_count=0, error_count=error_count, candidate_count=len(candidates), run_id=run_id_str,
+            unprocessed_tickers=tuple(unprocessed_tickers),
         )
 
-    result_common = {"row_count": saved_count, "candidate_count": len(candidates)}
+    result_common = {
+        "row_count": saved_count,
+        "candidate_count": len(candidates),
+        "unprocessed_tickers": unprocessed_tickers,
+        "errors": error_details,
+    }
 
     if error_count > 0:
         result = {"result_code": "PARTIAL_SUPPLY", **result_common}
@@ -221,6 +241,7 @@ def run_supply_stage(
         return SupplyStageResult(
             "partial", "PARTIAL_SUPPLY",
             row_count=saved_count, error_count=error_count, candidate_count=len(candidates), run_id=run_id_str,
+            unprocessed_tickers=tuple(unprocessed_tickers),
         )
 
     result = {"result_code": "OK", **result_common}
@@ -231,6 +252,7 @@ def run_supply_stage(
     )
     return SupplyStageResult(
         "success", "OK", row_count=saved_count, candidate_count=len(candidates), run_id=run_id_str,
+        unprocessed_tickers=(),
     )
 
 
