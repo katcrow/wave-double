@@ -646,7 +646,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      candidate_supply_hints: {
+        Row: {
+          attempt_run_id: string
+          batch_kind: string
+          candidate_id: string
+          collected_at: string
+          foreign_net: number | null
+          hint_status: string
+          individual_net: number | null
+          institution_net: number | null
+          investor_net_status: string
+          program_net: number | null
+          slot: string
+          ticker: string
+          trading_day: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       advance_dispatch_outbox: {
@@ -690,6 +707,7 @@ export type Database = {
       get_dashboard_snapshot: { Args: never; Returns: Json }
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
+      get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
       get_today_disappeared_candidates: {
         Args: { p_run_id: string }

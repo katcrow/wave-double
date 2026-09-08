@@ -11,6 +11,7 @@ export type RunStatus =
 export type BatchKind = "premarket" | "intraday" | "close";
 export type RunTrigger = "schedule" | "manual";
 export type Market = "KOSPI" | "KOSDAQ";
+export type SupplyHintStatus = "good" | "not_met" | "undetermined";
 
 export interface CandidatesSection {
   candidate_count: number;
@@ -67,6 +68,23 @@ export interface MarketSupplyRpcRow {
   individual_net: number;
   program_net: number;
   collected_at: string;
+}
+
+/** candidate_supply_hints view 및 get_candidate_supply_hints(p_run_id) 반환 행. */
+export interface CandidateSupplyHintRpcRow {
+  candidate_id: string;
+  attempt_run_id: string;
+  ticker: string;
+  trading_day: string;
+  slot: "D0";
+  batch_kind: BatchKind;
+  foreign_net: number | null;
+  institution_net: number | null;
+  individual_net: number | null;
+  program_net: number | null;
+  investor_net_status: EvidenceInvestorStatus;
+  collected_at: string;
+  hint_status: SupplyHintStatus;
 }
 
 /** infra/supabase/migrations/202609011600_create_run_lineage.sql의 runs 테이블 컬럼. */

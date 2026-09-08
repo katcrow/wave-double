@@ -11,6 +11,7 @@ from .run_state import (
     validate_stage_transition,
 )
 from .candidate_selection import CandidateSelection, MAX_CANDIDATES, SelectedCandidate, select_candidates
+from .supply_hint import SupplyHintStatus, compute_supply_hint
 
 __all__ = [
     "BatchKind",
@@ -26,4 +27,6 @@ __all__ = [
     "MAX_CANDIDATES",
     "SelectedCandidate",
     "select_candidates",
+    "SupplyHintStatus",
+    "compute_supply_hint",
 ]
