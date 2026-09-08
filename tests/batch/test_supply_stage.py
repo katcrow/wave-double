@@ -1,12 +1,14 @@
 from datetime import date
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from apps.batch.ls_supply_provider import SupplyBar
 from apps.batch.run_state import RunStateGateway
 from apps.batch.supply_3day_repository import SupplyRow
 from apps.batch.supply_stage import run_supply_stage
+from apps.batch.tagged_candidate_fetcher import TaggedCandidateFetcher
 
 
 class FakeRpc:
@@ -19,9 +21,10 @@ class FakeRpc:
 
 
 class FakeCandidateRow:
-    def __init__(self, candidate_id, ticker):
+    def __init__(self, candidate_id, ticker, strategies=None):
         self.candidate_id = candidate_id
         self.ticker = ticker
+        self.strategies = strategies or []
 
 
 class FakeTaggedFetcher:
@@ -133,6 +136,59 @@ def test_normal_all_candidates_produce_three_rows_confirmed():
     write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
     assert [c[1]["p_status"] for c in write_stage_calls] == ["running", "success"]
     assert write_stage_calls[-1][1]["p_unprocessed_count"] == 0
+
+
+def test_f_only_and_multi_tag_candidates_each_make_one_supply_call():
+    fetcher = FakeTaggedFetcher([
+        FakeCandidateRow("c1", "005930", ["F"]),
+        FakeCandidateRow("c2", "000660", ["A", "F"]),
+    ])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    provider = FakeSupplyProvider({"005930": _bars("005930"), "000660": _bars("000660")})
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, calendar, provider, repo)
+
+    assert result.status == "success"
+    assert len(repo.saved) == 6
+    assert provider.calls == [
+        ("005930", D2, D0),
+        ("000660", D2, D0),
+    ]
+    for candidate_id in ("c1", "c2"):
+        candidate_rows = [row for row in repo.saved if row.candidate_id == candidate_id]
+        assert len(candidate_rows) == 3
+        assert {row.slot for row in candidate_rows} == {"D-2", "D-1", "D0"}
+
+
+def test_real_tagged_fetcher_f_only_candidate_reaches_supply_stage_once():
+    def handler(request):
+        if request.url.path == "/rest/v1/candidate_tags":
+            assert request.url.params["status"] == "eq.active"
+            assert "strategy" not in request.url.params
+            return httpx.Response(200, json=[{"candidate_id": "f-only"}])
+        assert request.url.path == "/rest/v1/candidates"
+        return httpx.Response(200, json=[{"candidate_id": "f-only", "ticker": "005930"}])
+
+    tagged_fetcher = TaggedCandidateFetcher(
+        "https://example.supabase.co",
+        "service-role-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    calendar = FakeCalendarClient([D0, D1, D2])
+    provider = FakeSupplyProvider({"005930": _bars("005930")})
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    try:
+        result = _run(rpc, tagged_fetcher, calendar, provider, repo)
+    finally:
+        tagged_fetcher.close()
+
+    assert result.status == "success"
+    assert len(repo.saved) == 3
+    assert provider.calls == [("005930", D2, D0)]
 
 
 def test_per_ticker_api_failure_is_error_others_still_saved():

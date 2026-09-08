@@ -57,6 +57,34 @@ def test_fetch_deduplicates_candidate_ids_across_multiple_active_tags():
     assert rows == [TaggedCandidateRow("c1", "005930")]
 
 
+def test_fetch_includes_f_only_and_multi_strategy_tags_without_strategy_filter():
+    seen_candidates_params = {}
+
+    def handler(request):
+        if request.url.path == "/rest/v1/candidate_tags":
+            assert request.url.params["status"] == "eq.active"
+            assert "strategy" not in request.url.params
+            # c1은 F-only, c2는 A/F multi-tag인 active 후보를 의미한다.
+            return httpx.Response(200, json=[{"candidate_id": "c1"}, {"candidate_id": "c2"}, {"candidate_id": "c2"}])
+        seen_candidates_params.update(request.url.params)
+        return httpx.Response(
+            200,
+            json=[
+                {"candidate_id": "c1", "ticker": "005930"},
+                {"candidate_id": "c2", "ticker": "000660"},
+            ],
+        )
+
+    fetcher = make_fetcher(handler)
+    rows = fetcher.fetch("run-1")
+
+    assert seen_candidates_params["candidate_id"] == "in.(c1,c2)"
+    assert rows == [
+        TaggedCandidateRow("c1", "005930"),
+        TaggedCandidateRow("c2", "000660"),
+    ]
+
+
 def test_fetch_returns_empty_list_without_second_call_when_no_active_tags():
     calls = []
 

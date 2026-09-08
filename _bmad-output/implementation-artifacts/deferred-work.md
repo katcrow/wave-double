@@ -17,3 +17,9 @@
 
 - **(medium)** `emit_open_command`(Story 3.2, `infra/supabase/migrations/202609031501_fix_emit_open_command_review_patch.sql:57`)의 재진입 방지(ALREADY_OPEN) 가드가 `status = 'OPEN'`만 확인한다. `candidate_outcome_one_open_per_ticker_strategy_idx`는 `status='OPEN'`에만 걸린 partial unique index이고 `(ticker,strategy,entry_date)` unique 제약도 `entry_date`가 다르면 막지 못하므로, `SUSPENDED` 상태인 (ticker,strategy)를 이후 배치가 재태깅하면 새 `candidate_outcome` 행이 중복 생성될 수 있다. ~~`SUSPENDED`는 Story 3.5가 처음 실제로 도달 가능하게 만든 상태라 이전에는 이 경로가 도달 불가능했다(2026-09-03 code review, blind-hunter 발견). epics.md의 Story 3.1 AC는 OPEN 중복 방지만 명시하고 SUSPENDED 재진입은 다루지 않아 원 스펙의 공백이며, Story 3.8(correction 이벤트 메커니즘)이 SUSPENDED 복귀/재진입 정책을 정의할 때 함께 다뤄야 한다.~~ **해결됨(2026-09-04, Story 3.8의 `202609032200_add_outcome_correction_mechanism.sql`).** `emit_open_command`의 재진입 가드를 `status in ('OPEN','SUSPENDED','DELISTED')`로 넓혔고, SUSPENDED/DELISTED는 진입일과 무관하게 항상 `skipped:true`(`ALREADY_TRACKED_SUSPENDED`/`ALREADY_DELISTED`)로 재진입을 막아 중복 행 생성을 차단한다. 운영 project(`qqhjeumlecaudsiqhhdu`)에 적용돼 있고 `tests/sql/test_outcome_open_command.sql`(SUSPENDED 재태깅 스킵 시나리오)로 검증된다.
 - **(low)** `daily_ohlcv.close`(Story 2.1, `infra/supabase/migrations/202609021500_create_daily_ohlcv.sql`)에 양수 제약이 없어(NaN/Infinity만 배제), 전일 종가가 0이면 Story 3.5의 갭 안전망 계산(`v_prev_close <> 0` 가드)이 나눗셈 예외 대신 감지를 조용히 건너뛴다. `pricechk`도 없는 상태에서 전일 종가가 0이면 어떤 경로로도 이상이 감지되지 않는다(2026-09-03 code review, blind-hunter 발견). `daily_ohlcv` 스키마 자체의 기존 공백이며, 이 컬럼에 양수 체크 제약을 추가하는 것은 Story 2.1 스키마의 몫이다.
+
+## Deferred from: Story 4.1 Epic 7 contract review (2026-09-08)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-epic7-계약-보강.md`
+  summary: 컴파일된 Epic 4 context의 수동 보강 내용을 원천 planning artifact와 동기화하는 생성 파이프라인을 정리한다.
+  evidence: `epic-4-context.md`는 planning artifact에서 재생성되는 캐시 문서이므로 수동으로 추가한 운영/전략 계약이 재생성 시 덮어써질 수 있다. 이번 보강에서는 유효한 최신 context를 유지했지만, 생성기 입력과 캐시 동기화 정책은 별도 프로세스 작업이다.
