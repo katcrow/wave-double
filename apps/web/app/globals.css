@@ -348,6 +348,27 @@ a {
   gap: var(--space-3);
 }
 
+.candidate-card--expanded {
+  border-color: var(--color-accent);
+}
+
+.candidate-card__toggle {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.candidate-card__toggle:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
 .candidate-card__header {
   display: flex;
   align-items: baseline;
@@ -375,9 +396,165 @@ a {
   white-space: nowrap;
 }
 
+.candidate-card__toggle-hint {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-accent);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
 .candidate-card__notice {
   margin: 0;
   font-size: var(--font-size-label);
+  color: var(--color-caution);
+}
+
+/* Story 4.6: 카드별 attempt-scoped 후보 근거 패널 */
+
+.candidate-evidence-panel {
+  min-width: 0;
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.candidate-evidence-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.candidate-evidence-panel__eyebrow,
+.candidate-evidence-panel__meta {
+  margin: 0;
+}
+
+.candidate-evidence-panel__eyebrow {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-evidence-panel__meta {
+  margin-top: var(--space-1);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+  overflow-wrap: anywhere;
+}
+
+.candidate-evidence-panel__meta span {
+  color: var(--color-ink-secondary);
+  font-family: var(--font-family-data);
+}
+
+.candidate-evidence-panel__summary {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-caution);
+  border-radius: var(--radius-full);
+  color: var(--color-caution);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-evidence-panel__summary--pending {
+  border-color: var(--color-informational);
+  color: var(--color-informational);
+}
+
+.candidate-evidence-panel__state {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+}
+
+.candidate-evidence-panel__table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.candidate-evidence-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-label);
+}
+
+.candidate-evidence-table th,
+.candidate-evidence-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.candidate-evidence-table thead th {
+  background: var(--color-surface-raised);
+  color: var(--color-ink-muted);
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-evidence-table tbody tr:last-child th,
+.candidate-evidence-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.candidate-evidence-table tbody th {
+  min-width: 82px;
+  color: var(--color-ink-primary);
+  text-align: left;
+  font-family: var(--font-family-base);
+}
+
+.candidate-evidence-table__slot,
+.candidate-evidence-table__day,
+.candidate-evidence-table__status {
+  display: block;
+}
+
+.candidate-evidence-table__slot {
+  font-family: var(--font-family-data);
+  font-weight: var(--font-weight-data);
+}
+
+.candidate-evidence-table__day {
+  margin-top: 2px;
+  color: var(--color-ink-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-body);
+}
+
+.candidate-evidence-table__status {
+  margin-top: var(--space-1);
+  color: var(--color-positive);
+  font-size: 11px;
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-evidence-table__row--pending {
+  background: rgba(127, 168, 216, 0.06);
+}
+
+.candidate-evidence-table__row--pending .candidate-evidence-table__status {
+  color: var(--color-informational);
+}
+
+.candidate-evidence-table__row--missing {
+  background: rgba(217, 170, 104, 0.07);
+}
+
+.candidate-evidence-table__row--missing .candidate-evidence-table__status,
+.candidate-evidence-table__row--missing td {
   color: var(--color-caution);
 }
 

@@ -93,6 +93,35 @@ export interface TodayCandidateCardRow {
   supply_partial_missing: boolean;
 }
 
+export type EvidenceSource = "t1859" | "t1852" | "t1856";
+export type EvidenceSlot = "D0" | "D-1" | "D-2";
+export type EvidenceInvestorStatus = "confirmed" | "pending" | "missing";
+
+/**
+ * infra/supabase/migrations/202609081200_create_get_candidate_evidence.sql의
+ * get_candidate_evidence(p_run_id) 반환 배열 원소 안의 supply 행 shape.
+ */
+export interface CandidateEvidenceRawRow {
+  trading_day: string;
+  slot: EvidenceSlot;
+  close: number;
+  volume: number;
+  change_pct: number;
+  foreign_net: number | null;
+  institution_net: number | null;
+  individual_net: number | null;
+  program_net: number | null;
+  investor_net_status: EvidenceInvestorStatus;
+  collected_at: string;
+}
+
+/** get_candidate_evidence() 반환 배열 원소. candidate_id와 attempt는 RPC p_run_id로 함께 격리된다. */
+export interface CandidateEvidenceRpcRow {
+  candidate_id: string;
+  sources: EvidenceSource[];
+  rows: CandidateEvidenceRawRow[];
+}
+
 export type DisappearedReason = "population_dropout" | "collection_failure";
 
 /**

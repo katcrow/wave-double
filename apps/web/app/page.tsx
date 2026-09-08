@@ -3,6 +3,7 @@ import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
 import { buildCandidateCardViewModels } from "@/lib/candidate-cards";
+import type { CandidateEvidenceRpcRow } from "@/lib/dashboard-types";
 import { isIntradaySnapshot } from "@/lib/dashboard-types";
 import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
 import { buildDisappearedCandidateViewModels } from "@/lib/disappeared-candidates";
@@ -35,6 +36,8 @@ export default async function HomePage() {
   // 진짜 0건 케이스와 RPC 실패 케이스가 같은 문구로 섞이지 않게 한다.
   let candidateCards: ReturnType<typeof buildCandidateCardViewModels> = [];
   let candidateCardsFetchFailed = false;
+  let candidateEvidenceById = new Map<string, CandidateEvidenceRpcRow>();
+  let candidateEvidenceFetchFailed = false;
   if (snapshot.complete_snapshot) {
     const { data: cardRows, error: cardError } = await supabase.rpc("get_today_candidate_cards", {
       p_run_id: snapshot.complete_snapshot.run_id,
@@ -47,6 +50,21 @@ export default async function HomePage() {
     } else {
       candidateCardsFetchFailed = true;
       console.error("unexpected get_today_candidate_cards shape", cardRows);
+    }
+
+    const { data: evidenceRows, error: evidenceError } = await supabase.rpc("get_candidate_evidence", {
+      p_run_id: snapshot.complete_snapshot.run_id,
+    });
+    if (evidenceError) {
+      candidateEvidenceFetchFailed = true;
+      console.error("get_candidate_evidence failed", evidenceError);
+    } else if (Array.isArray(evidenceRows)) {
+      candidateEvidenceById = new Map(
+        (evidenceRows as CandidateEvidenceRpcRow[]).map((row) => [row.candidate_id, row])
+      );
+    } else {
+      candidateEvidenceFetchFailed = true;
+      console.error("unexpected get_candidate_evidence shape", evidenceRows);
     }
   }
 
@@ -94,7 +112,12 @@ export default async function HomePage() {
       {candidateCards.length > 0 ? (
         <ul className="candidate-card-grid" role="list">
           {candidateCards.map((candidate) => (
-            <CandidateCard key={candidate.candidateId} candidate={candidate} />
+            <CandidateCard
+              key={candidate.candidateId}
+              candidate={candidate}
+              evidence={candidateEvidenceById.get(candidate.candidateId)}
+              evidenceFetchFailed={candidateEvidenceFetchFailed}
+            />
           ))}
         </ul>
       ) : (
