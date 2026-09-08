@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-08-2026 11:20
+last_updated: 09-08-2026 11:36
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -123,7 +123,7 @@ development_status:
   7-5-후보-태깅-stage에-전략-f-반영: done
   7-6-ui-확장-라벨-배지-라우트-f: done
   7-7-oos-워크포워드-검증-전략-f: done
-  epic-7-retrospective: optional
+  epic-7-retrospective: done
 action_items:
   - id: "epic-1-retro-item-1-루트-typescript-게이트를-웹-tsconfig와-일치시키고-ci에"
     epic: 1
@@ -296,7 +296,38 @@ action_items:
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
   - id: "story-7-7-item-1-전략-f-oos-홀드아웃-거래-200건-누적-시-재평가"
     epic: 7
-    action: "전략 F의 OOS(holdout) 실전 거래가 200건 이상 누적되면 승률/PF 열화 여부를 재평가하고 유지/재조정/보류를 재결정한다."
+    action: "전략 F의 OOS(holdout) 실전 거래가 200건 이상 누적되면 승률/PF 열화 여부를 재평가하고 유지/재조정/보류를
+      재결정한다."
     owner: "Neo"
     status: open
     ref: "_bmad-output/implementation-artifacts/spec-7-7-oos-워크포워드-검증-전략-f.md"
+  - id: "epic-7-retro-item-27-운영에-f-migration을-순서대로-적용하고-production-co"
+    epic: 7
+    action: "운영에 F migration을 순서대로 적용하고 production contract fixture와 grants를 재실행한다."
+    owner: "운영/개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+  - id: "epic-7-retro-item-28-f의-rebuild_outcome_projection-sql-fixtur"
+    epic: 7
+    action: "F의 rebuild_outcome_projection SQL fixture와 rule 누락 및 legacy 경계를 추가 검증한다."
+    owner: "개발"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+  - id: "epic-7-retro-item-29-인증된-playwright-mcp로-f-카드-배지와-g-404-회귀를-검"
+    epic: 7
+    action: "인증된 Playwright MCP로 F 카드 배지와 G 404 회귀를 검증한다."
+    owner: "QA/프론트엔드"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+  - id: "epic-7-retro-item-30-전략-실험-산출물-격리와-epic-story-scoped-clean-tr"
+    epic: 7
+    action: "전략 실험 산출물 격리와 Epic story-scoped clean-tree/diff-check 게이트를 표준화한다."
+    owner: "개발 프로세스"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+  - id: "epic-7-retro-item-31-candidate-cards-ts의-현재-최대-5종-stale-주석을-여"
+    epic: 7
+    action: "candidate-cards.ts의 현재 최대 5종 stale 주석을 여섯 전략 기준으로 정리한다."
+    owner: "프론트엔드"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
