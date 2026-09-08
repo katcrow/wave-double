@@ -4,49 +4,48 @@
 
 ## Goal
 
-Extend the existing five-strategy candidate detection system (A/B/C/D/E) with a sixth strategy, F (각도 가속·이평선 쌍바닥 기법 — slope-acceleration + moving-average double-bottom), so that F's signals are computed and tagged OR-combined with the existing strategies on the same candidate population, and any candidate matching one or more of the six strategies is surfaced with multi-badge tagging. This is a Correct Course extension (2026-09-07) that reuses Epic 6's `candidate_tags` / `compute_abc` / `StrategyTagList` / per-strategy outcome parameterization infrastructure rather than reopening Epic 6. Sequencing matters: this epic must complete **before** Epic 4 Story 4.10 (hint badge unified filter) and Epic 5 Stories 5.6/5.12 (per-strategy view, metric comparison), otherwise those would be built on a five-strategy assumption and need rework. Within this epic, Story 7.1 (calculation logic committed to code) is a prerequisite for 7.2–7.6.
+기존 매수 전략 A/B/C/D/E에 더해 전략 F(각도 가속·이평선 쌍바닥 기법)를 같은 후보 모집단 위에서 OR 조건으로 계산·태깅해, 여섯 전략 중 하나라도 매칭된 후보가 다중 배지와 함께 대시보드에 노출되게 한다. Epic 6(D/E 통합)이 구축한 가변 개수 전제의 다중 태그 인프라를 그대로 재사용하며, Epic 6 자체는 재오픈하지 않는다. 이 에픽은 Epic 4(Story 4.10 힌트 배지 통합 필터)와 Epic 5(Story 5.6/5.12)보다 먼저 완료되어야 한다 — 그렇지 않으면 두 에픽이 5-전략 가정으로 구현된 뒤 재작업이 필요하다.
 
 ## Stories
 
-- Story 7.1: 전략 F 계산 로직 코드화 & 백테스트 baseline 이식
-- Story 7.2: `candidate_tags` 전략 제약 확장 (F)
-- Story 7.3: 전략 계산 API 일반화 (AD-5 addendum 2 확장)
-- Story 7.4: Outcome 판정 로직 F 파라미터화 (Epic 3/6 확장)
+- Story 7.1: 전략 F 계산 로직 코드화 & 백테스트 baseline 이식 (커밋·최종 검토만 남음)
+- Story 7.2: `candidate_tags` 전략 제약 확장 (A|B|C|D|E → A|B|C|D|E|F)
+- Story 7.3: 전략 계산 API 일반화 — `compute_abc`가 F까지 6개 시그널 키 반환
+- Story 7.4: Outcome 판정 로직 F 파라미터화 (TP3%/SL4%/최대보유 없음)
 - Story 7.5: 후보 태깅 stage에 전략 F 반영
 - Story 7.6: UI 확장 — 라벨·배지·라우트 (F)
 - Story 7.7: OOS(워크포워드) 검증 — 전략 F
 
 ## Requirements & Constraints
 
-- Strategy F must expose the same interface as A–E: daily-bar frame in, signal-ticker-set out. Entry condition: slope acceleration AND MA double-bottom neckline breakout. Exit condition: TP 3% / SL 4%, tp_first=True, no max holding period.
-- Adopted params (표본 확대형/expanded-sample variant): slope_window=30, accel_window=5, min_slope_delta=0.004 (doc value 0.0045, code-reproduced value 0.004 — documented discrepancy), ma_db_window=16, cost_rate=0.0005.
-- Code-reproduced backtest numbers (win rate 70.83%, PF 1.7178, 168 trades, ~2.30 trades/month) are authoritative over the source doc's numbers (73.1% / 1.92 / 182 trades / 2.8/month) — both exceed the acceptance bar (win rate > 50%, PF > 1), same pattern as D/E. (An earlier code run reported 70.10%/1.6585/194 trades before a Story 7.1 review pass fixed a double-bottom warmup-padding bug that fabricated a phantom first trough at segment restarts; the corrected numbers above are authoritative.)
-- Strategy tagging must remain multi-label/OR-combined (e.g. a ticker can match both A and F simultaneously); DB tag storage, strategy calc API, and outcome judgment must all support this without breaking existing A–E behavior.
-- All schema changes are forward-only expand-migrate-contract (AD-14): add/expand → backfill/dual-read → consumer cutover → contract in a later release. CI must verify clean `db reset`, N/N-1 compatibility, generated types, and SQL fixture parity.
-- Historical A–E `candidate_outcome`/tagging data must remain immutable — no recomputation or re-judgment when F is added (NFR-5, past-data invariance).
-- Strategy F must go through the same out-of-sample (walk-forward) validation as D/E before being trusted in production: in-sample 2020-08-03–2024-08-27, holdout 2024-08-28–2026-08-27. Until that validation completes, F's "OOS unverified" status must be tracked as an open risk (rated Medium in the 2026-09-07 correct-course proposal) and surfaced/updated once validation finishes.
-- Badge/color accessibility: color alone must never be the only way strategies (or statuses) are distinguished — a text label (and, for status, icon/description) must always accompany color coding.
+- 후보 모집단(조건검색식 t1859가 뽑은 집합, 백테스트 104종목 전체와 구분) 한정으로 전략 A/B/C/D/E/F 시그널을 계산하고, 시그널이 발생한 종목에 다중 태깅을 부여한다(예 A∩F). 태깅 로직은 백테스트 룰과 일치해야 한다.
+- 태깅된 후보만 대시보드에 노출된다. 종가 확정 배치의 태깅만 `candidate_outcome`을 생성할 자격을 가지며, 장중 배치의 태깅은 참고 표시 전용이다.
+- 신뢰성(NFR-5): 파이프라인 단계 실패 시 부분 커밋을 허용하되 단계별 완료 여부를 기록하고, 실패한 단계가 이전 단계의 유효 데이터를 덮어쓰거나 삭제해서는 안 된다. 과거에 적재된 outcome 행은 재계산·재판정되지 않아야 한다(불변).
+- 공개 리포지토리 운영이므로 전략 F를 포함한 전략 로직·파라미터가 공개됨을 전제로 한다(이미 인지·수용된 트레이드오프, 신규 이슈 아님).
+- 실매매 자동화는 범위 밖이며, 이 에픽의 산출물은 추천(태깅)·추적 목적에 한정된다.
+- OOS(워크포워드) 검증 미완료 상태에서 태깅 stage(7.5)가 먼저 반영될 수 있으며, 이 경우 "OOS 미검증" 상태를 열린 리스크로 추적하고 검증 완료 시 갱신해야 한다.
 
 ## Technical Decisions
 
-- **AD-5 (shared strategy API), Addendum 2 (Epic 7):** `backtest.strategy_api.compute_abc(frame) -> StrategyResult` keeps its name for backward compatibility but its returned `StrategyResult` must now carry all six signal keys (A/B/C/D/E/F), each exposing its own signal ticker set plus its own exit parameters (TP/SL/max-holding) — extending the per-strategy exit-parameter structure Epic 6 already introduced, no new structure needed.
-- New general-purpose signal helpers `_linreg_slope` and `_double_bottom_signal` (added to `backtest/indicator_opt/_signals.py` for Strategy F) must be reused by the shared prod/backtest calculation function (Story 7.3) — same reuse boundary principle as A–E: swap the data loader, never the indicator logic.
-- `candidate_tags_strategy_check` constraint (currently `A|B|C|D|E` per `202609051500_finalize_candidate_tags_strategy_contract.sql`) must be expanded via forward-only migration to `A|B|C|D|E|F` without breaking existing rows/queries.
-- `outcome_strategy_rules` (per-strategy TP/SL/max-holding lookup table from `202609051600_parameterize_outcome_strategy_rules.sql`) needs a new F row: `tp_pct=3, sl_pct=4`. Because both `outcome_strategy_rules.cutoff_n` and `candidate_outcome.cutoff_n` are `integer NOT NULL CHECK (cutoff_n > 0)`, "no max holding" cannot be stored as NULL. Convention: use a large sentinel integer (`999999`) to represent "unlimited" rather than altering the NOT NULL constraint. The existing `publish_attempt` comparison logic (`v_traded_days >= cutoff_n`, from Story 3.7) is reused unchanged — a sentinel this large never triggers TIMEOUT in realistic holding-period ranges.
-- Golden fixture regression testing (Story 2.4/6.4 `golden_signals.json`) must add an F key, verified at the same Jaccard ≥ 0.9 threshold as A–E, with `strategy_f.py` as the reference implementation.
-- `strategy_f.py` (`StrategyFParams`), the general signal helpers, and `test_strategy_f.py` (13 tests) already exist in the codebase as of the 2026-09-07 correct-course kickoff — Story 7.1's remaining scope is commit + final review only, not net-new implementation.
+- **단일 전략 API 공유(AD-5, Epic 6/7 addendum):** `backtest.strategy_api.compute_abc(frame) -> StrategyResult`가 운영·백테스트 공유 유일 entrypoint다. 함수명은 하위호환을 위해 그대로 유지하되, 반환하는 `StrategyResult`가 A/B/C/D/E/F 6개 시그널 키를 모두 포함하도록 확장한다. 각 전략은 고유한 청산조건(TP/SL/최대보유)을 노출해 outcome 적재가 전략별로 올바르게 적용되게 한다. 같은 일봉에서 TP/SL이 동시 충족되면 SL을 우선한다.
+- **F 전용 계산 로직:** `backtest/indicator_opt/strategy_f.py`(`StrategyFParams`: slope_window=30, accel_window=5, min_slope_delta=0.004, ma_db_window=16, TP 3%/SL 4%, tp_first=True, max_holding_bars=None, cost_rate=0.0005)와 `_signals.py`의 범용 `_linreg_slope`/`_double_bottom_signal`이 운영/백테스트 공유 계산 함수에서 재사용되어야 한다("데이터 로더 교체, 지표 로직 무변경" 원칙, A~E와 동일).
+- **DB 계약 진화(AD-14):** 모든 스키마 변경은 forward-only expand-migrate-contract로 수행한다(add/expand → backfill/dual-read → consumer 전환 → 다음 release의 contract). CI는 clean db reset, N/N-1 호환성, generated types, SQL fixture parity를 검증해야 한다. Destructive down migration이나 rollback 의존은 금지.
+- **`candidate_tags_strategy_check` 제약:** 기존 A|B|C|D|E 확정 제약을 A|B|C|D|E|F로 확장하며, 기존 A/B/C/D/E 행·쿼리는 영향받지 않아야 한다.
+- **Outcome 파라미터화:** `outcome_strategy_rules`/`candidate_outcome`의 `cutoff_n`은 `integer not null check (cutoff_n > 0)`이라 NULL 불가 — F의 "최대보유 없음"은 충분히 큰 sentinel 정수(예 999999)로 표현하며 스키마 변경(NOT NULL 제약 완화)은 하지 않는다. 기존 `v_traded_days >= cutoff_n` 비교 로직을 그대로 재사용한다.
+- **골든 픽스처 회귀:** `golden_signals.json`에 F 키를 추가하고 Jaccard ≥ 0.9 기준으로 검증한다. 참조 구현은 `strategy_f.py`.
+- **Attempt-scoped lineage:** `candidate_tags` 등 attempt-scoped 행은 `attempt_run_id`와 terminal status를 보존하며, 재시도/publication이 이력을 삭제하지 않는다.
 
 ## UX & Interaction Patterns
 
-- `apps/web/lib/strategy-labels.ts` (`STRATEGY_LABEL`) and `StrategyTagList.tsx` must be extended to include F alongside A–E: badges render horizontally, collapsing to a `+N` summary under narrow width.
-- The `/strategies/[strategy]` route must accept an F path (rendering F's description/performance page) while continuing to 404 on undefined strategy codes.
-- Badge color scheme additions for F must not rely on color alone to distinguish strategies — a text label must always accompany the color (accessibility rule also applied to batch failure/risk status elsewhere in the design).
+- 전략 태그는 가로로 나열하고, 좁은 폭에서는 줄바꿈 대신 `+N`으로 접힌다(`StrategyTagList.tsx`). 태그 클릭은 필터가 아니라 해당 전략의 설명/성과 페이지(`/strategies/[strategy]`)로 이동한다.
+- 색상만으로 전략을 구분해서는 안 되며, 텍스트 라벨이 항상 함께 제공되어야 한다(WCAG 2.2 AA 접근성 플로어). 배지 색상 체계에 F를 추가할 때 접근성 대비를 재확인한다.
+- `apps/web/lib/strategy-labels.ts`의 `STRATEGY_LABEL`과 `/strategies/[strategy]` 라우트에 F를 추가하되, 정의되지 않은 전략 코드는 여전히 404 처리되어야 한다.
 
 ## Cross-Story Dependencies
 
-- Story 7.1 (F logic in code + backtest baseline) is a hard prerequisite for Stories 7.2–7.6.
-- Story 7.2 (schema constraint expansion) and 7.3 (strategy API generalization) must both complete before Story 7.5 (tagging stage integration) can compute/store F tags.
-- Story 7.4 (outcome rule parameterization for F) must complete before Story 7.5's tags can flow correctly into `emit_open_command` entry/exit judgment.
-- Story 7.6 (UI labels/badges/routes) depends on Story 7.5 having real F-tagged data to display.
-- Story 7.7 (OOS validation) may run in parallel with Story 7.5 for scheduling reasons, but its "OOS unverified" status must be tracked as an open risk until validation completes and the result is recorded.
-- This entire epic is a hard prerequisite for Epic 4 Story 4.10 and Epic 5 Stories 5.6/5.12, which assume a six-strategy (not five-strategy) world.
+- Story 7.1(계산 로직 코드화)이 7.2~7.6의 선행 조건이다.
+- Story 7.2(DB 제약)와 7.3(계산 API 일반화)이 완료되어야 Story 7.5(태깅 stage 반영)를 진행할 수 있다.
+- Story 7.4(outcome 파라미터화)가 완료되어야 Story 7.5에서 태그가 `emit_open_command`에 전달될 때 F의 청산조건이 정확히 적용된다.
+- Story 7.7(OOS 검증)은 7.5와 일정상 병행될 수 있으나, 그 경우 "OOS 미검증" 상태를 대시보드/문서에 명시하고 추적해야 한다.
+- 이 에픽은 Epic 4(Story 4.10)·Epic 5(Story 5.6, 5.12)보다 먼저 완료되어야 한다. Epic 3은 순서 무관(간접 영향만 있음 — `candidate_outcome`은 strategy를 문자열로 다루므로 로직 변경 없음).
+- Epic 6의 산출물(`candidate_tags` 다중 태그 스키마, `compute_abc`, `StrategyTagList`, 전략별 outcome 파라미터화)을 재사용하며, Epic 6은 재오픈하지 않는다.

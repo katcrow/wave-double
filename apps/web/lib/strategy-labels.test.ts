@@ -8,13 +8,14 @@ test("전략 A/B/C는 정의된 라벨을 반환한다", () => {
   assert.equal(getStrategyLabel("C"), "전략 C");
 });
 
-test("전략 D/E는 정의된 라벨을 반환한다", () => {
+test("전략 D/E/F는 정의된 라벨을 반환한다", () => {
   assert.equal(getStrategyLabel("D"), "전략 D");
   assert.equal(getStrategyLabel("E"), "전략 E");
+  assert.equal(getStrategyLabel("F"), "전략 F");
 });
 
 test("정의되지 않은 전략 코드는 undefined를 반환한다", () => {
-  assert.equal(getStrategyLabel("F"), undefined);
+  assert.equal(getStrategyLabel("G"), undefined);
 });
 
 // prototype pollution 방지: Object.prototype에 존재하는 이름은 own-property가 아니므로 undefined.
