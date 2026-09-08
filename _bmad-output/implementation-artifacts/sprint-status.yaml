@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-07-2026 17:20
+last_updated: 09-08-2026 10:07
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -105,8 +105,8 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: done
-  6-1-전략-d-돌파3%기법-계산-로직-코드화-baseline-이식: done
-  6-2-전략-e-익절2%_고정sl5%기법-계산-로직-코드화-baseline-이식: done
+  6-1-전략-d-돌파3-기법-계산-로직-코드화-백테스트-baseline-이식: done
+  6-2-전략-e-익절2-_고정sl5-기법-계산-로직-코드화-백테스트-baseline-이식: done
   6-3-candidate_tags-전략-제약-확장: done
   6-4-전략-계산-api-일반화-ad-5-확장: done
   6-5-outcome-판정-로직-전략별-파라미터화-epic-3-확장: done
@@ -116,13 +116,13 @@ development_status:
   epic-6-retrospective: done
 
   epic-7: in-progress
-  7-1-전략-f-각도가속-이평쌍바닥기법-계산-로직-코드화-baseline-이식: done
+  7-1-전략-f-각도-가속-이평선-쌍바닥-기법-계산-로직-코드화-백테스트-baseline-이식: done
   7-2-candidate_tags-전략-제약-확장-f: done
-  7-3-전략-계산-api-일반화-ad-5-확장-f: done
-  7-4-outcome-판정-로직-f-파라미터화: done
-  7-5-후보-태깅-stage에-전략-f-반영: backlog
+  7-3-전략-계산-api-일반화-ad-5-addendum-2-확장: done
+  7-4-outcome-판정-로직-f-파라미터화-epic-3-6-확장: done
+  7-5-후보-태깅-stage에-전략-f-반영: done
   7-6-ui-확장-라벨-배지-라우트-f: backlog
-  7-7-oos-워크포워드-검증-f: backlog
+  7-7-oos-워크포워드-검증-전략-f: backlog
   epic-7-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-루트-typescript-게이트를-웹-tsconfig와-일치시키고-ci에"
