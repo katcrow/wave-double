@@ -9,6 +9,7 @@ from apps.batch.run_state import RunStateGateway
 from apps.batch.tags_stage import TaggedCandidate, run_tags_stage
 from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
 from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
+from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
 from backtest.strategy_api import StrategyError, StrategyErrorCode, StrategyResult
 from domain.ohlcv_cache import OhlcvCacheStatus
 
@@ -299,6 +300,7 @@ def test_params_meta_and_batch_kind_are_recorded_on_saved_tags():
     assert saved.params_meta["min_history_days"] == 120
     assert saved.params_meta["strategy_d_params"] == STRATEGY_D_PARAMS.as_dict()
     assert saved.params_meta["strategy_e_params"] == STRATEGY_E_PARAMS.as_dict()
+    assert saved.params_meta["strategy_f_params"] == STRATEGY_F_PARAMS.as_dict()
     write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
     assert write_stage_calls[-1][1]["p_result"]["batch_kind"] == "intraday"
 
@@ -408,6 +410,105 @@ def test_strategy_d_signal_compute_error_counts_as_error_not_silently_dropped():
     error_result = StrategyResult(
         ticker="005930", status=OhlcvCacheStatus.ERROR, signals={},
         error=StrategyError(code=StrategyErrorCode.SIGNAL_COMPUTE_ERROR, strategy="D", message="strategy D boom"),
+    )
+    strategy = FakeStrategyClient({
+        "005930": error_result,
+        "000660": _ready_result("000660", 3, a_at_minus2=True),
+    })
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "partial"
+    assert result.result_code == "PARTIAL_TAGGING"
+    assert result.error_count == 1
+    assert result.tagged_count == 1
+    assert len(tags_repo.saved) == 1
+    assert tags_repo.saved[0].strategy == "A"
+
+
+def test_strategy_f_only_signal_is_tagged():
+    n = 3
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    signals = {
+        "A": pd.Series(False, index=idx),
+        "B": pd.Series(False, index=idx),
+        "C": pd.Series(False, index=idx),
+        "D": pd.Series(False, index=idx),
+        "E": pd.Series(False, index=idx),
+        "F": pd.Series([False, True, False], index=idx),
+    }
+    result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
+    frame = _frame(n)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": result_obj})
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "success"
+    assert len(tags_repo.saved) == 1
+    assert tags_repo.saved[0].strategy == "F"
+    assert result.tagged_candidates[0].strategies == ["F"]
+
+
+def test_strategy_a_and_f_multi_tag_on_same_ticker():
+    n = 3
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    signals = {
+        "A": pd.Series([False, True, False], index=idx),
+        "B": pd.Series(False, index=idx),
+        "C": pd.Series(False, index=idx),
+        "D": pd.Series(False, index=idx),
+        "E": pd.Series(False, index=idx),
+        "F": pd.Series([False, True, False], index=idx),
+    }
+    result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
+    frame = _frame(n)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": result_obj})
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "success"
+    assert len(tags_repo.saved) == 2
+    assert {tag.strategy for tag in tags_repo.saved} == {"A", "F"}
+    assert result.tagged_candidates[0].strategies == ["A", "F"]
+
+
+def test_all_six_strategies_signal_on_same_ticker():
+    n = 3
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    signals = {key: pd.Series([False, True, False], index=idx) for key in ("A", "B", "C", "D", "E", "F")}
+    result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
+    frame = _frame(n)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": result_obj})
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "success"
+    assert len(tags_repo.saved) == 6
+    assert {tag.strategy for tag in tags_repo.saved} == {"A", "B", "C", "D", "E", "F"}
+    assert result.tagged_candidates[0].strategies == ["A", "B", "C", "D", "E", "F"]
+
+
+def test_strategy_f_signal_compute_error_counts_as_error_not_silently_dropped():
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
+    loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
+    error_result = StrategyResult(
+        ticker="005930", status=OhlcvCacheStatus.ERROR, signals={},
+        error=StrategyError(code=StrategyErrorCode.SIGNAL_COMPUTE_ERROR, strategy="F", message="strategy F boom"),
     )
     strategy = FakeStrategyClient({
         "005930": error_result,
