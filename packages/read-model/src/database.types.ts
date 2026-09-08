@@ -689,6 +689,7 @@ export type Database = {
       }
       get_dashboard_snapshot: { Args: never; Returns: Json }
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
+      get_market_supply: { Args: { p_run_id: string }; Returns: Json }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
       get_today_disappeared_candidates: {
         Args: { p_run_id: string }

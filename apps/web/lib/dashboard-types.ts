@@ -10,6 +10,7 @@ export type RunStatus =
 
 export type BatchKind = "premarket" | "intraday" | "close";
 export type RunTrigger = "schedule" | "manual";
+export type Market = "KOSPI" | "KOSDAQ";
 
 export interface CandidatesSection {
   candidate_count: number;
@@ -55,6 +56,17 @@ export interface DashboardSnapshot {
   available_partial_sections: string[];
   missing_sections: string[];
   unprocessed_items: number;
+}
+
+/** infra/supabase/migrations/202609081300_create_get_market_supply.sql 반환 행. */
+export interface MarketSupplyRpcRow {
+  market: Market;
+  trading_day: string;
+  foreign_net: number;
+  institution_net: number;
+  individual_net: number;
+  program_net: number;
+  collected_at: string;
 }
 
 /** infra/supabase/migrations/202609011600_create_run_lineage.sql의 runs 테이블 컬럼. */

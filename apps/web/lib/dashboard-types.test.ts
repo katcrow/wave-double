@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isIntradaySnapshot } from "./dashboard-types.ts";
 import type { CompleteSnapshot, DashboardSnapshot } from "./dashboard-types.ts";
+import { normalizeMarket } from "./market-supply.ts";
 
 function complete(overrides: Partial<CompleteSnapshot> = {}): CompleteSnapshot {
   return {
@@ -50,4 +51,11 @@ test("batch_kind='premarket': true", () => {
 test("complete_snapshot=null: false", () => {
   const result = isIntradaySnapshot(snapshot({ complete_snapshot: null }));
   assert.equal(result, false);
+});
+
+test("시장 탭 값은 KOSPI/KOSDAQ만 허용하고 나머지는 KOSPI로 정규화한다", () => {
+  assert.equal(normalizeMarket("KOSDAQ"), "KOSDAQ");
+  assert.equal(normalizeMarket("KOSPI"), "KOSPI");
+  assert.equal(normalizeMarket("NASDAQ"), "KOSPI");
+  assert.equal(normalizeMarket(null), "KOSPI");
 });

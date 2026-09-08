@@ -2,10 +2,12 @@ import CandidateCard from "@/components/dashboard/CandidateCard";
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
+import MarketSupplyPanel from "@/components/dashboard/MarketSupplyPanel";
 import { buildCandidateCardViewModels } from "@/lib/candidate-cards";
 import { isCandidateEvidenceRpcRow } from "@/lib/candidate-evidence";
-import type { CandidateEvidenceRpcRow } from "@/lib/dashboard-types";
+import type { CandidateEvidenceRpcRow, MarketSupplyRpcRow } from "@/lib/dashboard-types";
 import { isIntradaySnapshot } from "@/lib/dashboard-types";
+import { isMarketSupplyRpcRow } from "@/lib/market-supply";
 import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
 import { buildDisappearedCandidateViewModels } from "@/lib/disappeared-candidates";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -39,6 +41,8 @@ export default async function HomePage() {
   let candidateCardsFetchFailed = false;
   let candidateEvidenceById = new Map<string, CandidateEvidenceRpcRow>();
   let candidateEvidenceFetchFailed = false;
+  let marketSupplyRows: MarketSupplyRpcRow[] = [];
+  let marketSupplyFetchFailed = false;
   if (snapshot.complete_snapshot) {
     const { data: cardRows, error: cardError } = await supabase.rpc("get_today_candidate_cards", {
       p_run_id: snapshot.complete_snapshot.run_id,
@@ -66,6 +70,19 @@ export default async function HomePage() {
     } else {
       candidateEvidenceFetchFailed = true;
       console.error("unexpected get_candidate_evidence shape", evidenceRows);
+    }
+
+    const { data: marketSupplyData, error: marketSupplyError } = await supabase.rpc("get_market_supply", {
+      p_run_id: snapshot.complete_snapshot.run_id,
+    });
+    if (marketSupplyError) {
+      marketSupplyFetchFailed = true;
+      console.error("get_market_supply failed", marketSupplyError);
+    } else if (Array.isArray(marketSupplyData) && marketSupplyData.every(isMarketSupplyRpcRow)) {
+      marketSupplyRows = marketSupplyData;
+    } else {
+      marketSupplyFetchFailed = true;
+      console.error("unexpected get_market_supply shape", marketSupplyData);
     }
   }
 
@@ -134,6 +151,7 @@ export default async function HomePage() {
       )}
 
       <DisappearedCandidatesNotice candidates={disappearedCandidates} />
+      <MarketSupplyPanel rows={marketSupplyRows} fetchFailed={marketSupplyFetchFailed} />
     </section>
   );
 }
