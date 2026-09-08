@@ -39,6 +39,7 @@ from backtest.data.loader import DATA_DIR, list_tickers, load_ticker
 from backtest.indicator_opt.combine_strategies import build_signals
 from backtest.indicator_opt.strategy_d import compute_strategy_d
 from backtest.indicator_opt.strategy_e import compute_strategy_e
+from backtest.indicator_opt.strategy_f import compute_strategy_f
 from backtest.indicators import atr
 from backtest.strategy_api import compute_abc
 from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS
@@ -51,7 +52,7 @@ WINDOW_START = "2026-01-01"
 TP_PCT = 3.0
 SL_PCT = 3.0
 JACCARD_GATE = 0.9  # 통계적 유사도 기준(AD-5 조정-방식론 동등성 선행조건)
-_GOLDEN_KEYS = ("A", "B", "C", "D", "E")
+_GOLDEN_KEYS = ("A", "B", "C", "D", "E", "F")
 _OHLCV_COLS = ("Open", "High", "Low", "Close", "Volume")
 
 
@@ -117,11 +118,13 @@ def compute_reference(
             "C": c.reindex(frame.index).fillna(False).astype(bool),
             "D": pd.Series(False, index=frame.index, dtype=bool),
             "E": pd.Series(False, index=frame.index, dtype=bool),
+            "F": pd.Series(False, index=frame.index, dtype=bool),
         }
         for segment in _valid_segments(frame):
             segment_masks = {
                 "D": compute_strategy_d(segment),
                 "E": compute_strategy_e(segment),
+                "F": compute_strategy_f(segment),
             }
             for key, mask in segment_masks.items():
                 masks[key].loc[segment.index] = (
@@ -137,7 +140,7 @@ def compute_reference(
                 segment["High"], segment["Low"], segment["Close"], window=14
             ).reindex(segment.index).to_numpy()
         terminal_indices = [segment.index[-1] for segment in _valid_segments(frame)]
-        for key in ("D", "E"):
+        for key in ("D", "E", "F"):
             masks[key].loc[terminal_indices] = False
             masks[key] = (masks[key] & segmented_atr.notna() & (segmented_atr > 0)).astype(bool)
         values = frame.loc[:, _OHLCV_COLS]

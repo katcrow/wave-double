@@ -1,7 +1,7 @@
-# 골든 픽스처 (Story 6.4)
+# 골든 픽스처 (Story 6.4/7.3)
 
 운영 태깅(`backtest.strategy_api.compute_abc`)이 backtest(`screen_abc`)가 검증한
-전략 A/B/C/D/E를 재현하는지 검증하는 **단일 권위 gate**의 고정 입력이다. `backtest/tests/test_golden_fixture.py`
+전략 A/B/C/D/E/F를 재현하는지 검증하는 **단일 권위 gate**의 고정 입력이다. `backtest/tests/test_golden_fixture.py`
 가 이 픽스처를 소비해 Jaccard 회귀를 강제한다.
 
 ## 파일 스키마 계약
@@ -43,15 +43,15 @@
 ```json
 {
   "trading_day": "2026-08-26",
-  "strategy_signals": { "A": ["종목코드..."], "B": [...], "C": [...], "D": [...], "E": [...] }
+  "strategy_signals": { "A": ["종목코드..."], "B": [...], "C": [...], "D": [...], "E": [...], "F": [...] }
 }
 ```
-- 참조 시그널 집합: 각 전략(A/B/C/D/E)에 대해 창 `[2026-01-01, trading_day]` 내 신호가
+- 참조 시그널 집합: 각 전략(A/B/C/D/E/F)에 대해 창 `[2026-01-01, trading_day]` 내 신호가
   1회 이상 발생한 종목 코드(오름차순) 목록. 각 전략은 비어 있으면 안 된다(빈 픽스처는
   명시적 실패, AD-5).
-- 참조 산출 경로: A/B/C는 `combine_strategies.build_signals`를, D/E는 각각
-  `strategy_d.compute_strategy_d`/`strategy_e.compute_strategy_e`를 유효한 연속 구간에
-  적용해 동일한 호출·윈도우 규칙을 재현한다.
+- 참조 산출 경로: A/B/C는 `combine_strategies.build_signals`를, D/E/F는 각각
+  `strategy_d.compute_strategy_d`/`strategy_e.compute_strategy_e`/`strategy_f.compute_strategy_f`를
+  유효한 연속 구간에 적용해 동일한 호출·윈도우 규칙을 재현한다.
 - 전략별 확정 값은 픽스처 재생성 도구가 원본 데이터에서 결정적으로 산출한다.
 
 ## 재생성 방법
@@ -67,7 +67,7 @@ uv run --with pandas --with numpy --with pyarrow \
 - 스크립트는 상단 부트스트랩으로 `backtest`(루트)와 `domain`(packages/domain) 패키지를
   자동으로 import 경로에 추가하므로 별도 `PYTHONPATH` 없이 실행할 수 있다.
 - 데이터 원천은 `backtest/data/raw/*.parquet`(pyarrow 필요).
-- 재생성은 결정적이며, 완료 시 참조 대비 `compute_abc`의 A/B/C/D/E별 Jaccard가 0.9 이상인지
+- 재생성은 결정적이며, 완료 시 참조 대비 `compute_abc`의 A/B/C/D/E/F별 Jaccard가 0.9 이상인지
   sanity로 강제한다. 미달이면 `SystemExit(1)`로 실패한다(불일치 종목 목록 출력).
 - parity sanity를 통과한 뒤에만 픽스처 3파일을 기록하므로, 실패 시 기존 권위
   픽스처를 덮어쓰지 않는다.

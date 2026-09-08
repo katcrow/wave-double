@@ -16,11 +16,15 @@ from .indicator_opt.strategy_e import (
     STRATEGY_E_PARAMS,
     compute_strategy_e,
 )
+from .indicator_opt.strategy_f import (
+    STRATEGY_F_PARAMS,
+    compute_strategy_f,
+)
 from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS, OhlcvCacheStatus
 
 _OHLCV_COLS = ("Open", "High", "Low", "Close", "Volume")
-_STRATEGY_KEYS = ("A", "B", "C", "D", "E")
-_STRATEGY_PARAMS: dict[str, dict[str, int | float]] = {
+_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F")
+_STRATEGY_PARAMS: dict[str, dict[str, int | float | bool | None]] = {
     "A": {
         "atr_window": 14,
         "take_profit_pct": 3.0,
@@ -41,6 +45,7 @@ _STRATEGY_PARAMS: dict[str, dict[str, int | float]] = {
     },
     "D": STRATEGY_D_PARAMS.as_dict(),
     "E": STRATEGY_E_PARAMS.as_dict(),
+    "F": STRATEGY_F_PARAMS.as_dict(),
 }
 
 # TP/SL SL-우선 규칙: 같은 봉에서 목표가·손절가가 동시에 도달되면
@@ -234,6 +239,7 @@ def compute_abc(frame: pd.DataFrame, *, ticker: str = "") -> StrategyResult:
     for key, calculator, params in (
         ("D", compute_strategy_d, STRATEGY_D_PARAMS),
         ("E", compute_strategy_e, STRATEGY_E_PARAMS),
+        ("F", compute_strategy_f, STRATEGY_F_PARAMS),
     ):
         mask = pd.Series(False, index=frame.index, dtype=bool)
         try:
@@ -255,7 +261,7 @@ def compute_abc(frame: pd.DataFrame, *, ticker: str = "") -> StrategyResult:
     try:
         signals.update(
             _apply_atr_last_bar_filters(
-                signals, frame, segments, ("D", "E")
+                signals, frame, segments, ("D", "E", "F")
             )
         )
         valid_rows = _valid_ohlcv_rows(frame)

@@ -1,6 +1,6 @@
 """골든 픽스처 회귀 테스트 (Story 6.4).
 
-운영 태깅(`compute_abc`)이 backtest 기준 구현이 검증한 전략 A/B/C/D/E를 통계적으로
+운영 태깅(`compute_abc`)이 backtest 기준 구현이 검증한 전략 A/B/C/D/E/F를 통계적으로
 재현하는지 ``tests/fixtures/golden/``의 고정 픽스처로 대조하는 gate다. 판정 기준은
 완전 일치가 아닌 **전략별 Jaccard ≥ 0.9** (통계적 유사도)이며, backtest(yfinance
 배당조정)와 운영(LS ``sujung``)의 조정-방식론 동등성이 별도 단발성 검증으로
@@ -20,13 +20,14 @@ import pytest
 from backtest.indicator_opt.combine_strategies import build_signals
 from backtest.indicator_opt.strategy_d import compute_strategy_d
 from backtest.indicator_opt.strategy_e import compute_strategy_e
+from backtest.indicator_opt.strategy_f import compute_strategy_f
 from backtest.indicators import atr
 from backtest.strategy_api import compute_abc
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GOLDEN_DIR = REPO_ROOT / "tests" / "fixtures" / "golden"
 
-_GOLDEN_KEYS = ("A", "B", "C", "D", "E")
+_GOLDEN_KEYS = ("A", "B", "C", "D", "E", "F")
 JACCARD_GATE = 0.9
 TP_PCT = 3.0
 SL_PCT = 3.0
@@ -104,11 +105,13 @@ def _reference_signals(universe: list[str], ohlcv: dict, start_ts: pd.Timestamp)
             "C": c.reindex(frame.index).fillna(False).astype(bool),
             "D": pd.Series(False, index=frame.index, dtype=bool),
             "E": pd.Series(False, index=frame.index, dtype=bool),
+            "F": pd.Series(False, index=frame.index, dtype=bool),
         }
         for segment in _valid_segments(frame):
             segment_masks = {
                 "D": compute_strategy_d(segment),
                 "E": compute_strategy_e(segment),
+                "F": compute_strategy_f(segment),
             }
             for k, mask in segment_masks.items():
                 masks[k].loc[segment.index] = (
@@ -123,7 +126,7 @@ def _reference_signals(universe: list[str], ohlcv: dict, start_ts: pd.Timestamp)
             segmented_atr.loc[segment.index] = atr(
                 segment["High"], segment["Low"], segment["Close"], window=14
             ).reindex(segment.index).to_numpy()
-        for k in ("D", "E"):
+        for k in ("D", "E", "F"):
             masks[k].loc[[segment.index[-1] for segment in _valid_segments(frame)]] = False
             masks[k] = (masks[k] & segmented_atr.notna() & (segmented_atr > 0)).astype(bool)
         values = frame.loc[:, ("Open", "High", "Low", "Close", "Volume")]

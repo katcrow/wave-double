@@ -14,6 +14,7 @@ from backtest.strategy_api import (
 )
 from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
 from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
+from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
 
 
 def _make_df(n: int = 200, *, close_nan: int | None = None) -> pd.DataFrame:
@@ -157,11 +158,15 @@ class TestLastBarDiscarded:
             "backtest.strategy_api.compute_strategy_d", return_value=last_bar.copy()
         ), patch(
             "backtest.strategy_api.compute_strategy_e", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_f", return_value=last_bar.copy()
         ):
             result = compute_abc(df, ticker="T")
 
         assert result.status == "READY"
-        assert all(not result.signals[key].any() for key in ("A", "B", "C", "D", "E"))
+        assert all(
+            not result.signals[key].any() for key in ("A", "B", "C", "D", "E", "F")
+        )
 
 
 class TestATRFilter:
@@ -207,8 +212,8 @@ class TestNormalCompute:
         assert result.ticker == "T"
         assert result.status == "READY"
         assert result.error is None
-        assert set(result.signals) == {"A", "B", "C", "D", "E"}
-        for key in ("A", "B", "C", "D", "E"):
+        assert set(result.signals) == {"A", "B", "C", "D", "E", "F"}
+        for key in ("A", "B", "C", "D", "E", "F"):
             assert result.signals[key].index.equals(df.index)
             assert result.signals[key].dtype == bool
             assert len(result.signals[key]) == 200
@@ -217,7 +222,8 @@ class TestNormalCompute:
         assert not result.signals["C"].iloc[-1]
         assert result.params_meta["D"] == STRATEGY_D_PARAMS.as_dict()
         assert result.params_meta["E"] == STRATEGY_E_PARAMS.as_dict()
-        assert set(result.params_meta) == {"A", "B", "C", "D", "E"}
+        assert result.params_meta["F"] == STRATEGY_F_PARAMS.as_dict()
+        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F"}
         for key in ("A", "B", "C"):
             assert result.params_meta[key] == {
                 "atr_window": 14,
@@ -249,7 +255,7 @@ class TestInvalidOhlcSegments:
         invalid = 100
         df.iloc[invalid, df.columns.get_loc("High")] = 1.0
         segment_masks: list[pd.Index] = []
-        d_e_segments: list[pd.Index] = []
+        d_e_f_segments: list[pd.Index] = []
 
         def fake_build(frame, *_args, **_kwargs):
             segment_masks.append(frame.index)
@@ -257,37 +263,41 @@ class TestInvalidOhlcSegments:
             mask.iloc[-1] = True
             return mask.copy(), mask.copy(), mask.copy()
 
-        def fake_d_e(frame, *_args, **_kwargs):
-            d_e_segments.append(frame.index)
+        def fake_segment_calculator(frame, *_args, **_kwargs):
+            d_e_f_segments.append(frame.index)
             mask = pd.Series(False, index=frame.index)
             mask.iloc[-1] = True
             return mask
 
         with patch("backtest.strategy_api.build_signals", side_effect=fake_build), patch(
-            "backtest.strategy_api.compute_strategy_d", side_effect=fake_d_e
+            "backtest.strategy_api.compute_strategy_d", side_effect=fake_segment_calculator
         ), patch(
-            "backtest.strategy_api.compute_strategy_e", side_effect=fake_d_e
+            "backtest.strategy_api.compute_strategy_e", side_effect=fake_segment_calculator
+        ), patch(
+            "backtest.strategy_api.compute_strategy_f", side_effect=fake_segment_calculator
         ):
             result = compute_abc(df, ticker="T")
 
         assert result.status == "READY"
         assert len(segment_masks) == 1
         assert segment_masks[0].equals(df.index)
-        assert len(d_e_segments) == 4
+        assert len(d_e_f_segments) == 6
         assert all(result.signals[key].dtype == bool for key in result.signals)
         assert all(not result.signals[key].iloc[invalid] for key in result.signals)
-        # A/B/C preserve full-frame calculation; D/E terminal segment bars are filtered.
+        # A/B/C preserve full-frame calculation; D/E/F terminal segment bars are filtered.
         assert not result.signals["D"].iloc[invalid - 1]
         assert not result.signals["E"].iloc[invalid - 1]
+        assert not result.signals["F"].iloc[invalid - 1]
 
     @pytest.mark.parametrize(
         ("calculator", "strategy"),
         [
             ("compute_strategy_d", "D"),
             ("compute_strategy_e", "E"),
+            ("compute_strategy_f", "F"),
         ],
     )
-    def test_d_or_e_failure_is_typed_and_names_strategy(
+    def test_calculator_failure_is_typed_and_names_strategy(
         self, calculator: str, strategy: str
     ) -> None:
         df = _make_df(n=200)
@@ -304,20 +314,30 @@ class TestInvalidOhlcSegments:
         assert result.error.strategy == strategy
         assert "계산기 오류" in result.error.message
 
-    def test_calculator_contract_violation_is_typed_error(self) -> None:
+    @pytest.mark.parametrize(
+        ("calculator", "strategy"),
+        [
+            ("compute_strategy_d", "D"),
+            ("compute_strategy_e", "E"),
+            ("compute_strategy_f", "F"),
+        ],
+    )
+    def test_calculator_contract_violation_is_typed_error(
+        self, calculator: str, strategy: str
+    ) -> None:
         df = _make_df(n=200)
         invalid_mask = pd.Series(1, index=df.index, dtype="int64")
 
-        with patch("backtest.strategy_api.compute_strategy_d", return_value=invalid_mask):
+        with patch(f"backtest.strategy_api.{calculator}", return_value=invalid_mask):
             result = compute_abc(df, ticker="T")
 
         assert result.status == "ERROR"
         assert result.signals == {}
         assert result.error is not None
         assert result.error.code == StrategyErrorCode.SIGNAL_COMPUTE_ERROR
-        assert result.error.strategy == "D"
+        assert result.error.strategy == strategy
 
-    def test_d_and_e_positive_masks_are_returned(self) -> None:
+    def test_d_e_f_positive_masks_are_returned(self) -> None:
         df = _make_df(n=200)
         positive = pd.Series(False, index=df.index)
         positive.iloc[100] = True
@@ -326,12 +346,15 @@ class TestInvalidOhlcSegments:
             "backtest.strategy_api.compute_strategy_d", return_value=positive.copy()
         ), patch(
             "backtest.strategy_api.compute_strategy_e", return_value=positive.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_f", return_value=positive.copy()
         ):
             result = compute_abc(df, ticker="T")
 
         assert result.status == "READY"
         assert result.signals["D"].iloc[100]
         assert result.signals["E"].iloc[100]
+        assert result.signals["F"].iloc[100]
 
 
 class TestBuildSignalsDefaultSwallows:
