@@ -270,12 +270,15 @@ begin
   values ('close:2099-08-07', date '2099-08-07', 'close')
   on conflict (logical_run_key) do nothing;
   begin
-    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    -- explicit created_at: within one transaction now() is fixed, so both rows would
+    -- otherwise share an identical timestamp and the OPEN/TP replay order would fall back
+    -- to comparing two random event_id UUIDs -- non-deterministic. Force OPEN before TP.
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload, created_at)
     values
       ('100014', 'A', 'OPEN', 'close:2099-08-07',
-        '{"entry_date":"2099-08-07","entry_price":700}'::jsonb),
+        '{"entry_date":"2099-08-07","entry_price":700}'::jsonb, now()),
       ('100014', 'A', 'TP', 'close:2099-08-07',
-        '{"exit_price":721,"return_pct":2.9}'::jsonb);
+        '{"exit_price":721,"return_pct":2.9}'::jsonb, now() + interval '1 second');
     perform public.rebuild_outcome_projection();
   exception when others then
     if sqlerrm like 'REBUILD: TP payload missing trading_day%' then caught := true; else raise; end if;
@@ -291,12 +294,14 @@ begin
   values ('close:2099-08-08', date '2099-08-08', 'close')
   on conflict (logical_run_key) do nothing;
   begin
-    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    -- explicit created_at: see the 100014 block above -- force OPEN before SL so replay
+    -- order is deterministic instead of depending on random event_id tie-breaking.
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload, created_at)
     values
       ('100015', 'A', 'OPEN', 'close:2099-08-08',
-        '{"entry_date":"2099-08-08","entry_price":700}'::jsonb),
+        '{"entry_date":"2099-08-08","entry_price":700}'::jsonb, now()),
       ('100015', 'A', 'SL', 'close:2099-08-08',
-        '{"trading_day":"2099-08-08","exit_price":"oops","return_pct":-3.1}'::jsonb);
+        '{"trading_day":"2099-08-08","exit_price":"oops","return_pct":-3.1}'::jsonb, now() + interval '1 second');
     perform public.rebuild_outcome_projection();
   exception when others then
     if sqlerrm like 'REBUILD: SL payload invalid exit_price%' then caught := true; else raise; end if;

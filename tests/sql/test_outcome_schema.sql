@@ -60,14 +60,15 @@ begin
     raise exception 'candidate_outcome column types mismatch: %', v_column_types;
   end if;
 
-  if (select count(*) from public.outcome_strategy_rules) <> 5 then
-    raise exception 'outcome_strategy_rules must contain exactly A/B/C/D/E';
+  if (select count(*) from public.outcome_strategy_rules) <> 6 then
+    raise exception 'outcome_strategy_rules must contain exactly A/B/C/D/E/F';
   end if;
   if exists (
     select 1 from public.outcome_strategy_rules
     where (strategy in ('A','B','C') and (tp_pct, sl_pct, cutoff_n) <> (3.0, 3.0, 30))
        or (strategy = 'D' and (tp_pct, sl_pct, cutoff_n) <> (3.0, 5.0, 20))
        or (strategy = 'E' and (tp_pct, sl_pct, cutoff_n) <> (2.0, 5.0, 30))
+       or (strategy = 'F' and (tp_pct, sl_pct, cutoff_n) <> (3.0, 4.0, 999999))
   ) then raise exception 'outcome_strategy_rules values mismatch'; end if;
 
   -- sl_pct의 rule 범위는 candidate_outcome.exit_price가 양수가 되는 범위와 일치해야 한다.
@@ -234,6 +235,18 @@ begin
   perform set_config('wave_double.outcome_mutation_allowed', 'off', true);
   if not v_caught then raise exception 'direct candidate_outcome snapshot UPDATE was accepted'; end if;
 
+  -- Story 7.4 review patch: F direct projection writes cannot bypass the
+  -- strategy-specific snapshot contract either (guard_outcome_strategy_snapshot's
+  -- cutoff_n comparison was extended from D/E to D/E/F).
+  v_caught := false;
+  begin
+    insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+    values ('000008', 'F', date '2099-06-01', 1, 'OPEN', 3, 4, 1);
+  exception when others then
+    if sqlerrm = 'OUTCOME_STRATEGY_SNAPSHOT_MISMATCH' then v_caught := true; else raise; end if;
+  end;
+  if not v_caught then raise exception 'F strategy snapshot cutoff_n mismatch was accepted'; end if;
+
   -- A natural-key collision with an already-terminal projection must reject the
   -- OPEN ledger insert instead of leaving an orphan OPEN event behind.
   insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume)
@@ -323,7 +336,7 @@ begin
   v_caught := false;
   begin
     insert into public.outcome_events(ticker, strategy, command_type, logical_run_key)
-    values ('000001', 'F', 'OPEN', 'close:2099-06-01');
+    values ('000001', 'G', 'OPEN', 'close:2099-06-01');
   exception when check_violation then v_caught := true;
   end;
   if not v_caught then raise exception 'invalid event strategy was accepted'; end if;
@@ -379,7 +392,7 @@ begin
   v_caught := false;
   begin
     insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
-    values ('000002', 'F', date '2099-06-01', 1, 'OPEN');
+    values ('000002', 'G', date '2099-06-01', 1, 'OPEN');
   exception when check_violation then v_caught := true;
   end;
   if not v_caught then raise exception 'invalid projection strategy was accepted'; end if;

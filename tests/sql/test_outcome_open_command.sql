@@ -15,6 +15,7 @@ declare
   v_result5 jsonb;
   v_result8 jsonb;
   v_result9 jsonb;
+  v_result10 jsonb;
   v_preexisting_outcome_id uuid;
 begin
   insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
@@ -34,7 +35,8 @@ begin
     ('ZZTEST3', date '2099-07-01', 200, 205, 199, 201, 1000),
     ('ZZTEST4', date '2099-07-01', 300, 305, 299, 301, 1000),
     ('ZZTEST7', date '2099-07-01', 400, 405, 399, 401, 1000),
-    ('ZZTEST8', date '2099-07-01', 500, 505, 499, 501, 1000)
+    ('ZZTEST8', date '2099-07-01', 500, 505, 499, 501, 1000),
+    ('ZZTEST9', date '2099-07-01', 600, 605, 599, 601, 1000)
   on conflict (ticker, trading_day) do nothing;
 
   -- Scenario: 최초 발행.
@@ -95,6 +97,38 @@ begin
     where ticker = 'ZZTEST8' and strategy = 'E' and command_type = 'OPEN'
       and payload @> '{"tp_pct":2.0,"sl_pct":5.0,"cutoff_n":30}'::jsonb
   ) then raise exception 'D/E OPEN payload parameters were not snapshotted'; end if;
+
+  -- Story 7.4: F도 OPEN 시점의 전략별 청산 파라미터(TP 3%/SL 4%/cutoff_n sentinel 999999
+  -- = 무제한 보유)를 원장과 projection에 함께 고정한다.
+  v_result10 := public.emit_open_command('close:2099-07-01', 'ZZTEST9', 'F');
+  if (v_result10->>'skipped')::boolean is distinct from false
+     or (v_result10->>'tp_pct')::numeric <> 3.0
+     or (v_result10->>'sl_pct')::numeric <> 4.0
+     or (v_result10->>'cutoff_n')::integer <> 999999 then
+    raise exception 'F OPEN strategy parameters mismatch: %', v_result10;
+  end if;
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = 'ZZTEST9' and strategy = 'F' and tp_pct = 3.0 and sl_pct = 4.0 and cutoff_n = 999999
+  ) then raise exception 'F candidate_outcome parameters were not snapshotted'; end if;
+  if not exists (
+    select 1 from public.outcome_events
+    where ticker = 'ZZTEST9' and strategy = 'F' and command_type = 'OPEN'
+      and payload @> '{"tp_pct":3.0,"sl_pct":4.0,"cutoff_n":999999}'::jsonb
+  ) then raise exception 'F OPEN payload parameters were not snapshotted'; end if;
+
+  -- Story 7.4: F도 동일-key replay 시 rule 행이 일시적으로 없어도 저장된 snapshot을 그대로 반환한다.
+  delete from public.outcome_strategy_rules where strategy = 'F';
+  v_result10 := public.emit_open_command('close:2099-07-01', 'ZZTEST9', 'F');
+  if (v_result10->>'replayed')::boolean is distinct from true
+     or (v_result10->>'outcome_id')::uuid is null
+     or (v_result10->>'tp_pct')::numeric <> 3.0
+     or (v_result10->>'sl_pct')::numeric <> 4.0
+     or (v_result10->>'cutoff_n')::integer <> 999999 then
+    raise exception 'F replay must return stored snapshot without rule lookup: %', v_result10;
+  end if;
+  insert into public.outcome_strategy_rules(strategy, tp_pct, sl_pct, cutoff_n)
+  values ('F', 3.0, 4.0, 999999);
 
   -- 기존 동일-key replay는 rule row가 일시적으로 없어도 저장된 snapshot을 반환한다.
   delete from public.outcome_strategy_rules where strategy = 'D';
@@ -164,10 +198,11 @@ begin
   end;
   if not v_caught then raise exception 'missing daily_ohlcv close was accepted'; end if;
 
-  -- Scenario: 미지원 전략. D/E는 Epic 6.5에서 지원되므로 F만 거부되어야 한다.
+  -- Scenario: 미지원 전략. D/E/F는 Epic 6.5/7.4에서 지원되므로 진짜 미정의 코드('G')만
+  -- 거부되어야 한다.
   v_caught := false;
   begin
-    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'F');
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'G');
   exception when others then
     if sqlerrm = 'INVALID_STRATEGY' then v_caught := true; else raise; end if;
   end;
