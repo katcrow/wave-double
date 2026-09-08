@@ -1,15 +1,17 @@
 import {
   evidenceSlotLabel,
   formatEvidenceDateTime,
-  formatEvidenceNumber,
   formatEvidenceSummary,
-  formatEvidenceValue,
   normalizeCandidateEvidence,
 } from "@/lib/candidate-evidence";
+import {
+  EVIDENCE_METRICS,
+  formatEvidenceMetricValue,
+  formatEvidenceStatusLabel,
+  getEvidenceTradingDay,
+} from "@/lib/candidate-evidence-view";
 import type {
-  CandidateEvidenceRawRow,
   CandidateEvidenceRpcRow,
-  EvidenceInvestorStatus,
 } from "@/lib/dashboard-types";
 
 interface CandidateEvidencePanelProps {
@@ -17,33 +19,6 @@ interface CandidateEvidencePanelProps {
   evidence?: CandidateEvidenceRpcRow;
   fetchFailed: boolean;
   open: boolean;
-}
-
-const EVIDENCE_METRICS = [
-  { key: "close", label: "종가", unit: "원" },
-  { key: "volume", label: "거래량", unit: "주" },
-  { key: "change_pct", label: "등락률", unit: "%" },
-  { key: "foreign_net", label: "외인", unit: "주" },
-  { key: "institution_net", label: "기관", unit: "주" },
-  { key: "individual_net", label: "개인", unit: "주" },
-  { key: "program_net", label: "프로그램", unit: "주" },
-] as const;
-
-type EvidenceMetricKey = (typeof EVIDENCE_METRICS)[number]["key"];
-
-function formatMetricValue(
-  row: CandidateEvidenceRawRow | null,
-  status: EvidenceInvestorStatus | "missing",
-  key: EvidenceMetricKey
-): string {
-  if (key === "close") return formatEvidenceNumber(row?.close);
-  if (key === "volume") return formatEvidenceNumber(row?.volume);
-  if (key === "change_pct") return row ? `${formatEvidenceNumber(row.change_pct)}%` : "미수집";
-  return formatEvidenceValue(row?.[key], status);
-}
-
-function formatStatusLabel(status: EvidenceInvestorStatus | "missing"): string {
-  return status === "confirmed" ? "확정" : status === "pending" ? "미확정" : "미수집";
 }
 
 export default function CandidateEvidencePanel({
@@ -120,18 +95,18 @@ export default function CandidateEvidencePanel({
                     <th scope="row">
                       <span className="candidate-evidence-table__slot">{evidenceSlotLabel(slot)}</span>
                       <span className="candidate-evidence-table__day">
-                        {row?.trading_day ?? "거래일 없음"}
+                        {getEvidenceTradingDay(row) ?? "거래일 없음"}
                       </span>
                       <span className="candidate-evidence-table__status">
-                        {formatStatusLabel(status)}
+                        {formatEvidenceStatusLabel(status)}
                       </span>
                     </th>
                     {EVIDENCE_METRICS.map((metric) => (
                       <td
                         key={metric.key}
-                        aria-label={`${metric.label} ${formatMetricValue(row, status, metric.key)}`}
+                        aria-label={`${metric.label} ${formatEvidenceMetricValue(row, status, metric.key)}`}
                       >
-                        {formatMetricValue(row, status, metric.key)}
+                        {formatEvidenceMetricValue(row, status, metric.key)}
                       </td>
                     ))}
                   </tr>
@@ -143,6 +118,7 @@ export default function CandidateEvidencePanel({
             {viewModel.slots.map(({ slot, row, status }) => (
               <article
                 key={slot}
+                aria-labelledby={`${id}-${slot}-heading`}
                 className={
                   status === "missing"
                     ? "candidate-evidence-card candidate-evidence-card--missing"
@@ -152,22 +128,27 @@ export default function CandidateEvidencePanel({
                 }
               >
                 <header className="candidate-evidence-card__header">
+                  <h3 id={`${id}-${slot}-heading`} className="sr-only">
+                    {evidenceSlotLabel(slot)} {getEvidenceTradingDay(row) ?? "거래일 없음"} 근거
+                  </h3>
                   <div className="candidate-evidence-card__date">
                     <span className="candidate-evidence-card__slot">{evidenceSlotLabel(slot)}</span>
                     <span className="candidate-evidence-card__date-label">기준일</span>
-                    {row ? (
-                      <time dateTime={row.trading_day}>{row.trading_day}</time>
+                    {getEvidenceTradingDay(row) ? (
+                      <time dateTime={getEvidenceTradingDay(row) ?? undefined}>
+                        {getEvidenceTradingDay(row)}
+                      </time>
                     ) : (
                       <span>거래일 없음</span>
                     )}
                   </div>
-                  <span className="candidate-evidence-card__status">{formatStatusLabel(status)}</span>
+                  <span className="candidate-evidence-card__status">{formatEvidenceStatusLabel(status)}</span>
                 </header>
                 <dl className="candidate-evidence-card__metrics">
                   {EVIDENCE_METRICS.map((metric) => (
                     <div className="candidate-evidence-card__metric" key={metric.key}>
                       <dt>{metric.label}({metric.unit})</dt>
-                      <dd>{formatMetricValue(row, status, metric.key)}</dd>
+                      <dd>{formatEvidenceMetricValue(row, status, metric.key)}</dd>
                     </div>
                   ))}
                 </dl>

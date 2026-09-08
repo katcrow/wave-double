@@ -563,8 +563,8 @@ a {
 }
 
 @media (min-width: 1200px) {
-  .candidate-card-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr));
+  .candidate-card--expanded {
+    grid-column: 1 / -1;
   }
 
   .candidate-evidence-panel__table-wrap {
@@ -584,7 +584,29 @@ a {
   }
 }
 
+@media (min-width: 768px) and (max-width: 1199px) {
+  .candidate-evidence-panel__table-wrap {
+    overflow-x: visible;
+  }
+
+  .candidate-evidence-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .candidate-evidence-table th,
+  .candidate-evidence-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+  }
+}
+
 @media (max-width: 767px) {
+  .candidate-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .candidate-evidence-panel__table-wrap {
     display: none;
   }
@@ -704,6 +726,9 @@ a {
     font-size: var(--font-size-label);
     font-weight: var(--font-weight-data);
     text-align: right;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 }
 

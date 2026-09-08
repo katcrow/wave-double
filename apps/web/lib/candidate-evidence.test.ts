@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   formatEvidenceDateTime,
@@ -8,9 +9,16 @@ import {
   isCandidateEvidenceRpcRow,
   normalizeCandidateEvidence,
 } from "./candidate-evidence.ts";
+import {
+  EVIDENCE_METRICS,
+  formatEvidenceMetricValue,
+  formatEvidenceStatusLabel,
+  getEvidenceTradingDay,
+} from "./candidate-evidence-view.ts";
 import type { CandidateEvidenceRpcRow } from "./dashboard-types.ts";
 
 const candidateId = "11111111-1111-1111-1111-111111111111";
+const responsiveStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 function row(overrides: Partial<CandidateEvidenceRpcRow["rows"][number]> = {}) {
   return {
@@ -110,6 +118,48 @@ test("정규화 슬롯은 모바일 label/value에 필요한 7개 지표와 상�
   );
   assert.equal(model.slots[1].status, "pending");
   assert.equal(model.slots[1].row?.foreign_net, null);
+});
+
+test("table/card 양쪽 표현이 공유하는 7개 지표와 단위를 고정한다", () => {
+  assert.deepEqual(EVIDENCE_METRICS.map(({ key, label, unit }) => [key, label, unit]), [
+    ["close", "종가", "원"],
+    ["volume", "거래량", "주"],
+    ["change_pct", "등락률", "%"],
+    ["foreign_net", "외인", "주"],
+    ["institution_net", "기관", "주"],
+    ["individual_net", "개인", "주"],
+    ["program_net", "프로그램", "주"],
+  ]);
+});
+
+test("모바일 표시 포맷은 confirmed 0, pending, missing을 구분한다", () => {
+  const confirmed = row({ foreign_net: 0 });
+  assert.equal(formatEvidenceMetricValue(confirmed, "confirmed", "foreign_net"), "0");
+  assert.equal(formatEvidenceMetricValue(row({ foreign_net: null }), "pending", "foreign_net"), "미확정");
+  assert.equal(formatEvidenceMetricValue(row({ foreign_net: 0 }), "missing", "foreign_net"), "미수집");
+  assert.equal(formatEvidenceStatusLabel("pending"), "미확정");
+  assert.equal(formatEvidenceStatusLabel("missing"), "미수집");
+});
+
+test("빈 거래일은 빈 datetime 대신 안전한 기준일 문구를 사용한다", () => {
+  assert.equal(getEvidenceTradingDay(row({ trading_day: "" })), null);
+  assert.equal(getEvidenceTradingDay(row({ trading_day: "  " })), null);
+  assert.equal(getEvidenceTradingDay(row({ trading_day: "2099-06-01" })), "2099-06-01");
+});
+
+test("반응형 계약은 wide table과 expanded panel의 가로 제약을 명시한다", () => {
+  assert.match(responsiveStyles, /@media \(min-width: 1200px\)/);
+  assert.match(responsiveStyles, /\.candidate-card--expanded\s*\{\s*grid-column: 1 \/ -1;/);
+  assert.match(responsiveStyles, /\.candidate-evidence-table\s*\{[\s\S]*?table-layout: fixed;/);
+  assert.match(responsiveStyles, /\.candidate-evidence-panel__table-wrap\s*\{\s*overflow-x: visible;/);
+});
+
+test("반응형 계약은 mobile cards와 중간 폭 줄바꿈을 보장한다", () => {
+  assert.match(responsiveStyles, /@media \(min-width: 768px\) and \(max-width: 1199px\)/);
+  assert.match(responsiveStyles, /@media \(max-width: 767px\)/);
+  assert.match(responsiveStyles, /\.candidate-evidence-panel__table-wrap\s*\{\s*display: none;/);
+  assert.match(responsiveStyles, /\.candidate-evidence-card-list\s*\{\s*display: grid;/);
+  assert.match(responsiveStyles, /\.candidate-evidence-card__metric dd\s*\{[\s\S]*?overflow-wrap: break-word;[\s\S]*?word-break: normal;/);
 });
 
 test("같은 슬롯이 중복되면 최신 거래일/수집 시각 행을 선택한다", () => {
