@@ -7,9 +7,10 @@ import { test, expect } from "@playwright/test";
 // Story 2.7: 카드 그리드/빈 상태(태깅 후보 유무에 따른 분기)도 같은 이유로 인증된 세션이 필요해
 // 여기서는 자동화하지 않는다 -- spec-2-7의 Verification "Manual checks"에서 실제 Supabase
 // 프로젝트로 확인한다. 카드 뷰모델 계산 자체의 회귀 방지는 lib/candidate-cards.test.ts가 담당한다.
-// Story 4.6: 인증 세션을 발급하는 CI fixture가 아직 없어 근거 패널의 클릭/키보드/태그 링크
-// 브라우저 검증은 실행하지 않는다. 아래 미인증 redirect 회귀와 lib/candidate-evidence.test.ts가
-// 자동 검증 범위이며, 인증 세션이 준비되면 이 파일에 패널 smoke를 추가한다.
+// Story 4.6/4.7: 인증 세션을 발급하는 CI fixture가 아직 없어 근거 패널의 클릭/키보드/태그 링크와
+// 1200px/768px 미만 반응형 표현의 브라우저 검증은 실행하지 않는다. 아래 미인증 redirect 회귀와
+// lib/candidate-evidence.test.ts가 자동 검증 범위이며, 인증 세션이 준비되면 이 파일에 패널 smoke를
+// 추가한다.
 
 test("미인증 상태로 오늘의 후보에 접속하면 로그인으로 리다이렉트된다", async ({ page }) => {
   await page.goto("/");

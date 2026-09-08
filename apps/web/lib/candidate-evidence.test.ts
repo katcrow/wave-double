@@ -79,6 +79,39 @@ test("pending 행은 대기 상태로 남고 source fallback은 기본으로 표
   assert.equal(model.pendingSlotCount, 1);
 });
 
+test("정규화 슬롯은 모바일 label/value에 필요한 7개 지표와 상태를 보존한다", () => {
+  const model = normalizeCandidateEvidence(
+    evidence({
+      rows: [
+        row({
+          foreign_net: 11,
+          institution_net: -22,
+          individual_net: 33,
+          program_net: 44,
+        }),
+        row({ slot: "D-1", investor_net_status: "pending", foreign_net: null }),
+      ],
+    })
+  );
+  const d0 = model.slots[0];
+
+  assert.equal(d0.status, "confirmed");
+  assert.deepEqual(
+    [
+      d0.row?.close,
+      d0.row?.volume,
+      d0.row?.change_pct,
+      d0.row?.foreign_net,
+      d0.row?.institution_net,
+      d0.row?.individual_net,
+      d0.row?.program_net,
+    ],
+    [70000, 1200000, 1.25, 11, -22, 33, 44]
+  );
+  assert.equal(model.slots[1].status, "pending");
+  assert.equal(model.slots[1].row?.foreign_net, null);
+});
+
 test("같은 슬롯이 중복되면 최신 거래일/수집 시각 행을 선택한다", () => {
   const model = normalizeCandidateEvidence(
     evidence({

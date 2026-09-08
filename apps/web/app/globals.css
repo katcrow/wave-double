@@ -558,6 +558,155 @@ a {
   color: var(--color-caution);
 }
 
+.candidate-evidence-card-list {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  .candidate-card-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr));
+  }
+
+  .candidate-evidence-panel__table-wrap {
+    overflow-x: visible;
+  }
+
+  .candidate-evidence-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .candidate-evidence-table th,
+  .candidate-evidence-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+  }
+}
+
+@media (max-width: 767px) {
+  .candidate-evidence-panel__table-wrap {
+    display: none;
+  }
+
+  .candidate-evidence-card-list {
+    display: grid;
+    gap: var(--space-3);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .candidate-evidence-card {
+    min-width: 0;
+    padding: var(--space-3);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+
+  .candidate-evidence-card--pending {
+    border-color: var(--color-informational);
+    background: rgba(127, 168, 216, 0.06);
+  }
+
+  .candidate-evidence-card--missing {
+    border-color: var(--color-caution);
+    background: rgba(217, 170, 104, 0.07);
+  }
+
+  .candidate-evidence-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-width: 0;
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .candidate-evidence-card__date {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-2);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .candidate-evidence-card__slot {
+    color: var(--color-ink-primary);
+    font-family: var(--font-family-data);
+    font-size: var(--font-size-data);
+    font-weight: var(--font-weight-data);
+  }
+
+  .candidate-evidence-card__date-label {
+    color: var(--color-ink-muted);
+    font-size: var(--font-size-label);
+  }
+
+  .candidate-evidence-card__date time,
+  .candidate-evidence-card__date > span:last-child {
+    color: var(--color-ink-secondary);
+    font-family: var(--font-family-data);
+    font-size: var(--font-size-label);
+  }
+
+  .candidate-evidence-card__status {
+    flex-shrink: 0;
+    color: var(--color-positive);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-label);
+    overflow-wrap: anywhere;
+  }
+
+  .candidate-evidence-card--pending .candidate-evidence-card__status {
+    color: var(--color-informational);
+  }
+
+  .candidate-evidence-card--missing .candidate-evidence-card__status,
+  .candidate-evidence-card--missing .candidate-evidence-card__metric dd {
+    color: var(--color-caution);
+  }
+
+  .candidate-evidence-card__metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-3);
+    margin: var(--space-3) 0 0;
+  }
+
+  .candidate-evidence-card__metric {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .candidate-evidence-card__metric dt,
+  .candidate-evidence-card__metric dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .candidate-evidence-card__metric dt {
+    color: var(--color-ink-muted);
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-label);
+  }
+
+  .candidate-evidence-card__metric dd {
+    color: var(--color-ink-primary);
+    font-family: var(--font-family-data);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-data);
+    text-align: right;
+  }
+}
+
 .strategy-tag-list {
   display: flex;
   flex-wrap: wrap;
