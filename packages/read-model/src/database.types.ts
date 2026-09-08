@@ -526,6 +526,47 @@ export type Database = {
           },
         ]
       }
+      market_supply: {
+        Row: {
+          attempt_run_id: string
+          collected_at: string
+          foreign_net: number
+          individual_net: number
+          institution_net: number
+          market: string
+          program_net: number
+          trading_day: string
+        }
+        Insert: {
+          attempt_run_id: string
+          collected_at?: string
+          foreign_net: number
+          individual_net: number
+          institution_net: number
+          market: string
+          program_net: number
+          trading_day: string
+        }
+        Update: {
+          attempt_run_id?: string
+          collected_at?: string
+          foreign_net?: number
+          individual_net?: number
+          institution_net?: number
+          market?: string
+          program_net?: number
+          trading_day?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_supply_attempt_run_id_fkey"
+            columns: ["attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["run_id"]
+          },
+        ]
+      }
       supply_3day: {
         Row: {
           attempt_run_id: string

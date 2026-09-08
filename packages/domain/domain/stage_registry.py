@@ -24,11 +24,17 @@ def verify_tags(run_id: UUID, stage: str) -> bool:
     return bool(run_id) and stage == Stage.TAGS.value
 
 
+def verify_market_supply(run_id: UUID, stage: str) -> bool:
+    """Story 4.5의 시장 전체 수급 stage 기본 verifier."""
+    return bool(run_id) and stage == Stage.MARKET_SUPPLY.value
+
+
 class StageRegistry:
     def __init__(self, verifiers: Mapping[str | Stage, StageVerifier] | None = None) -> None:
         self._verifiers: dict[Stage, StageVerifier] = {
             Stage.CANDIDATES: verify_candidates,
             Stage.TAGS: verify_tags,
+            Stage.MARKET_SUPPLY: verify_market_supply,
         }
         for stage, verifier in (verifiers or {}).items():
             self.register(stage, verifier)

@@ -3,6 +3,19 @@
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 begin;
 
+create function public.__fixture_seed_market_supply(p_run_id uuid)
+returns void language sql as $$
+  insert into public.market_supply(
+    attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net
+  )
+  select p_run_id, m.market, l.trading_day, 1, 2, 3, 4
+  from public.runs r
+  join public.logical_runs l on l.logical_run_key = r.logical_run_key
+  cross join (values ('KOSPI'::text), ('KOSDAQ'::text)) m(market)
+  where r.run_id = p_run_id
+  on conflict (attempt_run_id, market, trading_day) do nothing;
+$$;
+
 do $$
  declare key text := 'close:2099-01-02'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
 begin
@@ -23,6 +36,9 @@ begin
    -- Story 4.1: publish_attempt는 supply_3day stage success도 게이트로 요구한다.
    perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
    perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
    if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) <> attempt_id then raise exception 'close canonical pointer missing'; end if;
    if (select status from public.runs where runs.run_id = attempt_id) <> 'published' then raise exception 'not published'; end if;
@@ -49,6 +65,7 @@ begin
   if exists (select 1 from public.logical_runs where logical_run_key = key and current_complete_run_id is not null) then raise exception 'partial changed complete pointer'; end if;
   caught := false;
   begin
+     perform public.__fixture_seed_market_supply(attempt_id);
      perform public.publish_attempt(attempt_id, fence, lease);
   exception when others then caught := true;
   end;
@@ -146,7 +163,10 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then raise exception 'close attempt with active tags did not publish'; end if;
@@ -208,6 +228,9 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if not exists (
@@ -266,7 +289,10 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then
@@ -355,8 +381,11 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
   begin
+    perform public.__fixture_seed_market_supply(attempt_id);
     perform public.publish_attempt(attempt_id, fence, lease);
   exception when others then
     if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then caught := true; else raise; end if;
@@ -411,8 +440,11 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
   begin
+    perform public.__fixture_seed_market_supply(attempt_id);
     perform public.publish_attempt(attempt_id, fence, lease);
   exception when others then
     if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then caught := true; else raise; end if;
@@ -517,7 +549,10 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
   publish_result := public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then
@@ -622,7 +657,10 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then
@@ -757,7 +795,10 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
   publish_result := public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then
@@ -984,7 +1025,11 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then
@@ -1118,7 +1163,11 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.candidate_outcome where outcome_id = outcome_future_row) <> 'OPEN' then
@@ -1408,7 +1457,11 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
+  perform public.__fixture_seed_market_supply(attempt_id);
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.runs where run_id = attempt_id) <> 'published' then
@@ -1509,6 +1562,10 @@ begin
   perform public.write_stage(seed_attempt_id, 'tags', seed_fence, seed_lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
   perform public.write_stage(seed_attempt_id, 'supply_3day', seed_fence, seed_lease, 'pending', 'running');
   perform public.write_stage(seed_attempt_id, 'supply_3day', seed_fence, seed_lease, 'running', 'success');
+  perform public.write_stage(seed_attempt_id, 'market_supply', seed_fence, seed_lease, 'pending', 'running');
+  perform public.write_stage(seed_attempt_id, 'market_supply', seed_fence, seed_lease, 'running', 'success');
+  perform public.__fixture_seed_market_supply(seed_attempt_id);
+  perform public.__fixture_seed_market_supply(seed_attempt_id);
   perform public.publish_attempt(seed_attempt_id, seed_fence, seed_lease);
 
   select outcome_id into outcome_d_tp from public.candidate_outcome where ticker = 'ZZ6DTP' and strategy = 'D';
@@ -1536,6 +1593,9 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
 
   if (select status from public.candidate_outcome where outcome_id = outcome_d_tp) <> 'TP'

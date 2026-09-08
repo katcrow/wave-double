@@ -1,7 +1,20 @@
 -- Supabase SQL fixture for Story 4.1.
--- 실행 전 202609080900_parameterize_outcome_strategy_rules_f.sql까지의 모든 migration을 적용한다.
+-- 실행 전 202609081000_create_market_supply.sql까지의 모든 migration을 적용한다.
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 begin;
+
+create function public.__fixture_seed_market_supply(p_run_id uuid)
+returns void language sql as $$
+  insert into public.market_supply(
+    attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net
+  )
+  select p_run_id, m.market, l.trading_day, 1, 2, 3, 4
+  from public.runs r
+  join public.logical_runs l on l.logical_run_key = r.logical_run_key
+  cross join (values ('KOSPI'::text), ('KOSDAQ'::text)) m(market)
+  where r.run_id = p_run_id
+  on conflict (attempt_run_id, market, trading_day) do nothing;
+$$;
 
 create temp table _supply_fixture_results (
   scenario text primary key,
@@ -147,6 +160,9 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success', jsonb_build_object('row_count', 3));
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success', jsonb_build_object('row_count', 2));
+  perform public.__fixture_seed_market_supply(attempt_id);
 
   -- Story 7.2/7.4 경계: 동일 후보의 A/F multi-tag와 F rule snapshot을 publish한다.
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, params_meta)
@@ -209,14 +225,14 @@ begin
   if (snapshot->'complete_snapshot'->'sections'->'supply_3day'->>'row_count')::integer <> 3 then
     raise exception 'expected supply_3day.row_count=3, got %', snapshot->'complete_snapshot'->'sections'->'supply_3day';
   end if;
-  if not (snapshot->'available_partial_sections' @> '["supply_3day"]'::jsonb) then
-    raise exception 'expected available_partial_sections to include supply_3day, got %', snapshot->'available_partial_sections';
+  if not (snapshot->'available_partial_sections' @> '["supply_3day", "market_supply"]'::jsonb) then
+    raise exception 'expected available_partial_sections to include supply_3day and market_supply, got %', snapshot->'available_partial_sections';
   end if;
   if snapshot->'missing_sections' @> '["supply_3day"]'::jsonb then
     raise exception 'expected missing_sections to exclude supply_3day, got %', snapshot->'missing_sections';
   end if;
-  if not (snapshot->'missing_sections' @> '["market_supply"]'::jsonb) then
-    raise exception 'expected missing_sections to still include market_supply (out of story scope), got %', snapshot->'missing_sections';
+  if snapshot->'missing_sections' @> '["market_supply"]'::jsonb then
+    raise exception 'expected missing_sections to exclude market_supply after stage success, got %', snapshot->'missing_sections';
   end if;
 end $$;
 

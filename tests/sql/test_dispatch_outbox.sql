@@ -3,6 +3,19 @@
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 begin;
 
+create function public.__fixture_seed_market_supply(p_run_id uuid)
+returns void language sql as $$
+  insert into public.market_supply(
+    attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net
+  )
+  select p_run_id, m.market, l.trading_day, 1, 2, 3, 4
+  from public.runs r
+  join public.logical_runs l on l.logical_run_key = r.logical_run_key
+  cross join (values ('KOSPI'::text), ('KOSDAQ'::text)) m(market)
+  where r.run_id = p_run_id
+  on conflict (attempt_run_id, market, trading_day) do nothing;
+$$;
+
 -- 1) 정상 dispatch: dispatch_request + dispatch_outbox(queued)가 함께 생성된다.
 do $$
 declare res jsonb; req_id uuid;
@@ -151,6 +164,9 @@ begin
   -- Story 4.1: publish_attempt는 supply_3day stage success도 게이트로 요구한다.
   perform public.write_stage(run_ok, 'supply_3day', fence_ok, lease_ok, 'pending', 'running');
   perform public.write_stage(run_ok, 'supply_3day', fence_ok, lease_ok, 'running', 'success');
+  perform public.write_stage(run_ok, 'market_supply', fence_ok, lease_ok, 'pending', 'running');
+  perform public.write_stage(run_ok, 'market_supply', fence_ok, lease_ok, 'running', 'success');
+  perform public.__fixture_seed_market_supply(run_ok);
   perform public.publish_attempt(run_ok, fence_ok, lease_ok);
 
   -- 실패 종결: runs.status가 failed가 되면 outbox는 failed.

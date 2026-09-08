@@ -192,6 +192,47 @@ class FakeSupplyRepository:
         return len(rows)
 
 
+class FakeMarketSupplyProvider:
+    def __init__(self, outcome=None):
+        from apps.batch.ls_market_supply_provider import MarketSupplyBar
+        self.outcome = outcome if outcome is not None else [
+            MarketSupplyBar("KOSPI", 1, 2, 3), MarketSupplyBar("KOSDAQ", 4, 5, 6),
+        ]
+        self.calls = 0
+
+    def fetch(self):
+        self.calls += 1
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
+
+
+class FakeMarketProgramSupplyProvider:
+    def __init__(self, outcomes=None):
+        from apps.batch.ls_market_program_supply_provider import MarketProgramSupplyBar
+        self.outcomes = outcomes if outcomes is not None else {
+            "KOSPI": MarketProgramSupplyBar("KOSPI", 7),
+            "KOSDAQ": MarketProgramSupplyBar("KOSDAQ", 8),
+        }
+        self.calls = []
+
+    def fetch(self, market):
+        self.calls.append(market)
+        outcome = self.outcomes[market]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class FakeMarketSupplyRepository:
+    def __init__(self):
+        self.upsert_calls = []
+
+    def upsert_rows(self, rows):
+        self.upsert_calls.append(list(rows))
+        return len(rows)
+
+
 def tags_deps(*, candidate_rows=None, ohlcv_status=OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY,
               tagged_candidate_rows=None, supply_by_ticker=None):
     """tags/supply 파이프라인 배선에 필요한 신규 의존성을 fresh하게 만들어 반환한다."""
@@ -389,6 +430,69 @@ def test_supply_stage_runs_after_tags_with_tagged_candidates():
     write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
     supply_stage_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "supply_3day"]
     assert [call[1]["p_status"] for call in supply_stage_calls] == ["running", "success"]
+
+
+def test_market_supply_stage_runs_after_supply_and_exposes_two_market_rows():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    deps = tags_deps()
+    market_provider = FakeMarketSupplyProvider()
+    market_program_provider = FakeMarketProgramSupplyProvider()
+    market_repo = FakeMarketSupplyRepository()
+
+    result = run_scheduled_batch(
+        BatchKind.INTRADAY,
+        datetime(2026, 9, 1, 10, 0),
+        repo,
+        FakeProvider(),
+        RunStateGateway(rpc),
+        FakeCandidateClient(LsResponse(data=[])),
+        deps["ohlcv_provider"], deps["ohlcv_repository"], deps["candidate_fetcher"],
+        deps["ohlcv_loader"], deps["tags_repository"], deps["tagged_candidate_fetcher"],
+        deps["supply_provider"], deps["program_supply_provider"], deps["supply_repository"],
+        market_provider, market_program_provider, market_repo,
+    )
+
+    assert result.status == "success"
+    assert result.market_supply_status == "success"
+    assert market_provider.calls == 1
+    assert market_program_provider.calls == ["KOSPI", "KOSDAQ"]
+    assert {row.market for row in market_repo.upsert_calls[0]} == {"KOSPI", "KOSDAQ"}
+    stages = [call[1]["p_stage"] for call in rpc.calls if call[0] == "write_stage"]
+    assert stages[-2:] == ["market_supply", "market_supply"]
+
+
+def test_partial_market_supply_blocks_close_publish_and_surfaces_failed_market():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    deps = tags_deps()
+    from apps.batch.ls_market_program_supply_provider import MarketProgramSupplyBar
+    market_program_provider = FakeMarketProgramSupplyProvider({
+        "KOSPI": RuntimeError("t1631 failure"),
+        "KOSDAQ": MarketProgramSupplyBar("KOSDAQ", 8),
+    })
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        RunStateGateway(rpc),
+        FakeCandidateClient(LsResponse(data=[])),
+        deps["ohlcv_provider"], deps["ohlcv_repository"], deps["candidate_fetcher"],
+        deps["ohlcv_loader"], deps["tags_repository"], deps["tagged_candidate_fetcher"],
+        deps["supply_provider"], deps["program_supply_provider"], deps["supply_repository"],
+        FakeMarketSupplyProvider(), market_program_provider, FakeMarketSupplyRepository(),
+    )
+
+    assert result.status == "partial"
+    assert result.market_supply_status == "partial"
+    assert result.published is False
+    assert [call for call in rpc.calls if call[0] == "publish_attempt"] == []
 
 
 def test_intraday_scheduler_keeps_all_zero_d0_pending_and_retries_semantically():
@@ -989,7 +1093,7 @@ def _publish_attempt_calls(rpc):
 
 
 def test_close_success_publishes_after_tags_stage():
-    """close 배치가 candidates+tags success로 종결되면 publish_attempt를 실제 호출한다."""
+    """close 배치가 필수 수집 stage까지 success면 publish_attempt를 실제 호출한다."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
     attempt = attempt_payload()
@@ -1012,6 +1116,7 @@ def test_close_success_publishes_after_tags_stage():
         deps["tags_repository"],
         deps["tagged_candidate_fetcher"], deps["supply_provider"],
         deps["program_supply_provider"], deps["supply_repository"],
+        FakeMarketSupplyProvider(), FakeMarketProgramSupplyProvider(), FakeMarketSupplyRepository(),
     )
 
     assert result.status == "success"
@@ -1044,6 +1149,7 @@ def test_premarket_and_intraday_do_not_publish():
             deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
         deps["tagged_candidate_fetcher"], deps["supply_provider"],
         deps["program_supply_provider"], deps["supply_repository"],
+        FakeMarketSupplyProvider(), FakeMarketProgramSupplyProvider(), FakeMarketSupplyRepository(),
         )
         assert result.status in ("success", "partial")
         assert result.published is False
@@ -1124,6 +1230,7 @@ def test_publish_failure_marks_outcome_tracking_failed_and_fails_batch():
         deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
         deps["tagged_candidate_fetcher"], deps["supply_provider"],
         deps["program_supply_provider"], deps["supply_repository"],
+        FakeMarketSupplyProvider(), FakeMarketProgramSupplyProvider(), FakeMarketSupplyRepository(),
     )
 
     assert result.status == "failed"

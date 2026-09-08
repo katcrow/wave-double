@@ -23,6 +23,9 @@ from .ls_client import LsClient, LsClientConfig
 from .ls_daily_bar import LsDailyBarProvider
 from .ls_program_supply_provider import LsProgramSupplyProvider
 from .ls_supply_provider import LsSupplyProvider
+from .ls_market_program_supply_provider import LsMarketProgramSupplyProvider
+from .ls_market_supply_provider import LsMarketSupplyProvider
+from .market_supply_repository import SupabaseMarketSupplyRepository
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
 from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
 from .run_state import RunStateGateway
@@ -90,6 +93,11 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
         supply_repository = stack.enter_context(
             contextlib.closing(SupabaseSupply3DayRepository(supabase_url, service_role_key))
         )
+        market_supply_provider = LsMarketSupplyProvider(ls_client)
+        market_program_supply_provider = LsMarketProgramSupplyProvider(ls_client)
+        market_supply_repository = stack.enter_context(
+            contextlib.closing(SupabaseMarketSupplyRepository(supabase_url, service_role_key))
+        )
 
         moment = now_kst if now_kst is not None else datetime.now(KST)
 
@@ -109,6 +117,9 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             supply_provider,
             program_supply_provider,
             supply_repository,
+            market_supply_provider,
+            market_program_supply_provider,
+            market_supply_repository,
             query_index=query_index,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,

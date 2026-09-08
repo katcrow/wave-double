@@ -3,6 +3,19 @@
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 begin;
 
+create function public.__fixture_seed_market_supply(p_run_id uuid)
+returns void language sql as $$
+  insert into public.market_supply(
+    attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net
+  )
+  select p_run_id, m.market, l.trading_day, 1, 2, 3, 4
+  from public.runs r
+  join public.logical_runs l on l.logical_run_key = r.logical_run_key
+  cross join (values ('KOSPI'::text), ('KOSDAQ'::text)) m(market)
+  where r.run_id = p_run_id
+  on conflict (attempt_run_id, market, trading_day) do nothing;
+$$;
+
 -- 시나리오 1: 첫 발행 이전 -- no_snapshot=true, result_code='NO_SNAPSHOT', complete_snapshot=null.
 do $$
 declare snapshot jsonb;
@@ -45,6 +58,9 @@ begin
   -- Story 4.1: supply_3day stage가 success여야 publish_attempt가 통과한다.
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
   -- 트랜잭션 내내 now()가 고정되므로, 시나리오 간 started_at 동률로 latest_attempt 정렬이 우연에 기대지 않도록 명시 설정한다.
   update public.runs set started_at = timestamptz '2099-02-01 00:00:00+00' where run_id = attempt_id;
@@ -66,11 +82,11 @@ begin
   if (snapshot->'complete_snapshot'->'sections'->'tags'->>'tag_count')::integer <> 1 then
     raise exception 'expected tag_count=1 in complete_snapshot';
   end if;
-  if snapshot->'available_partial_sections' <> '["candidates", "tags", "supply_3day"]'::jsonb then
-    raise exception 'expected available_partial_sections=[candidates, tags, supply_3day], got %', snapshot->'available_partial_sections';
+  if snapshot->'available_partial_sections' <> '["candidates", "tags", "supply_3day", "market_supply"]'::jsonb then
+    raise exception 'expected available_partial_sections=[candidates, tags, supply_3day, market_supply], got %', snapshot->'available_partial_sections';
   end if;
-  if snapshot->'missing_sections' <> '["market_supply", "outcome_tracking"]'::jsonb then
-    raise exception 'expected two missing sections after publish (supply_3day now available), got %', snapshot->'missing_sections';
+  if snapshot->'missing_sections' <> '["outcome_tracking"]'::jsonb then
+    raise exception 'expected only outcome_tracking missing after publish, got %', snapshot->'missing_sections';
   end if;
   if (snapshot->'complete_snapshot'->'sections'->'supply_3day'->>'row_count')::integer <> 0 then
     raise exception 'expected supply_3day.row_count=0 in complete_snapshot';
@@ -195,6 +211,9 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
   update public.runs set started_at = timestamptz '2099-02-03 00:00:00+00' where run_id = attempt_id;
   -- 트랜잭션 내내 now()가 고정되어 시나리오 2의 published_at과 동률이 나므로, 이 시나리오가
@@ -207,11 +226,11 @@ begin
   if (snapshot->'complete_snapshot'->'sections'->'outcome_tracking'->>'open_count')::integer <> 1 then
     raise exception 'expected outcome_tracking.open_count=1 in complete_snapshot, got %', snapshot->'complete_snapshot'->'sections'->'outcome_tracking';
   end if;
-  if snapshot->'available_partial_sections' <> '["candidates", "tags", "supply_3day", "outcome_tracking"]'::jsonb then
-    raise exception 'expected available_partial_sections to include supply_3day and outcome_tracking, got %', snapshot->'available_partial_sections';
+  if snapshot->'available_partial_sections' <> '["candidates", "tags", "supply_3day", "market_supply", "outcome_tracking"]'::jsonb then
+    raise exception 'expected available_partial_sections to include supply_3day, market_supply, and outcome_tracking, got %', snapshot->'available_partial_sections';
   end if;
-  if snapshot->'missing_sections' <> '["market_supply"]'::jsonb then
-    raise exception 'expected only market_supply left in missing_sections, got %', snapshot->'missing_sections';
+  if snapshot->'missing_sections' <> '[]'::jsonb then
+    raise exception 'expected no missing sections after market supply success, got %', snapshot->'missing_sections';
   end if;
 end $$;
 
@@ -231,6 +250,9 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 0));
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
+  perform public.__fixture_seed_market_supply(attempt_id);
   perform public.publish_attempt(attempt_id, fence, lease);
   update public.runs set started_at = timestamptz '2099-02-04 00:00:00+00' where run_id = attempt_id;
   -- 시나리오 6과 published_at 동률을 피해 이 시나리오가 최신 complete_snapshot으로 선택되게 한다.
@@ -251,8 +273,8 @@ begin
   if (snapshot->'complete_snapshot'->'sections'->'outcome_tracking'->>'open_count')::integer <> 0 then
     raise exception 'expected outcome_tracking.open_count=0 for zero active tags, got %', snapshot->'complete_snapshot'->'sections'->'outcome_tracking';
   end if;
-  if snapshot->'missing_sections' <> '["market_supply"]'::jsonb then
-    raise exception 'expected only market_supply left in missing_sections even with zero active tags, got %', snapshot->'missing_sections';
+  if snapshot->'missing_sections' <> '[]'::jsonb then
+    raise exception 'expected no missing sections even with zero active tags, got %', snapshot->'missing_sections';
   end if;
 end $$;
 

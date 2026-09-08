@@ -42,14 +42,13 @@ def test_stage_transitions_are_forward_only_and_terminal_writes_are_idempotent()
         validate_stage_transition("success", "running")
 
 
-def test_candidates_tags_and_supply_3day_must_all_be_success_to_publish():
-    assert can_publish({"candidates": "success", "tags": "success", "supply_3day": "success"})
-    assert not can_publish({"candidates": "success", "tags": "success", "supply_3day": "pending"})
-    assert not can_publish({"candidates": "success", "tags": "success", "supply_3day": "partial"})
-    assert not can_publish({"candidates": "success", "tags": "pending", "supply_3day": "success"})
-    assert not can_publish({"candidates": "success", "tags": "partial", "supply_3day": "success"})
-    assert not can_publish({"candidates": "partial", "tags": "success", "supply_3day": "success"})
-    assert not can_publish({"candidates": "success", "tags": "success"})
+def test_candidates_tags_supply_and_market_must_all_be_success_to_publish():
+    complete = {"candidates": "success", "tags": "success", "supply_3day": "success", "market_supply": "success"}
+    assert can_publish(complete)
+    for stage in ("candidates", "tags", "supply_3day", "market_supply"):
+        incomplete = {**complete, stage: "pending"}
+        assert not can_publish(incomplete)
+    assert not can_publish({"candidates": "success", "tags": "success", "supply_3day": "success"})
 
 
 def test_stage_registry_uses_run_id_and_stage_callable_contract():
@@ -69,12 +68,13 @@ def test_stage_registry_uses_run_id_and_stage_callable_contract():
     assert calls == [(run_id, "tags")]
 
 
-def test_default_registry_has_both_candidates_and_tags_verifiers():
+def test_default_registry_has_candidates_tags_and_market_supply_verifiers():
     from uuid import uuid4
 
     from domain.stage_registry import default_registry
 
     assert default_registry.verify(uuid4(), "candidates") is True
     assert default_registry.verify(uuid4(), "tags") is True
+    assert default_registry.verify(uuid4(), "market_supply") is True
     with pytest.raises(KeyError, match="supply_3day"):
         default_registry.verify(uuid4(), "supply_3day")

@@ -27,6 +27,13 @@ from .supply_stage import (
     TaggedCandidateFetcherProtocol,
     run_supply_stage,
 )
+from .market_supply_repository import MarketSupplyRepositoryProtocol
+from .market_supply_stage import (
+    MarketProgramSupplyProviderProtocol,
+    MarketSupplyProviderProtocol,
+    MarketSupplyStageResult,
+    run_market_supply_stage,
+)
 from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, run_tags_stage
 
 # status를 "얼마나 나쁜가"로 정렬한다 -- candidates/tags 결과를 합칠 때 더 나쁜 쪽이 이긴다.
@@ -46,6 +53,8 @@ class SchedulerResult:
     tags_result_code: str | None = None
     supply_status: str | None = None
     supply_result_code: str | None = None
+    market_supply_status: str | None = None
+    market_supply_result_code: str | None = None
     published: bool = False
     outcome_tracking_status: str | None = None
 
@@ -62,6 +71,7 @@ def _from_candidate_result(
     result: CandidateStageResult,
     tags_result: TagsStageResult | None = None,
     supply_result: SupplyStageResult | None = None,
+    market_supply_result: MarketSupplyStageResult | None = None,
     *,
     published: bool = False,
 ) -> SchedulerResult:
@@ -90,9 +100,21 @@ def _from_candidate_result(
         supply_result_code = supply_result.result_code
         if _STATUS_SEVERITY.get(supply_result.status, 0) > _STATUS_SEVERITY.get(status, 0):
             status = supply_result.status
+    market_supply_status: str | None = None
+    market_supply_result_code: str | None = None
+    if market_supply_result is not None:
+        market_supply_status = market_supply_result.status
+        market_supply_result_code = market_supply_result.result_code
+        if _STATUS_SEVERITY.get(market_supply_result.status, 0) > _STATUS_SEVERITY.get(status, 0):
+            status = market_supply_result.status
+    result_code = result.result_code
+    for stage_result in (tags_result, supply_result, market_supply_result):
+        if stage_result is not None and stage_result.status != "success":
+            result_code = stage_result.result_code
+            break
     return SchedulerResult(
         status,
-        result.result_code,
+        result_code,
         candidate_count=result.candidate_count,
         fallback_used=result.fallback_used,
         run_id=result.run_id,
@@ -100,6 +122,8 @@ def _from_candidate_result(
         tags_result_code=tags_result_code,
         supply_status=supply_status,
         supply_result_code=supply_result_code,
+        market_supply_status=market_supply_status,
+        market_supply_result_code=market_supply_result_code,
         published=published,
         outcome_tracking_status="success" if published else None,
     )
@@ -121,6 +145,9 @@ def run_scheduled_batch(
     supply_provider: SupplyProviderProtocol,
     program_supply_provider: ProgramSupplyProviderProtocol,
     supply_repository: Supply3DayRepositoryProtocol,
+    market_supply_provider: MarketSupplyProviderProtocol | None = None,
+    market_program_supply_provider: MarketProgramSupplyProviderProtocol | None = None,
+    market_supply_repository: MarketSupplyRepositoryProtocol | None = None,
     *,
     query_index: str | None = None,
     lease_seconds: int = 300,
@@ -186,6 +213,7 @@ def run_scheduled_batch(
     # fence_token이 없어 자동으로 파이프라인을 건너뛴다.
     tags_result: TagsStageResult | None = None
     supply_result: SupplyStageResult | None = None
+    market_supply_result: MarketSupplyStageResult | None = None
     if result.status in ("success", "partial") and result.fence_token is not None:
         tickers = [candidate.ticker for candidate in result.selection.candidates] if result.selection else []
         initialize_new_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day)
@@ -220,6 +248,26 @@ def run_scheduled_batch(
                 key.trading_day,
                 batch_kind=kind,
             )
+            if (
+                market_supply_provider is not None
+                and market_program_supply_provider is not None
+                and market_supply_repository is not None
+            ):
+                market_supply_result = run_market_supply_stage(
+                    gateway,
+                    market_supply_provider,
+                    market_program_supply_provider,
+                    market_supply_repository,
+                    result.run_id,
+                    result.fence_token,
+                    result.lease_token,
+                    key.trading_day,
+                    batch_kind=kind,
+                )
+            else:
+                # 기존 외부 호출자의 시그니처 호환성. 실제 CLI는 항상 세 adapter를
+                # 주입하므로 production 경로에서는 시장 stage를 건너뛰지 않는다.
+                market_supply_result = None
 
     # Story 3.5 후속 조치(deferred-work gap 해소): close 배치가 candidates+tags 둘 다
     # success로 종결되고 fence/lease가 확정된 경우에만 publish_attempt를 실제 호출해
@@ -238,6 +286,8 @@ def run_scheduled_batch(
         and tags_result.status == "success"
         and supply_result is not None
         and supply_result.status == "success"
+        and market_supply_result is not None
+        and market_supply_result.status == "success"
     ):
         try:
             gateway.publish(result.run_id, result.fence_token, result.lease_token)
@@ -262,11 +312,13 @@ def run_scheduled_batch(
                 tags_result_code=tags_result.result_code,
                 supply_status=supply_result.status if supply_result is not None else None,
                 supply_result_code=supply_result.result_code if supply_result is not None else None,
+                market_supply_status=market_supply_result.status if market_supply_result is not None else None,
+                market_supply_result_code=market_supply_result.result_code if market_supply_result is not None else None,
                 published=False,
                 outcome_tracking_status="failed",
             )
 
-    return _from_candidate_result(result, tags_result, supply_result, published=published)
+    return _from_candidate_result(result, tags_result, supply_result, market_supply_result, published=published)
 
 
 __all__ = ["SchedulerResult", "run_scheduled_batch"]
