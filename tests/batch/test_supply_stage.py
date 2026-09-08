@@ -97,22 +97,27 @@ D1 = date(2026, 8, 31)
 D0 = date(2026, 9, 1)
 
 
-def _bars(ticker: str, *, missing_day: date | None = None) -> list[SupplyBar]:
+def _bars(
+    ticker: str,
+    *,
+    missing_day: date | None = None,
+    d0_close: float = 102.0,
+) -> list[SupplyBar]:
     all_bars = {
         D2: SupplyBar(D2, 100.0, 1.0, 1000.0, -10.0, 20.0, 30.0),
         D1: SupplyBar(D1, 101.0, 1.5, 1100.0, -11.0, 21.0, 31.0),
-        D0: SupplyBar(D0, 102.0, 2.0, 1200.0, -12.0, 22.0, 32.0),
+        D0: SupplyBar(D0, d0_close, 2.0, 1200.0, -12.0, 22.0, 32.0),
     }
     if missing_day is not None:
         del all_bars[missing_day]
     return list(all_bars.values())
 
 
-def _program_bars(*, missing_day: date | None = None) -> list[ProgramSupplyBar]:
+def _program_bars(*, missing_day: date | None = None, d0_program: float = 30.0) -> list[ProgramSupplyBar]:
     all_bars = {
         D2: ProgramSupplyBar(D2, 10.0),
         D1: ProgramSupplyBar(D1, 20.0),
-        D0: ProgramSupplyBar(D0, 30.0),
+        D0: ProgramSupplyBar(D0, d0_program),
     }
     if missing_day is not None:
         del all_bars[missing_day]
@@ -233,6 +238,41 @@ def test_real_tagged_fetcher_f_only_candidate_reaches_supply_stage_once():
     assert result.status == "success"
     assert len(repo.saved) == 3
     assert provider.calls == [("005930", D2, D0)]
+
+
+def test_same_ticker_d0_rows_accumulate_across_attempts_without_changing_first_values():
+    fetcher_one = FakeTaggedFetcher([FakeCandidateRow("c1", "005930")])
+    fetcher_two = FakeTaggedFetcher([FakeCandidateRow("c2", "005930")])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    first_result = _run(
+        rpc,
+        fetcher_one,
+        calendar,
+        FakeSupplyProvider({"005930": _bars("005930", d0_close=102.0)}),
+        repo,
+        FakeProgramSupplyProvider({"005930": _program_bars(d0_program=30.0)}),
+    )
+    second_result = _run(
+        rpc,
+        fetcher_two,
+        calendar,
+        FakeSupplyProvider({"005930": _bars("005930", d0_close=999.0)}),
+        repo,
+        FakeProgramSupplyProvider({"005930": _program_bars(d0_program=999.0)}),
+    )
+
+    assert first_result.status == second_result.status == "success"
+    d0_rows = [row for row in repo.saved if row.slot == "D0" and row.trading_day == D0]
+    assert len(d0_rows) == 2
+    assert {row.attempt_run_id for row in d0_rows} == {first_result.run_id, second_result.run_id}
+    by_candidate = {row.candidate_id: row for row in d0_rows}
+    assert by_candidate["c1"].close == 102.0
+    assert by_candidate["c1"].program_net == 30.0
+    assert by_candidate["c2"].close == 999.0
+    assert by_candidate["c2"].program_net == 999.0
 
 
 def test_per_ticker_api_failure_is_error_others_still_saved():

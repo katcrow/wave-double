@@ -9,6 +9,7 @@ declare
   v_candidate_id uuid := gen_random_uuid();
   other_run_id uuid;
   second_run_id uuid; second_fence bigint; second_lease uuid; second_candidate_id uuid := gen_random_uuid();
+  third_run_id uuid; third_fence bigint; third_lease uuid; third_candidate_id uuid := gen_random_uuid();
   caught boolean := false;
 begin
   started := public.start_attempt(key, date '2099-05-01', 'close', 'manual', 300);
@@ -51,6 +52,41 @@ begin
   );
   if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 3 then
     raise exception 'expected missing row to be inserted';
+  end if;
+
+  -- 같은 attempt의 재시도는 동일 자연키에서 최신 payload로 멱등 갱신한다.
+  insert into public.supply_3day(
+    candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
+    foreign_net, institution_net, individual_net, program_net, investor_net_status,
+    collected_at
+  ) values (
+    v_candidate_id, run_id, date '2099-05-01', 'D0', 72100, 1205000, 1.55,
+    1010, 2010, -3020, 510, 'confirmed', timestamptz '2099-05-01 09:30:00+09'
+  )
+  on conflict (candidate_id, trading_day, attempt_run_id) do update set
+    slot = excluded.slot,
+    close = excluded.close,
+    volume = excluded.volume,
+    change_pct = excluded.change_pct,
+    foreign_net = excluded.foreign_net,
+    institution_net = excluded.institution_net,
+    individual_net = excluded.individual_net,
+    program_net = excluded.program_net,
+    investor_net_status = excluded.investor_net_status,
+    collected_at = excluded.collected_at;
+  if (
+    select count(*) from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-01'
+  ) <> 1 then
+    raise exception 'same attempt retry must not create a duplicate D0 row';
+  end if;
+  if not exists (
+    select 1 from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-01'
+      and close = 72100 and investor_net_status = 'confirmed'
+      and collected_at = timestamptz '2099-05-01 09:30:00+09'
+  ) then
+    raise exception 'same attempt retry must retain the latest D0 payload';
   end if;
 
   -- confirmed인데 foreign/institution/individual 중 하나라도 NULL: CHECK 위반으로 거부.
@@ -250,6 +286,9 @@ begin
   end;
   if not caught then raise exception 'duplicate (candidate_id, trading_day, attempt_run_id) was accepted'; end if;
 
+  -- 보존 계약(정리 구현은 이번 스토리 범위 밖): 장중 D0만 잠정 90일 정리 후보이고,
+  -- D-2/D-1 및 종가 확정 D0는 별도 보존 기준으로 남긴다. 아래 fixture는 D-2/D-1과
+  -- close attempt의 확정 D0를 함께 만들고, 별도 장중 attempt의 D0 이력과 구분한다.
   -- 누적(append-only) 검증(data-model.md): "당일(D0) 행은 배치마다 덮어쓰지 않고
   -- attempt_run_id별로 누적한다" -- 새 attempt(배치)의 D0 수집이 이전 attempt가 이미 적재한
   -- 같은 종목·같은 거래일의 행을 덮어쓰지 않고 별개 행으로 공존해야 한다.
@@ -261,7 +300,7 @@ begin
   -- 누적"되는 관찰 단위는 candidate_id가 아니라 ticker다: attempt마다 새 candidate_id가 발급되고,
   -- 그 candidate_id로 적재된 supply_3day 행이 이전 attempt의 행을 덮어쓰지 않고 공존해야 한다.
   -- 아래는 동일 ticker에 대해 서로 다른 attempt(서로 다른 candidate_id)가 각각 D0 행을 남기고,
-  -- 두 행이 candidates.ticker 기준으로 공존함을 검증한다.
+  -- 세 행이 candidates.ticker 기준으로 공존하며 09:30/10:00/10:30 시점을 재구성할 수 있음을 검증한다.
   started := public.start_attempt('close:2099-05-05', date '2099-05-05', 'close', 'manual', 300);
   second_run_id := (started->>'run_id')::uuid; second_fence := (started->>'fence_token')::bigint; second_lease := (started->>'lease_token')::uuid;
   perform public.write_stage(second_run_id, 'candidates', second_fence, second_lease, 'pending', 'running');
@@ -274,27 +313,56 @@ begin
 
   insert into public.supply_3day(
     candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
-    foreign_net, institution_net, individual_net, program_net, investor_net_status
+    foreign_net, institution_net, individual_net, program_net, investor_net_status, collected_at
   ) values (
-    second_candidate_id, second_run_id, date '2099-04-29', 'D-2', 70200, 1000500, 1.25,
-    1100, 2100, -3100, 550, 'confirmed'
+    second_candidate_id, second_run_id, date '2099-05-01', 'D0', 72200, 1000500, 1.25,
+    1100, 2100, -3100, 550, 'confirmed', timestamptz '2099-05-01 10:00:00+09'
+  );
+
+  started := public.start_attempt('intraday:2099-05-01:10:30', date '2099-05-01', 'intraday', 'manual', 300);
+  third_run_id := (started->>'run_id')::uuid; third_fence := (started->>'fence_token')::bigint; third_lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(third_run_id, 'candidates', third_fence, third_lease, 'pending', 'running');
+  perform public.write_candidates(third_run_id, third_fence, third_lease,
+    jsonb_build_array(jsonb_build_object(
+      'candidate_id', third_candidate_id, 'ticker', '005930', 'name', '삼성전자', 'trading_value', 100,
+      'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
+    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 1, 'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(third_run_id, 'candidates', third_fence, third_lease, 'running', 'success');
+
+  insert into public.supply_3day(
+    candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
+    foreign_net, institution_net, individual_net, program_net, investor_net_status, collected_at
+  ) values (
+    third_candidate_id, third_run_id, date '2099-05-01', 'D0', 72300, 1010000, 1.35,
+    1110, 2110, -3120, 560, 'confirmed', timestamptz '2099-05-01 10:30:00+09'
   );
   if (
     select count(*) from public.supply_3day s
     join public.candidates c on c.candidate_id = s.candidate_id and c.attempt_run_id = s.attempt_run_id
-    where c.ticker = '005930' and s.trading_day = date '2099-04-29' and s.slot = 'D-2'
-  ) <> 2 then
-    raise exception 'expected two accumulated rows (different attempt_run_id) for the same ticker/trading_day/slot';
+    where c.ticker = '005930' and s.trading_day = date '2099-05-01' and s.slot = 'D0'
+  ) <> 3 then
+    raise exception 'expected three accumulated D0 rows (different attempt_run_id) for the same ticker/trading_day/slot';
   end if;
   if (
     select count(distinct s.attempt_run_id) from public.supply_3day s
     join public.candidates c on c.candidate_id = s.candidate_id and c.attempt_run_id = s.attempt_run_id
-    where c.ticker = '005930' and s.trading_day = date '2099-04-29' and s.slot = 'D-2'
-  ) <> 2 then
-    raise exception 'expected the two accumulated rows to have distinct attempt_run_id values';
+    where c.ticker = '005930' and s.trading_day = date '2099-05-01' and s.slot = 'D0'
+  ) <> 3 then
+    raise exception 'expected accumulated D0 rows to have distinct attempt_run_id values';
   end if;
-  if (select count(*) from public.supply_3day s where s.candidate_id = v_candidate_id and s.attempt_run_id = run_id and s.trading_day = date '2099-04-29' and s.slot = 'D-2') <> 1 then
-    raise exception 'expected the original attempt row to remain untouched (not overwritten)';
+  if (
+    select close from public.supply_3day s
+    where s.candidate_id = v_candidate_id and s.attempt_run_id = run_id and s.trading_day = date '2099-05-01' and s.slot = 'D0'
+  ) <> 72100 then
+    raise exception 'expected the original attempt D0 value to remain untouched by later attempts';
+  end if;
+  if (
+    select string_agg(to_char(s.collected_at at time zone 'Asia/Seoul', 'HH24:MI'), ',' order by s.collected_at)
+    from public.supply_3day s
+    join public.candidates c on c.candidate_id = s.candidate_id and c.attempt_run_id = s.attempt_run_id
+    where c.ticker = '005930' and s.trading_day = date '2099-05-01' and s.slot = 'D0'
+  ) <> '09:30,10:00,10:30' then
+    raise exception 'expected D0 attempt history to reconstruct 09:30,10:00,10:30';
   end if;
 
   -- PK 없음(UNIQUE 제약만 존재)을 확인한다.
@@ -316,3 +384,5 @@ begin
 end $$;
 
 rollback;
+
+select 'story_4_3_d0_attempt_accumulation: pass' as result;

@@ -77,7 +77,7 @@ development_status:
   epic-4: in-progress
   4-1-t1702-종목별-가격-수급-수집: done
   4-2-t1637-프로그램-순매수-수집-병합: done
-  4-3-d0-당일-행-attempt별-누적-저장: backlog
+  4-3-d0-당일-행-attempt별-누적-저장: review
   4-4-빈-수급-적재-방지-가드: backlog
   4-5-market_supply-스키마-t1601-수집: backlog
   4-6-후보-근거-패널-evidence-panel-ui: backlog

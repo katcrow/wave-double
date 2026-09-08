@@ -110,6 +110,34 @@ def test_upsert_rows_preserves_non_null_program_net():
     assert body[0]["program_net"] == -1234.0
 
 
+def test_upsert_rows_accumulates_d0_per_attempt_but_retries_are_idempotent():
+    stored = {}
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        for row in json.loads(request.content):
+            key = (row["candidate_id"], row["trading_day"], row["attempt_run_id"])
+            stored[key] = row
+        return httpx.Response(201, json={})
+
+    repo = make_repo(handler)
+    first_attempt = _row(candidate_id="c1", attempt_run_id="run-1", close=72000.0)
+    second_attempt = _row(candidate_id="c2", attempt_run_id="run-2", close=72100.0)
+    retry = _row(candidate_id="c1", attempt_run_id="run-1", close=72500.0)
+
+    assert repo.upsert_rows([first_attempt, second_attempt]) == 2
+    assert repo.upsert_rows([retry]) == 1
+
+    assert len(stored) == 2
+    assert stored[("c1", "2026-09-01", "run-1")]["close"] == 72500.0
+    assert stored[("c2", "2026-09-01", "run-2")]["close"] == 72100.0
+    assert all(
+        request.url.params["on_conflict"] == "candidate_id,trading_day,attempt_run_id"
+        for request in requests
+    )
+
+
 def test_upsert_rows_raises_on_http_error():
     def handler(request):
         return httpx.Response(500, json={"message": "boom"})
