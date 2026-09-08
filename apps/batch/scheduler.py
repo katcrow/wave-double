@@ -20,7 +20,13 @@ from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository, ini
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway, parse_attempt, safe_record_dispatch_receipt
 from .supply_3day_repository import Supply3DayRepositoryProtocol
-from .supply_stage import SupplyProviderProtocol, SupplyStageResult, TaggedCandidateFetcherProtocol, run_supply_stage
+from .supply_stage import (
+    ProgramSupplyProviderProtocol,
+    SupplyProviderProtocol,
+    SupplyStageResult,
+    TaggedCandidateFetcherProtocol,
+    run_supply_stage,
+)
 from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, run_tags_stage
 
 # status를 "얼마나 나쁜가"로 정렬한다 -- candidates/tags 결과를 합칠 때 더 나쁜 쪽이 이긴다.
@@ -113,6 +119,7 @@ def run_scheduled_batch(
     tags_repository: TagsRepositoryProtocol,
     tagged_candidate_fetcher: TaggedCandidateFetcherProtocol,
     supply_provider: SupplyProviderProtocol,
+    program_supply_provider: ProgramSupplyProviderProtocol,
     supply_repository: Supply3DayRepositoryProtocol,
     *,
     query_index: str | None = None,
@@ -205,6 +212,7 @@ def run_scheduled_batch(
                 tagged_candidate_fetcher,
                 calendar_repository,
                 supply_provider,
+                program_supply_provider,
                 supply_repository,
                 result.run_id,
                 result.fence_token,

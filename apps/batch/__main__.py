@@ -21,6 +21,7 @@ from .candidate_tags_repository import SupabaseCandidateTagsRepository
 from .ls_auth import LsOAuthTokenProvider
 from .ls_client import LsClient, LsClientConfig
 from .ls_daily_bar import LsDailyBarProvider
+from .ls_program_supply_provider import LsProgramSupplyProvider
 from .ls_supply_provider import LsSupplyProvider
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
 from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
@@ -85,6 +86,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             contextlib.closing(TaggedCandidateFetcher(supabase_url, service_role_key))
         )
         supply_provider = LsSupplyProvider(ls_client)
+        program_supply_provider = LsProgramSupplyProvider(ls_client)
         supply_repository = stack.enter_context(
             contextlib.closing(SupabaseSupply3DayRepository(supabase_url, service_role_key))
         )
@@ -105,6 +107,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             tags_repository,
             tagged_candidate_fetcher,
             supply_provider,
+            program_supply_provider,
             supply_repository,
             query_index=query_index,
             trigger=Trigger(args.trigger),

@@ -113,7 +113,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
         captured["batch_kind"] = batch_kind
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
@@ -145,7 +145,7 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
         return SchedulerResult("success", "OK")

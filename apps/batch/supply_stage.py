@@ -18,6 +18,7 @@ from uuid import UUID
 
 from domain.run_state import Stage, StageStatus
 
+from .ls_program_supply_provider import ProgramSupplyBar
 from .ls_supply_provider import SupplyBar
 from .run_state import RunStateGateway
 from .supply_3day_repository import Supply3DayRepositoryProtocol, SupplyRow
@@ -43,6 +44,12 @@ class SupplyProviderProtocol(Protocol):
     def fetch(self, ticker: str, fromdt: date, todt: date) -> list[SupplyBar]: ...
 
 
+class ProgramSupplyProviderProtocol(Protocol):
+    """LS ``t1637`` 일자별 프로그램 순매수 조회 프로토콜."""
+
+    def fetch(self, ticker: str, fromdt: date, todt: date) -> list[ProgramSupplyBar]: ...
+
+
 @dataclass
 class SupplyStageResult:
     """supply stage의 최종 결과."""
@@ -60,6 +67,7 @@ def run_supply_stage(
     tagged_fetcher: TaggedCandidateFetcherProtocol,
     calendar_client: CalendarDaysProvider,
     supply_provider: SupplyProviderProtocol,
+    program_supply_provider: ProgramSupplyProviderProtocol,
     supply_repo: Supply3DayRepositoryProtocol,
     run_id: UUID | str,
     fence_token: int | str,
@@ -133,21 +141,37 @@ def run_supply_stage(
             error_count += 1
             continue
 
-        if len(bars) != len({bar.trading_day for bar in bars}):
+        if len(bars) != len({bar.trading_day for bar in bars}) or {
+            bar.trading_day for bar in bars
+        } != set(ordered_days):
             # 동일 trading_day의 중복 행 -- dict comprehension이 조용히 마지막 행으로
-            # 덮어쓰지 않도록 error로 처리한다(조용한 덮어쓰기 금지).
+            # 덮어쓰지 않도록 error로 처리한다(조용한 덮어쓰기 금지). t1702도
+            # 예상 거래일 외 응답을 저장하지 않는다.
             error_count += 1
             continue
 
         by_day = {bar.trading_day: bar for bar in bars}
-        if any(day not in by_day for day in ordered_days):
-            # 예상 3거래일 중 일부 날짜가 응답에 없음 -- 조용히 누락 금지, error로 처리.
+        try:
+            program_bars = program_supply_provider.fetch(cand.ticker, d_minus_2, d0)
+        except Exception:
             error_count += 1
             continue
 
+        if len(program_bars) != len({bar.trading_day for bar in program_bars}):
+            # 같은 날짜의 프로그램 행도 조용히 덮어쓰지 않는다.
+            error_count += 1
+            continue
+
+        program_by_day = {bar.trading_day: bar for bar in program_bars}
+        if set(program_by_day) != set(ordered_days):
+            # 예상 3거래일 중 일부가 없거나 범위 밖 행만 반환된 경우다.
+            error_count += 1
+            continue
+
+        candidate_rows: list[SupplyRow] = []
         for day in ordered_days:
             bar = by_day[day]
-            all_rows.append(
+            candidate_rows.append(
                 SupplyRow(
                     candidate_id=cand.candidate_id,
                     attempt_run_id=run_id_str,
@@ -159,10 +183,11 @@ def run_supply_stage(
                     foreign_net=bar.foreign_net,
                     institution_net=bar.institution_net,
                     individual_net=bar.individual_net,
-                    program_net=None,
+                    program_net=program_by_day[day].program_net,
                     investor_net_status="confirmed",
                 )
             )
+        all_rows.extend(candidate_rows)
 
     try:
         saved_count = supply_repo.upsert_rows(all_rows)
@@ -231,6 +256,7 @@ __all__ = [
     "TaggedCandidateFetcherProtocol",
     "CalendarDaysProvider",
     "SupplyProviderProtocol",
+    "ProgramSupplyProviderProtocol",
     "SupplyStageResult",
     "run_supply_stage",
 ]
