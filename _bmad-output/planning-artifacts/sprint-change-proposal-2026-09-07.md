@@ -43,7 +43,7 @@ Neo가 백테스트로 검증한 신규 종가배팅 후보 탐지 기법 1종(*
 - **PRD 충돌 (Action-needed)**: §1 Vision("5종 매수 전략 A·B·C·D·E"), §3 Glossary(전략 A/B/C/D/E), §4.2 FR-3 본문("전략 A/B/C/D/E"), §8.1 In Scope 문구가 모두 5종 고정 표현이라 6종 일반화 필요. §7 Non-Goals는 이미 "전략 종류 확장은 V1 편입"으로 열려 있으므로 신규 철회 조항은 불필요 — 문구만 F 추가로 갱신.
 - **Architecture Spine 충돌 (Action-needed)**: AD-5 addendum이 "A/B/C/D/E 5개 시그널 키"로 특정되어 있음. `StrategyResult`가 F까지 6개 키를 포함하도록 addendum에 소규모 추가 필요. `apps/web/lib/strategy-labels.ts`의 `STRATEGY_LABEL`, `/strategies/[strategy]` 라우트도 F 추가 필요.
 - **UX 문서 충돌 (경미)**: DESIGN.md/EXPERIENCE.md가 이미 "A/B/C/D/E(가변 개수)"로 표현돼 있어(에픽 6에서 일반화됨) 문구 자체는 최소 수정("A/B/C/D/E" → "A/B/C/D/E/F" 예시 텍스트만 갱신). 배지 색상 접근성(UX-DR14) 재확인 필요.
-- **backtest-baseline.md**: 이미 F 절이 존재하므로 추가 코드화 불필요. **단, OOS(워크포워드) 검증 절은 아직 없음** — D/E(Story 6.8)와 같은 방식으로 F도 필요.
+- **backtest-baseline.md**: 이미 F 절이 존재하므로 추가 코드화 불필요. **OOS(워크포워드) 검증 완료(2026-09-08, Story 7.7)** — D/E(Story 6.8)와 같은 방식으로 in-sample(2020-08-03~2024-08-27)/OOS(2024-08-28~2026-08-27) 재실행 결과가 `backtest-baseline.md` F절 "OOS(워크포워드) 검증" 하위 절에 병기되었다: 승률 75.32%→67.03%(−8.29%p), PF 2.1592→1.4382, 거래수 77건→91건. 열화는 있으나 승률·PF 모두 실전 채택 기준을 상회해 **결정: 유지**.
 - **DB 마이그레이션(Action-needed)**: `candidate_tags_strategy_check` 제약(`202609051500_finalize_candidate_tags_strategy_contract.sql`이 최종 확정한 A|B|C|D|E)을 A|B|C|D|E|F로 확장하는 forward-only migration 필요(AD-14). `outcome_strategy_rules`(Story 6.5/`202609051600_parameterize_outcome_strategy_rules.sql`)에 F의 TP3%/SL4%/무제한보유 행 추가 필요.
 - **골든 픽스처**: `golden_signals.json`에 F 키 추가, 참조 구현은 이미 있는 `strategy_f.py`.
 
@@ -56,7 +56,7 @@ Neo가 백테스트로 검증한 신규 종가배팅 후보 탐지 기법 1종(*
 
 **Effort:** Low~Medium — 계산 로직 코드화(에픽 6의 6.1/6.2에 해당)가 이미 끝나 있어, 남은 작업은 DB 제약 확장·API 일반화·outcome 파라미터 추가·UI 라벨 추가·OOS 검증뿐이다. 에픽 6 대비 작업량이 적다.
 
-**Risk:** Medium — F도 D/E와 마찬가지로 OOS(워크포워드) 미검증 상태로 편입 검토 중이다(에픽 7 내 OOS 스토리로 관리, D의 전례처럼 완료 전에는 "미검증" 리스크로 추적).
+**Risk:** Medium → **검증 완료(2026-09-08)** — F도 D/E와 마찬가지로 OOS(워크포워드) 미검증 상태로 편입 검토 중이었으나, Story 7.7에서 in-sample/OOS 재실행을 완료했다(`backtest-baseline.md` F절 참조, 결정: 유지). 낮은 수준의 잔여 리스크(200건 누적 재평가 트리거로 관리 중)로 남아 있다.
 
 ## 4. Detailed Change Proposals
 
@@ -116,8 +116,9 @@ NEW: - 전략 A/B/C/D/E/F 시그널 태깅(후보 모집단 한정), 태깅된 �
 **§9 Success Metrics 표 — 전략 확장 행 추가**
 ```
 NEW 행 추가: | 전략 확장(전략 F)은 V2+ | **철회 후 재작성(2026-09-07)** — Correct Course로 전략
-F(각도 가속·이평선 쌍바닥 기법)가 V1 편입. F는 OOS 워크포워드 검증 전 상태로 편입되는 리스크를 수용함
-(sprint-change-proposal-2026-09-07.md 참조) |
+F(각도 가속·이평선 쌍바닥 기법)가 V1 편입. F는 OOS 워크포워드 검증을 완료(2026-09-08, Story 7.7 —
+승률 75.32%→67.03%, PF 2.1592→1.4382, 결정: 유지)했으며 해당 리스크는 해소됨
+(sprint-change-proposal-2026-09-07.md 및 backtest-baseline.md F절 참조) |
 ```
 
 **Rationale:** §7 Non-Goals는 2026-09-04에 이미 "전략 종류 확장은 V1"으로 열려 있어 재작성이 불필요하다. 나머지는 A/B/C/D/E → A/B/C/D/E/F 표기 갱신과 F의 근거 문서 참조 추가뿐이다.
@@ -162,7 +163,7 @@ Given/When/Then: strategy_f.py, test_strategy_f.py(13 tests pass), backtest-base
 ### Story 7.4: Outcome 판정 로직 F 파라미터화 (TP3%/SL4%/무제한보유, outcome_strategy_rules 확장)
 ### Story 7.5: 후보 태깅 stage에 전략 F 반영
 ### Story 7.6: UI 확장 — 라벨·배지·라우트 (strategy-labels.ts, /strategies/[strategy])
-### Story 7.7: OOS(워크포워드) 검증 — 전략 F in-sample/holdout 대조
+### Story 7.7: OOS(워크포워드) 검증 — 전략 F in-sample/holdout 대조 — 완료(2026-09-08)
 ```
 
 (스토리별 Given/When/Then은 Epic 6의 6.2~6.8을 F로 치환한 동일 골격 — Sprint Planning 단계에서 상세 AC를 확정한다.)
@@ -177,4 +178,4 @@ Given/When/Then: strategy_f.py, test_strategy_f.py(13 tests pass), backtest-base
 - **Developer**: Epic 7 스토리 7.2~7.7 구현(7.1은 코드 확인 및 커밋만), migration 작성(위 4.4)
 - **Neo**: 승인 후 `bmad-create-epics-and-stories`로 Epic 7 정식 문서화 → `bmad-sprint-planning`으로 sprint-status.yaml 갱신 → `bmad-build`로 스토리별 구현
 
-**Success criteria**: 전략 F가 A/B/C/D/E와 동일하게 OR 결합·다중 배지로 대시보드에 노출되고, `backtest-baseline.md`에 OOS 검증 결과가 병기되며, 골든 픽스처 회귀가 F를 포함해 Jaccard ≥ 0.9로 통과한다.
+**Success criteria**: 전략 F가 A/B/C/D/E와 동일하게 OR 결합·다중 배지로 대시보드에 노출되고, `backtest-baseline.md`에 OOS 검증 결과가 병기되며(Story 7.7, 2026-09-08 완료 — 승률 75.32%→67.03%, PF 2.1592→1.4382, 결정: 유지), 골든 픽스처 회귀가 F를 포함해 Jaccard ≥ 0.9로 통과한다.

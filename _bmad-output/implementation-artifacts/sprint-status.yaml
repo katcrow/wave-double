@@ -115,14 +115,14 @@ development_status:
   6-8-oos-워크포워드-검증: done
   epic-6-retrospective: done
 
-  epic-7: in-progress
+  epic-7: done
   7-1-전략-f-각도-가속-이평선-쌍바닥-기법-계산-로직-코드화-백테스트-baseline-이식: done
   7-2-candidate_tags-전략-제약-확장-f: done
   7-3-전략-계산-api-일반화-ad-5-addendum-2-확장: done
   7-4-outcome-판정-로직-f-파라미터화-epic-3-6-확장: done
   7-5-후보-태깅-stage에-전략-f-반영: done
   7-6-ui-확장-라벨-배지-라우트-f: done
-  7-7-oos-워크포워드-검증-전략-f: backlog
+  7-7-oos-워크포워드-검증-전략-f: done
   epic-7-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-루트-typescript-게이트를-웹-tsconfig와-일치시키고-ci에"
@@ -294,3 +294,9 @@ action_items:
     owner: "운영/개발"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+  - id: "story-7-7-item-1-전략-f-oos-홀드아웃-거래-200건-누적-시-재평가"
+    epic: 7
+    action: "전략 F의 OOS(holdout) 실전 거래가 200건 이상 누적되면 승률/PF 열화 여부를 재평가하고 유지/재조정/보류를 재결정한다."
+    owner: "Neo"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/spec-7-7-oos-워크포워드-검증-전략-f.md"

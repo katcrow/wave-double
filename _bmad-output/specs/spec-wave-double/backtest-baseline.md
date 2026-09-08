@@ -245,6 +245,61 @@ baseline이다.
 **결정: 유지.** 승률>50%, PF>1의 실전 채택 기준을 충족하고, 과적합 우려가 적은
 단순 조건(기울기 비교 + 패턴 인식)이므로 현재 상태를 유지한다.
 
+### 전략 F — OOS(워크포워드) 검증 (Story 7.7, 2026-09-08)
+
+`docs/각도가속_이평쌍바닥기법_추가.md`가 자체적으로 권고한 워크포워드
+검증이다. 전략 D/E(Story 6.8)와 동일하게 파라미터·엔진 변경 없이
+(`strategy_f.py`/`engine.py` 그대로) 전체 관측창(2020-08-03~2026-08-27)을
+in-sample(앞 4년, 2020-08-03~2024-08-27)과 OOS/holdout(뒤 2년, 이후 미사용
+구간, 2024-08-28~2026-08-27)으로 시간순 분할해 각각 재실행했다. 파라미터가
+이 저장소 데이터로 재적합된 적이 없으므로, 이 분할은 데이터 누출 방지가
+아니라 "다른 시기에도 같은 규칙이 유지되는가"를 확인하는 목적이다.
+
+실행 명령:
+
+```text
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_f --start 2020-08-03 --end 2024-08-27 --output backtest/results/indicator_opt/strategy_f_oos_insample.csv
+uv run --with pandas --with numpy --with pyarrow python -m backtest.indicator_opt.strategy_f --start 2024-08-28 --end 2026-08-27 --output backtest/results/indicator_opt/strategy_f_oos_holdout.csv
+```
+
+| 구간 | 관측창 | 종목수 | 시그널 | 거래수 | 승 | 패 | 승률 | PF | 평균수익 | 월간 거래 | data_fingerprint |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| in-sample | 2020-08-03~2024-08-27 | 98 | 78 | 77 | 58 | 19 | 75.32% | 2.1592 | +1.173% | 1.5714 | `b2e027e0f8155d3fbabfd310f52c31e82afd1079722ed579e98207ca112e73a3` |
+| OOS(holdout) | 2024-08-28~2026-08-27 | 104 | 95 | 91 | 61 | 30 | 67.03% | 1.4382 | +0.592% | 3.64 | `b2e027e0f8155d3fbabfd310f52c31e82afd1079722ed579e98207ca112e73a3` |
+
+결과 CSV: `backtest/results/indicator_opt/strategy_f_oos_insample.csv`(+`_trades.csv`),
+`backtest/results/indicator_opt/strategy_f_oos_holdout.csv`(+`_trades.csv`). F는
+E와 동일하게 `strategy_f.py:314-327`이 fingerprint를 **윈도우 적용 전 원본
+전체 프레임**에서 계산하므로(구간 분할은 신호·거래 필터링에만 적용) in-sample/OOS
+두 실행의 fingerprint가 동일하다 — 같은 104종목 parquet 원본을 사용했다는
+근거이며 결함이 아니다(Story 6.8에서 관측된 `strategy_e.py`와 동일한 기존
+특성이며, 이번 스토리에서 코드를 수정하지 않았다). `invalid_ohlcv_rows`(244)도
+같은 이유로 두 구간에서 동일하다 — `strategy_f.py:322-327`이 윈도우(구간) 적용
+전 원본 프레임 루프 중에 `valid_rows`/`invalid_ohlcv_rows`와 fingerprint digest를
+함께 계산하므로(코드로 확인됨), 구간 분할은 신호·거래 필터링에만 적용되고
+두 값 모두 원본 전체 프레임 기준으로 고정된다. 종목수 차이(98→104)는
+전략 D/E와 같은 사유(일부 종목의 늦은 상장)다.
+
+**해석.** 승률(75.32%→67.03%, −8.29%p)과 PF(2.1592→1.4382, −0.721)는 in-sample
+대비 뚜렷이 하락했으나, 두 값 모두 실전 채택 기준(승률>50%, PF>1)을 여전히
+크게 상회한다. F는 월 2.3건 빈도 전략임에도 OOS 2년 구간 거래수가 91건으로
+D/E의 OOS 표본(각 4건)보다 훨씬 커, 이 관측치는 D/E보다 표본 변동성에 덜
+취약하다 — 다만 THIN_SAMPLE 우려가 없다는 뜻일 뿐 열화 자체가 사라지는 것은
+아니므로 수치를 그대로 병기한다. `max_drawdown`도 −12.9658%(in-sample)→
+−20.8512%(OOS)로 뚜렷하게 악화했다(두 값 모두 각 CSV의 `max_drawdown`
+컬럼). 월간 거래빈도는 1.5714건→3.64건으로 오히려 증가했는데, 이는 holdout
+구간이 in-sample의 절반 길이(2년 vs 4년)임에도 거래수(91건)가 in-sample(77건)
+보다 많기 때문이다 — 짧은 구간에 더 많은 거래가 몰려 월평균이 상승했다.
+
+**결정: 유지.** 승률·PF 모두 하락했지만 여전히 실전 채택 기준을 넉넉히
+충족하고, 표본 수(91건)가 D/E보다 커 이번 하락이 소수 거래의 우연으로
+과대 대표된 결과일 가능성도 낮다. 파라미터 재조정이나 전략 보류 없이 현재
+상태를 유지하되, 관측된 하락 폭(승률 −8.29%p, PF −0.72)이 D(거의 무변화)보다는
+크므로 실전 태깅된 F 후보의 outcome을 Epic 5 성과 비교 화면에서 계속
+관찰하고, OOS 표본이 200건 이상 누적되는 시점에 재평가한다. 재조정이
+필요하다고 판단될 경우 실제 파라미터 변경은 이 스토리 범위 밖의 별도
+스토리로 남긴다.
+
 ## 백테스트 기대치 (104종목, 73개월, TP+3%/SL−3%)
 
 | 전략 | 거래수 | 승 | 패 | 승률 | PF | 평균 보유 | 최대 보유 |
