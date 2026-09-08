@@ -218,6 +218,7 @@ def run_scheduled_batch(
                 result.fence_token,
                 result.lease_token,
                 key.trading_day,
+                batch_kind=kind,
             )
 
     # Story 3.5 후속 조치(deferred-work gap 해소): close 배치가 candidates+tags 둘 다

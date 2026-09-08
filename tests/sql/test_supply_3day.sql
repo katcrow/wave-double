@@ -22,16 +22,24 @@ begin
     jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 1, 'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
   perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
 
-  -- 정상 confirmed 삽입: 4컬럼 전부 NOT NULL + investor_net_status='confirmed'.
+  -- 정상 confirmed 삽입: 실제 0도 confirmed로 보존한다(미확정 NULL과 구분).
   insert into public.supply_3day(
     candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
     foreign_net, institution_net, individual_net, program_net, investor_net_status
   ) values (
     v_candidate_id, run_id, date '2099-04-29', 'D-2', 70000, 1000000, 1.23,
-    1000, 2000, -3000, 500, 'confirmed'
+    0, 0, 0, 0, 'confirmed'
   );
   if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 1 then
     raise exception 'expected confirmed row to be inserted';
+  end if;
+  if not exists (
+    select 1 from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-04-29'
+      and investor_net_status = 'confirmed'
+      and foreign_net = 0 and institution_net = 0 and individual_net = 0 and program_net = 0
+  ) then
+    raise exception 'confirmed actual zero investor values were not preserved';
   end if;
 
   -- 정상 pending 삽입: 4컬럼 전부 NULL + investor_net_status='pending'(장중 미확정).
@@ -43,6 +51,13 @@ begin
   if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 2 then
     raise exception 'expected pending row to be inserted';
   end if;
+  if exists (
+    select 1 from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-04-30'
+      and (foreign_net is not null or institution_net is not null or individual_net is not null or program_net is not null)
+  ) then
+    raise exception 'pending row must keep all four investor values NULL';
+  end if;
 
   -- 정상 missing 삽입: 4컬럼 전부 NULL + investor_net_status='missing'(미수집).
   insert into public.supply_3day(
@@ -52,6 +67,13 @@ begin
   );
   if (select count(*) from public.supply_3day where attempt_run_id = run_id) <> 3 then
     raise exception 'expected missing row to be inserted';
+  end if;
+  if exists (
+    select 1 from public.supply_3day
+    where candidate_id = v_candidate_id and attempt_run_id = run_id and trading_day = date '2099-05-01'
+      and (foreign_net is not null or institution_net is not null or individual_net is not null or program_net is not null)
+  ) then
+    raise exception 'missing row must keep all four investor values NULL';
   end if;
 
   -- 같은 attempt의 재시도는 동일 자연키에서 최신 payload로 멱등 갱신한다.
@@ -420,6 +442,6 @@ begin
   ) then raise exception 'supply_3day must have zero RLS policies (deny-all for anon/authenticated)'; end if;
 end $$;
 
-select 'story_4_3_d0_attempt_accumulation: pass' as result;
+select 'story_4_4_supply_guard: pass' as result;
 
 rollback;

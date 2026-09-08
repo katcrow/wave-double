@@ -476,6 +476,15 @@ def test_partial_program_supply_surfaces_in_scheduler_result_and_blocks_publish(
     assert result.status == "partial"
     assert result.supply_status == "partial"
     assert result.supply_result_code == "PARTIAL_SUPPLY"
+    assert len(deps["supply_repository"].upsert_calls) == 1
+    missing_rows = deps["supply_repository"].upsert_calls[0]
+    assert len(missing_rows) == 3
+    assert all(row.investor_net_status == "missing" for row in missing_rows)
+    assert all(
+        value is None
+        for row in missing_rows
+        for value in (row.foreign_net, row.institution_net, row.individual_net, row.program_net)
+    )
     assert _publish_attempt_calls(rpc) == []
 
 

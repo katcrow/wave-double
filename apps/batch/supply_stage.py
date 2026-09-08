@@ -16,7 +16,7 @@ from datetime import date
 from typing import Any, Protocol
 from uuid import UUID
 
-from domain.run_state import Stage, StageStatus
+from domain.run_state import BatchKind, Stage, StageStatus
 
 from .ls_program_supply_provider import ProgramSupplyBar
 from .ls_supply_provider import SupplyBar
@@ -24,6 +24,7 @@ from .run_state import RunStateGateway
 from .supply_3day_repository import Supply3DayRepositoryProtocol, SupplyRow
 
 _EXPECTED_TRADING_DAY_COUNT = 3
+_SEMANTIC_RETRY_COUNT = 1
 
 
 class TaggedCandidateFetcherProtocol(Protocol):
@@ -74,6 +75,7 @@ def run_supply_stage(
     fence_token: int | str,
     lease_token: UUID | str,
     trading_day: date,
+    batch_kind: BatchKind | str = BatchKind.CLOSE,
 ) -> SupplyStageResult:
     """supply stage를 실행한다.
 
@@ -86,6 +88,7 @@ def run_supply_stage(
     lease_uuid = lease_token if isinstance(lease_token, UUID) else UUID(str(lease_token))
     fence_int = int(fence_token)
     run_id_str = str(run_id)
+    kind = batch_kind if isinstance(batch_kind, BatchKind) else BatchKind(batch_kind)
 
     gateway.write_stage(
         run_uuid, Stage.SUPPLY_3DAY, fence_int, lease_uuid,
@@ -153,53 +156,73 @@ def run_supply_stage(
             record_candidate_error(cand.ticker, f"t1702: {exc}")
             continue
 
-        if len(bars) != len({bar.trading_day for bar in bars}) or {
-            bar.trading_day for bar in bars
-        } != set(ordered_days):
-            # 동일 trading_day의 중복 행 -- dict comprehension이 조용히 마지막 행으로
-            # 덮어쓰지 않도록 error로 처리한다(조용한 덮어쓰기 금지). t1702도
-            # 예상 거래일 외 응답을 저장하지 않는다.
+        try:
+            by_day = _index_bars(bars, ordered_days, "t1702")
+        except ValueError:
             record_candidate_error(cand.ticker, "t1702: expected exactly three unique trading days")
             continue
 
-        by_day = {bar.trading_day: bar for bar in bars}
         try:
             program_bars = program_supply_provider.fetch(cand.ticker, d_minus_2, d0)
         except Exception as exc:
+            _append_missing_rows(all_rows, cand, run_id_str, ordered_days, slot_by_day, by_day)
             record_candidate_error(cand.ticker, f"t1637: {exc}")
             continue
 
-        if len(program_bars) != len({bar.trading_day for bar in program_bars}):
-            # 같은 날짜의 프로그램 행도 조용히 덮어쓰지 않는다.
-            record_candidate_error(cand.ticker, "t1637: duplicate trading day")
+        try:
+            program_by_day = _index_bars(program_bars, ordered_days, "t1637")
+        except ValueError as exc:
+            _append_missing_rows(all_rows, cand, run_id_str, ordered_days, slot_by_day, by_day)
+            record_candidate_error(cand.ticker, f"t1637: {exc}")
             continue
 
-        program_by_day = {bar.trading_day: bar for bar in program_bars}
-        if set(program_by_day) != set(ordered_days):
-            # 예상 3거래일 중 일부가 없거나 범위 밖 행만 반환된 경우다.
-            record_candidate_error(cand.ticker, "t1637: expected exactly three trading days")
-            continue
-
-        candidate_rows: list[SupplyRow] = []
-        for day in ordered_days:
-            bar = by_day[day]
-            candidate_rows.append(
-                SupplyRow(
-                    candidate_id=cand.candidate_id,
-                    attempt_run_id=run_id_str,
-                    trading_day=day,
-                    slot=slot_by_day[day],
-                    close=bar.close,
-                    volume=bar.volume,
-                    change_pct=bar.change_pct,
-                    foreign_net=bar.foreign_net,
-                    institution_net=bar.institution_net,
-                    individual_net=bar.individual_net,
-                    program_net=program_by_day[day].program_net,
-                    investor_net_status="confirmed",
+        d0_bar = by_day[d0]
+        d0_program = program_by_day[d0]
+        status = "confirmed"
+        if _all_zero(
+            d0_bar.foreign_net,
+            d0_bar.institution_net,
+            d0_bar.individual_net,
+            d0_program.program_net,
+        ):
+            try:
+                retry_bars = _fetch_semantic_retry(
+                    supply_provider, cand.ticker, d_minus_2, d0, _SEMANTIC_RETRY_COUNT,
                 )
+                retry_program_bars = _fetch_semantic_retry(
+                    program_supply_provider, cand.ticker, d_minus_2, d0, _SEMANTIC_RETRY_COUNT,
+                )
+                by_day = _index_bars(retry_bars, ordered_days, "t1702")
+                program_by_day = _index_bars(retry_program_bars, ordered_days, "t1637")
+            except Exception as exc:
+                # 가격은 첫 t1702 응답에서 확보했으므로 세 슬롯은 보존하되,
+                # 재시도로도 투자자 수급 확정에 실패한 사실은 missing으로 표시한다.
+                _append_missing_rows(all_rows, cand, run_id_str, ordered_days, slot_by_day, by_day)
+                record_candidate_error(cand.ticker, f"semantic retry: {exc}")
+                continue
+
+            d0_bar = by_day[d0]
+            d0_program = program_by_day[d0]
+            if _all_zero(
+                d0_bar.foreign_net,
+                d0_bar.institution_net,
+                d0_bar.individual_net,
+                d0_program.program_net,
+            ):
+                if kind is BatchKind.INTRADAY:
+                    status = "pending"
+
+        all_rows.extend(
+            _build_candidate_rows(
+                cand,
+                run_id_str,
+                ordered_days,
+                slot_by_day,
+                by_day,
+                program_by_day,
+                investor_net_status=status,
             )
-        all_rows.extend(candidate_rows)
+        )
 
     try:
         saved_count = supply_repo.upsert_rows(all_rows)
@@ -282,3 +305,85 @@ __all__ = [
     "SupplyStageResult",
     "run_supply_stage",
 ]
+
+
+def _index_bars(bars: list[Any], ordered_days: list[date], source: str) -> dict[date, Any]:
+    """응답 날짜를 엄격히 검증해 조용한 중복/누락/범위 밖 저장을 막는다."""
+    if len(bars) != len({bar.trading_day for bar in bars}):
+        raise ValueError(f"{source}: duplicate trading day")
+    by_day = {bar.trading_day: bar for bar in bars}
+    if set(by_day) != set(ordered_days):
+        raise ValueError(f"{source}: expected exactly three unique trading days")
+    return by_day
+
+
+def _fetch_semantic_retry(provider: Any, ticker: str, fromdt: date, todt: date, retries: int) -> list[Any]:
+    """의미적으로 의심스러운 all-zero 응답에 한정된 bounded retry."""
+    if retries != 1:
+        raise ValueError("semantic retry budget must remain one bounded retry")
+    return provider.fetch(ticker, fromdt, todt)
+
+
+def _all_zero(*values: float | None) -> bool:
+    return all(value == 0 for value in values)
+
+
+def _build_candidate_rows(
+    candidate: Any,
+    run_id: str,
+    ordered_days: list[date],
+    slot_by_day: dict[date, str],
+    by_day: dict[date, SupplyBar],
+    program_by_day: dict[date, ProgramSupplyBar],
+    *,
+    investor_net_status: str,
+) -> list[SupplyRow]:
+    rows: list[SupplyRow] = []
+    for day in ordered_days:
+        bar = by_day[day]
+        is_pending = investor_net_status == "pending" and day == ordered_days[-1]
+        rows.append(
+            SupplyRow(
+                candidate_id=candidate.candidate_id,
+                attempt_run_id=run_id,
+                trading_day=day,
+                slot=slot_by_day[day],
+                close=bar.close,
+                volume=bar.volume,
+                change_pct=bar.change_pct,
+                foreign_net=None if is_pending else bar.foreign_net,
+                institution_net=None if is_pending else bar.institution_net,
+                individual_net=None if is_pending else bar.individual_net,
+                program_net=None if is_pending else program_by_day[day].program_net,
+                investor_net_status="pending" if is_pending else "confirmed",
+            )
+        )
+    return rows
+
+
+def _append_missing_rows(
+    all_rows: list[SupplyRow],
+    candidate: Any,
+    run_id: str,
+    ordered_days: list[date],
+    slot_by_day: dict[date, str],
+    by_day: dict[date, SupplyBar],
+) -> None:
+    for day in ordered_days:
+        bar = by_day[day]
+        all_rows.append(
+            SupplyRow(
+                candidate_id=candidate.candidate_id,
+                attempt_run_id=run_id,
+                trading_day=day,
+                slot=slot_by_day[day],
+                close=bar.close,
+                volume=bar.volume,
+                change_pct=bar.change_pct,
+                foreign_net=None,
+                institution_net=None,
+                individual_net=None,
+                program_net=None,
+                investor_net_status="missing",
+            )
+        )
