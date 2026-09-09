@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 
 class SupplyHintStatus(StrEnum):
@@ -17,6 +17,7 @@ class SupplyHintStatus(StrEnum):
 
 
 Numeric: TypeAlias = int | float | Decimal
+SupplyHintSlot: TypeAlias = Literal["D0", "D-1", "D-2"]
 
 
 def _is_finite(value: Numeric) -> bool:
@@ -37,12 +38,13 @@ def compute_supply_hint(
     institution_net: Numeric | None,
     individual_net: Numeric | None,
     program_net: Numeric | None,
-    slot: str = "D0",
+    slot: SupplyHintSlot,
 ) -> SupplyHintStatus:
     """close 확정 D0의 외인·기관·프로그램 순매수만 엄격하게 판정한다.
 
     개인 순매수는 행의 confirmed 상태 정합성에 필요한 값이지만 힌트 임계값에는
-    포함하지 않는다. 장중 행, 미확정/미수집 행, 미완성 confirmed 행은 모두
+    포함하지 않는다. 호출자는 D0/D-1/D-2 slot을 명시해야 하며, 장중 행,
+    미확정/미수집 행, 미완성 confirmed 행은 모두
     ``undetermined``로 보존한다.
     """
 
@@ -61,4 +63,4 @@ def compute_supply_hint(
     return SupplyHintStatus.NOT_MET
 
 
-__all__ = ["SupplyHintStatus", "compute_supply_hint"]
+__all__ = ["SupplyHintSlot", "SupplyHintStatus", "compute_supply_hint"]

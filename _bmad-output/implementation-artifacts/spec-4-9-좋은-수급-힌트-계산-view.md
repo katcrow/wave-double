@@ -82,6 +82,11 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 - Python/SQL 공유 fixture에 slot 및 foreign_net 0/음수 경계를 추가하고 SQL fixture와 CSV drift 검사를 고정했다.
 - RPC 전체 payload, authenticated role 조건부 호출, dashboard nullable 타입과 웹 runtime validator/literal narrowing 테스트를 추가했다.
 
+### 2026-09-09 — 후속 patch 보완
+- `compute_supply_hint`의 slot 기본값을 제거해 모든 호출자가 명시적인 D0/D-1/D-2를 전달하도록 고쳤다.
+- SQL fixture의 중복 case `VALUES`/comment block을 제거하고 psql `\copy`로 공유 CSV를 직접 소비하도록 바꿨다. MCP 검증은 동일 CSV 기반 equivalent INSERT로 실행한다.
+- view/RPC fixture의 단건 조회에 `FOUND`/count 및 `IS DISTINCT FROM` 방어를 추가하고, date JSON string과 missing row 전체 payload를 검증한다.
+
 ## Design Notes
 
 `good`/`not_met`/`undetermined`는 저장·전송용 안정적 코드이며 한국어 라벨은 Story 4.10 UI가 매핑한다. SQL view가 `batch_kind='close'`까지 확인하므로 upstream 상태가 잘못 확정된 장중 행도 좋은 수급으로 노출되지 않는다. RPC는 후보의 `trading_day`와 D0를 묶어 같은 attempt의 과거 행이나 다른 attempt의 후보가 섞이지 않게 한다.

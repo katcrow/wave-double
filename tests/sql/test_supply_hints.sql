@@ -1,18 +1,21 @@
 -- Supabase SQL fixture for Story 4.9 좋은 수급 힌트 view/RPC.
--- CSV fixture(tests/fixtures/supply_hint_cases.csv)와 같은 경계값을 사용하며 rollback한다.
--- SHARED_SUPPLY_HINT_FIXTURE_BEGIN
--- HAPPY_PATH|close|D0|confirmed|101|202|-303|404|good
--- NOT_MET_ZERO|close|D0|confirmed|101|202|-303|0|not_met
--- NOT_MET_FOREIGN_ZERO|close|D0|confirmed|0|202|-303|404|not_met
--- NOT_MET_FOREIGN_NEGATIVE|close|D0|confirmed|-101|202|-303|404|not_met
--- NOT_MET_NEGATIVE|close|D0|confirmed|101|-202|-303|404|not_met
--- UNKNOWN_PENDING|close|D0|pending|||||undetermined
--- UNKNOWN_MISSING|close|D0|missing|||||undetermined
--- UNKNOWN_NULL|close|D0|confirmed|101|202|-303||undetermined
--- INTRADAY|intraday|D0|confirmed|101|202|-303|404|undetermined
--- NON_D0|close|D-1|confirmed|101|202|-303|404|undetermined
--- SHARED_SUPPLY_HINT_FIXTURE_END
+-- psql가 실제 CSV를 temp table로 로드한다. Supabase MCP에서는 동등한 INSERT로 대체 실행한다.
 begin;
+
+create temporary table supply_hint_fixture (
+  case_id text primary key,
+  batch_kind text not null,
+  slot text not null,
+  investor_net_status text not null,
+  foreign_net numeric,
+  institution_net numeric,
+  individual_net numeric,
+  program_net numeric,
+  expected text not null,
+  candidate_id uuid
+) on commit drop;
+
+\copy supply_hint_fixture(case_id, batch_kind, slot, investor_net_status, foreign_net, institution_net, individual_net, program_net, expected) from 'tests/fixtures/supply_hint_cases.csv' with (format csv, header true)
 
 do $$
 declare
@@ -33,6 +36,9 @@ declare
   result jsonb;
   candidate_result jsonb;
   actual_status text;
+  actual_trading_day date;
+  actual_count bigint;
+  candidate_count bigint;
   missing_investor_net_status text;
   missing_collected_at timestamptz;
 begin
@@ -57,32 +63,6 @@ begin
   ) then
     raise exception 'PUBLIC must not retain execute on get_candidate_supply_hints';
   end if;
-
-  create temporary table supply_hint_fixture (
-    case_id text primary key,
-    batch_kind text not null,
-    slot text not null,
-    investor_net_status text not null,
-    foreign_net numeric,
-    institution_net numeric,
-    individual_net numeric,
-    program_net numeric,
-    expected text not null,
-    candidate_id uuid
-  ) on commit drop;
-
-  insert into supply_hint_fixture(case_id, batch_kind, slot, investor_net_status, foreign_net, institution_net, individual_net, program_net, expected)
-  values
-    ('HAPPY_PATH', 'close', 'D0', 'confirmed', 101, 202, -303, 404, 'good'),
-    ('NOT_MET_ZERO', 'close', 'D0', 'confirmed', 101, 202, -303, 0, 'not_met'),
-    ('NOT_MET_FOREIGN_ZERO', 'close', 'D0', 'confirmed', 0, 202, -303, 404, 'not_met'),
-    ('NOT_MET_FOREIGN_NEGATIVE', 'close', 'D0', 'confirmed', -101, 202, -303, 404, 'not_met'),
-    ('NOT_MET_NEGATIVE', 'close', 'D0', 'confirmed', 101, -202, -303, 404, 'not_met'),
-    ('UNKNOWN_PENDING', 'close', 'D0', 'pending', null, null, null, null, 'undetermined'),
-    ('UNKNOWN_MISSING', 'close', 'D0', 'missing', null, null, null, null, 'undetermined'),
-    ('UNKNOWN_NULL', 'close', 'D0', 'confirmed', 101, 202, -303, null, 'undetermined'),
-    ('INTRADAY', 'intraday', 'D0', 'confirmed', 101, 202, -303, 404, 'undetermined'),
-    ('NON_D0', 'close', 'D-1', 'confirmed', 101, 202, -303, 404, 'undetermined');
 
   started := public.start_attempt('close:2099-08-01', date '2099-08-01', 'close', 'manual', 300);
   published_run := (started->>'run_id')::uuid;
@@ -132,6 +112,9 @@ begin
 
   -- 같은 attempt의 오래된 D0는 최신 거래일 행으로 대체되어야 한다.
   select f.candidate_id into current_candidate_id from supply_hint_fixture f where f.case_id = 'HAPPY_PATH';
+  if not found then
+    raise exception 'HAPPY_PATH fixture row was not loaded from CSV';
+  end if;
   insert into public.supply_3day(
     candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
     foreign_net, institution_net, individual_net, program_net, investor_net_status, collected_at
@@ -168,27 +151,39 @@ begin
     select h.hint_status into actual_status
     from public.candidate_supply_hints h
     where h.candidate_id = fixture_case.candidate_id and h.attempt_run_id = published_run;
-    if actual_status <> fixture_case.expected then
+    if not found or actual_status is distinct from fixture_case.expected then
       raise exception 'view mismatch for %: expected %, got %', fixture_case.case_id, fixture_case.expected, actual_status;
     end if;
   end loop;
-  if (select h.trading_day from public.candidate_supply_hints h
-      where h.candidate_id = (select candidate_id from supply_hint_fixture where case_id = 'HAPPY_PATH')
-        and h.attempt_run_id = published_run) <> date '2099-08-01' then
+  select count(*), max(h.trading_day) into actual_count, actual_trading_day
+  from public.candidate_supply_hints h
+  where h.candidate_id = (select candidate_id from supply_hint_fixture where case_id = 'HAPPY_PATH')
+    and h.attempt_run_id = published_run;
+  if actual_count <> 1 or actual_trading_day is distinct from date '2099-08-01' then
     raise exception 'view did not select the latest D0 trading_day';
   end if;
   select h.hint_status into actual_status
   from public.candidate_supply_hints h
   where h.candidate_id = missing_candidate and h.attempt_run_id = published_run;
-  if actual_status <> 'undetermined'
-     or (select count(*) from public.candidate_supply_hints h
-         where h.candidate_id = missing_candidate and h.attempt_run_id = published_run) <> 1 then
+  if not found then
+    raise exception 'missing D0 candidate has no view row';
+  end if;
+  select count(*) into actual_count
+  from public.candidate_supply_hints h
+  where h.candidate_id = missing_candidate and h.attempt_run_id = published_run;
+  if actual_count <> 1 or actual_status is distinct from 'undetermined' then
     raise exception 'missing D0 candidate did not produce one undetermined view row';
+  end if;
+  select count(*) into actual_count
+  from public.candidate_supply_hints h
+  where h.candidate_id = missing_candidate and h.attempt_run_id = published_run;
+  if actual_count <> 1 then
+    raise exception 'missing D0 candidate view row count changed during payload check';
   end if;
   select h.investor_net_status, h.collected_at into missing_investor_net_status, missing_collected_at
   from public.candidate_supply_hints h
   where h.candidate_id = missing_candidate and h.attempt_run_id = published_run;
-  if missing_investor_net_status <> 'missing' or missing_collected_at is not null then
+  if not found or missing_investor_net_status is distinct from 'missing' or missing_collected_at is not null then
     raise exception 'missing D0 candidate payload was not missing/null: %, %', missing_investor_net_status, missing_collected_at;
   end if;
 
@@ -197,14 +192,21 @@ begin
     raise exception 'expected eight shared plus one missing active close hint, got %', result;
   end if;
   for fixture_case in select * from supply_hint_fixture where batch_kind = 'close' and slot = 'D0' order by case_id loop
+    select count(*) into candidate_count
+    from jsonb_array_elements(result) e
+    where e->>'candidate_id' = fixture_case.candidate_id::text;
+    if candidate_count <> 1 then
+      raise exception 'RPC returned % rows for %, expected exactly one', candidate_count, fixture_case.case_id;
+    end if;
     select e into candidate_result
     from jsonb_array_elements(result) e
     where e->>'candidate_id' = fixture_case.candidate_id::text;
-    if candidate_result is null
+    if not found
+       or candidate_result is null
        or candidate_result->'candidate_id' <> to_jsonb(fixture_case.candidate_id::text)
        or candidate_result->'attempt_run_id' <> to_jsonb(published_run::text)
        or candidate_result->'ticker' <> to_jsonb(('T' || fixture_case.case_id)::text)
-       or candidate_result->'trading_day' <> to_jsonb(date '2099-08-01')
+       or candidate_result->'trading_day' <> to_jsonb('2099-08-01'::text)
        or candidate_result->'slot' <> to_jsonb('D0'::text)
        or candidate_result->'batch_kind' <> to_jsonb('close'::text)
        or candidate_result->'foreign_net' <> coalesce(to_jsonb(fixture_case.foreign_net), 'null'::jsonb)
@@ -217,14 +219,24 @@ begin
       raise exception 'RPC mismatch for %: expected %, got %', fixture_case.case_id, fixture_case.expected, candidate_result;
     end if;
   end loop;
+  if to_jsonb(date '2099-08-01') <> to_jsonb('2099-08-01'::text) then
+    raise exception 'date JSON representation is not the expected JSON string';
+  end if;
+  select count(*) into candidate_count
+  from jsonb_array_elements(result) e
+  where e->>'candidate_id' = missing_candidate::text;
+  if candidate_count <> 1 then
+    raise exception 'RPC returned % missing-row candidates, expected exactly one', candidate_count;
+  end if;
   select e into candidate_result
   from jsonb_array_elements(result) e
   where e->>'candidate_id' = missing_candidate::text;
-  if candidate_result is null
+  if not found
+     or candidate_result is null
      or candidate_result->'candidate_id' <> to_jsonb(missing_candidate::text)
      or candidate_result->'attempt_run_id' <> to_jsonb(published_run::text)
      or candidate_result->'ticker' <> to_jsonb('MISS0'::text)
-     or candidate_result->'trading_day' <> to_jsonb(date '2099-08-01')
+     or candidate_result->'trading_day' <> to_jsonb('2099-08-01'::text)
      or candidate_result->'slot' <> to_jsonb('D0'::text)
      or candidate_result->'batch_kind' <> to_jsonb('close'::text)
      or candidate_result->'foreign_net' <> 'null'::jsonb
@@ -292,7 +304,13 @@ begin
   select h.hint_status into actual_status
   from public.candidate_supply_hints h
   where h.candidate_id = intraday_candidate and h.attempt_run_id = intraday_run;
-  if actual_status <> 'undetermined' or jsonb_array_length(public.get_candidate_supply_hints(intraday_run)) <> 1 then
+  if not found then
+    raise exception 'intraday candidate has no view row';
+  end if;
+  select count(*) into actual_count
+  from public.candidate_supply_hints h
+  where h.candidate_id = intraday_candidate and h.attempt_run_id = intraday_run;
+  if actual_count <> 1 or actual_status is distinct from 'undetermined' or jsonb_array_length(public.get_candidate_supply_hints(intraday_run)) <> 1 then
     raise exception 'intraday confirmed values must remain undetermined';
   end if;
 
