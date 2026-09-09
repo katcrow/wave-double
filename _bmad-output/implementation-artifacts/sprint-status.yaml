@@ -88,8 +88,8 @@ development_status:
   4-10-힌트-배지-통합-필터: done
   epic-4-retrospective: done
 
-  epic-5: backlog
-  5-1-bias_events-append-only-스키마: backlog
+  epic-5: in-progress
+  5-1-bias_events-append-only-스키마: done
   5-2-백테스트-유니버스-시그널-계산: backlog
   5-3-편향-지표-계산-로직: backlog
   5-4-편향-계산-close-배치-연결-append: backlog

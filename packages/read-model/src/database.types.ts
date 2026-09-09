@@ -14,6 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      bias_event_by_source: {
+        Row: {
+          backtest_universe_signal_count: number
+          bias_event_id: string
+          candidate_pop_signal_count: number
+          created_at: string
+          diff_count: number
+          intersection_count: number
+          missed_opportunity_count: number
+          source: string
+        }
+        Insert: {
+          backtest_universe_signal_count: number
+          bias_event_id: string
+          candidate_pop_signal_count: number
+          created_at?: string
+          diff_count: number
+          intersection_count: number
+          missed_opportunity_count: number
+          source: string
+        }
+        Update: {
+          backtest_universe_signal_count?: number
+          bias_event_id?: string
+          candidate_pop_signal_count?: number
+          created_at?: string
+          diff_count?: number
+          intersection_count?: number
+          missed_opportunity_count?: number
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bias_event_by_source_bias_event_id_fkey"
+            columns: ["bias_event_id"]
+            isOneToOne: false
+            referencedRelation: "bias_event_by_source_canonical"
+            referencedColumns: ["bias_event_id"]
+          },
+          {
+            foreignKeyName: "bias_event_by_source_bias_event_id_fkey"
+            columns: ["bias_event_id"]
+            isOneToOne: false
+            referencedRelation: "bias_events"
+            referencedColumns: ["bias_event_id"]
+          },
+          {
+            foreignKeyName: "bias_event_by_source_bias_event_id_fkey"
+            columns: ["bias_event_id"]
+            isOneToOne: false
+            referencedRelation: "bias_events_canonical"
+            referencedColumns: ["bias_event_id"]
+          },
+        ]
+      }
+      bias_events: {
+        Row: {
+          bias_event_id: string
+          calculation_meta: Json
+          created_at: string
+          logical_run_key: string
+          trading_day: string
+        }
+        Insert: {
+          bias_event_id?: string
+          calculation_meta?: Json
+          created_at?: string
+          logical_run_key: string
+          trading_day: string
+        }
+        Update: {
+          bias_event_id?: string
+          calculation_meta?: Json
+          created_at?: string
+          logical_run_key?: string
+          trading_day?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bias_events_logical_run_key_fkey"
+            columns: ["logical_run_key"]
+            isOneToOne: false
+            referencedRelation: "logical_runs"
+            referencedColumns: ["logical_run_key"]
+          },
+        ]
+      }
       candidate_outcome: {
         Row: {
           cutoff_n: number
@@ -711,6 +798,48 @@ export type Database = {
       }
     }
     Views: {
+      bias_event_by_source_canonical: {
+        Row: {
+          backtest_universe_signal_count: number | null
+          bias_event_id: string | null
+          candidate_pop_signal_count: number | null
+          contributing_candidate_count: number | null
+          created_at: string | null
+          diff_count: number | null
+          intersection_count: number | null
+          logical_run_key: string | null
+          missed_opportunity_count: number | null
+          source: string | null
+          trading_day: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bias_events_logical_run_key_fkey"
+            columns: ["logical_run_key"]
+            isOneToOne: false
+            referencedRelation: "logical_runs"
+            referencedColumns: ["logical_run_key"]
+          },
+        ]
+      }
+      bias_events_canonical: {
+        Row: {
+          bias_event_id: string | null
+          calculation_meta: Json | null
+          created_at: string | null
+          logical_run_key: string | null
+          trading_day: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bias_events_logical_run_key_fkey"
+            columns: ["logical_run_key"]
+            isOneToOne: false
+            referencedRelation: "logical_runs"
+            referencedColumns: ["logical_run_key"]
+          },
+        ]
+      }
       candidate_supply_hints: {
         Row: {
           attempt_run_id: string | null

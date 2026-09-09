@@ -52,6 +52,7 @@
     "202609091500_close_outcome_correction_policy",
     "202609091501_normalize_correction_repeat_conflict",
     "202609091600_audit_outcome_strategy_rules",
+    "202609091700_create_bias_events",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_rebuild_outcome_projection",
@@ -89,6 +90,15 @@
     },
     "emit_open_command": {
       "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "enforce_bias_event_trading_day": {
+      "security_definer": false,
       "search_path": "public",
       "grants": {
         "anon": false,

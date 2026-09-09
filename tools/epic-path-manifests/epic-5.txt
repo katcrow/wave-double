@@ -1,0 +1,11 @@
+# Epic 5 (실전 성과 검증 화면 & 모집단 편향) 산출물 경로 manifest.
+# Epic이 서로 겹쳐 진행되므로 정확한 경로로만 범위를 게이트한다(epic-7-retro-item-30 규약).
+# 사용법: python tools/check_epic_scope.py --epic 5 --range <base>..HEAD
+_bmad-output/implementation-artifacts/epic-5-context.md
+_bmad-output/implementation-artifacts/spec-5-1-bias_events-append-only-스키마.md
+_bmad-output/implementation-artifacts/sprint-status.yaml
+infra/supabase/migrations/202609091700_create_bias_events.sql
+packages/read-model/src/database.types.ts
+tests/sql/test_bias_events.sql
+tools/epic-path-manifests/epic-5.txt
+tools/production_parity_baseline.json
