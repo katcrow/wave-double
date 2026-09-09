@@ -1,6 +1,7 @@
 """전략 D 계산·고정 청산 회귀 테스트."""
 
 from dataclasses import replace
+import sys
 
 import numpy as np
 import pandas as pd
@@ -14,6 +15,7 @@ from backtest.indicator_opt.strategy_d import (
     BASELINE_END,
     BASELINE_START,
     CANDIDATE_A,
+    _TRADE_COLUMNS,
     _baseline_row,
     compute_strategy_d,
     run_strategy_d_backtest,
@@ -362,3 +364,117 @@ def test_runner_records_fixed_observation_window_and_flattened_params() -> None:
     assert row["param_stop_loss_pct"] == 5.0
     assert row["param_max_holding_bars"] == 20
     assert row["param_cost_rate"] == 0.0005
+
+
+def test_runner_excludes_invalid_rows_and_splits_segments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame, _ = _strategy_d_frame()
+    frame = frame.iloc[:150].copy()
+    frame.iloc[30, frame.columns.get_loc("Close")] = np.nan
+    segments: list[pd.DataFrame] = []
+
+    def spy_run_backtest(segment, signals, trade_params, ticker=""):
+        segments.append(segment)
+        return []
+
+    monkeypatch.setattr(strategy_d, "run_backtest", spy_run_backtest)
+    result = run_strategy_d_backtest({"T": frame})
+
+    assert result["invalid_ohlcv_rows"] == 1
+    assert result["n_signals"] == 0
+    assert [len(segment) for segment in segments] == [30, 119]
+    assert all(np.isfinite(segment.to_numpy(dtype=float)).all() for segment in segments)
+
+
+def test_runner_fingerprint_includes_invalid_rows() -> None:
+    frame, _ = _strategy_d_frame()
+    frame = frame.iloc[:150].copy()
+    invalid = frame.copy()
+    invalid.iloc[30, invalid.columns.get_loc("Close")] = np.nan
+    changed_invalid = invalid.copy()
+    changed_invalid.iloc[30, changed_invalid.columns.get_loc("Volume")] = 999.0
+
+    first = run_strategy_d_backtest({"T": invalid})
+    second = run_strategy_d_backtest({"T": changed_invalid})
+
+    assert first["invalid_ohlcv_rows"] == second["invalid_ohlcv_rows"] == 1
+    assert first["data_fingerprint"] != second["data_fingerprint"]
+    assert first["n_signals"] == second["n_signals"] == 0
+
+
+def test_runner_is_invariant_to_dictionary_order() -> None:
+    frame_a, _ = _strategy_d_frame()
+    frame_b, _ = _strategy_d_frame(n=320)
+    data_one = {"B": frame_b, "A": frame_a}
+    data_two = {"A": frame_a, "B": frame_b}
+
+    first = run_strategy_d_backtest(data_one)
+    second = run_strategy_d_backtest(data_two)
+
+    assert first["data_fingerprint"] == second["data_fingerprint"]
+    assert first["trades"] == second["trades"]
+    assert [
+        (trade["entry_date"], trade["ticker"])
+        for trade in first["trades"]
+    ] == sorted(
+        (trade["entry_date"], trade["ticker"])
+        for trade in first["trades"]
+    )
+
+
+def test_runner_rejects_timezone_bound_mismatch() -> None:
+    frame, _ = _strategy_d_frame()
+    frame.index = frame.index.tz_localize("UTC")
+
+    with pytest.raises(ValueError, match="timezone"):
+        run_strategy_d_backtest({"T": frame}, start="2024-01-01")
+
+
+def test_cli_writes_nonempty_and_zero_trade_csv_headers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    frame, _ = _strategy_d_frame()
+    monkeypatch.setattr(strategy_d, "load_all", lambda: {"T": frame})
+
+    summary_path = tmp_path / "summary.csv"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "strategy_d",
+            "--output",
+            str(summary_path),
+            "--start",
+            frame.index[0].date().isoformat(),
+            "--end",
+            frame.index[60].date().isoformat(),
+        ],
+    )
+    strategy_d.main()
+    trades_path = summary_path.with_name("summary_trades.csv")
+
+    assert pd.read_csv(summary_path).loc[0, "n_trades"] >= 0
+    assert list(pd.read_csv(trades_path).columns) == list(_TRADE_COLUMNS)
+
+    zero_summary_path = tmp_path / "zero.csv"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "strategy_d",
+            "--output",
+            str(zero_summary_path),
+            "--start",
+            frame.index[0].date().isoformat(),
+            "--end",
+            frame.index[60].date().isoformat(),
+        ],
+    )
+    strategy_d.main()
+    zero_trades_path = zero_summary_path.with_name("zero_trades.csv")
+
+    assert pd.read_csv(zero_summary_path).loc[0, "n_trades"] == 0
+    assert zero_trades_path.read_text(encoding="utf-8").splitlines() == [
+        ",".join(_TRADE_COLUMNS)
+    ]

@@ -2,6 +2,7 @@ import json
 from datetime import date
 
 import httpx
+import pytest
 
 from apps.batch.supply_3day_repository import SupabaseSupply3DayRepository, SupplyRow
 
@@ -149,3 +150,20 @@ def test_upsert_rows_raises_on_http_error():
         pass
     else:
         raise AssertionError("expected HTTPStatusError to propagate")
+
+
+@pytest.mark.parametrize("field", ["close", "volume", "change_pct"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_supply_row_rejects_non_finite_price_fields(field, value):
+    with pytest.raises(ValueError, match="must be finite"):
+        _row(**{field: value})
+
+
+def test_supply_row_rejects_non_finite_investor_value():
+    with pytest.raises(ValueError, match="finite or null"):
+        _row(foreign_net=float("nan"))
+
+
+def test_supply_row_requires_null_investor_values_for_pending_or_missing():
+    with pytest.raises(ValueError, match="must keep investor values null"):
+        _row(investor_net_status="pending", foreign_net=1.0)

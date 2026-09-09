@@ -21,6 +21,10 @@ from .run import RESULTS_DIR
 _OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _PRICE_COLUMNS = ("Open", "High", "Low", "Close")
 _MAX_WINDOW = 100_000
+_TRADE_COLUMNS = (
+    "ticker", "entry_date", "exit_date", "entry_price", "exit_price",
+    "return_pct", "holding_bars", "exit_reason",
+)
 BASELINE_START = pd.Timestamp("2020-08-03")
 BASELINE_END = pd.Timestamp("2026-08-27")
 
@@ -110,7 +114,7 @@ def validate_strategy_d_params(params: StrategyDParams) -> None:
     _validate_params(params)
 
 
-def _validate_frame(frame: pd.DataFrame) -> None:
+def _validate_frame_layout(frame: pd.DataFrame) -> None:
     if not isinstance(frame, pd.DataFrame):
         raise ValueError("OHLCV 입력은 DataFrame이어야 합니다")
     if frame.columns.has_duplicates:
@@ -122,6 +126,10 @@ def _validate_frame(frame: pd.DataFrame) -> None:
         raise ValueError("OHLCV 인덱스는 DatetimeIndex여야 합니다")
     if not frame.index.is_monotonic_increasing or not frame.index.is_unique:
         raise ValueError("OHLCV 인덱스는 중복 없는 오름차순이어야 합니다")
+
+
+def _validate_frame(frame: pd.DataFrame) -> None:
+    _validate_frame_layout(frame)
     values = frame.loc[:, _OHLCV_COLUMNS].to_numpy(dtype=float)
     if not np.isfinite(values).all():
         raise ValueError("OHLCV에 유한하지 않은 값이 있습니다")
@@ -145,7 +153,7 @@ def _valid_ohlcv_rows(frame: pd.DataFrame) -> pd.Series:
     """baseline 입력에서 계산에 사용할 수 있는 행을 표시한다."""
 
     prices = frame.loc[:, _PRICE_COLUMNS]
-    return (
+    valid = (
         np.isfinite(frame.loc[:, _OHLCV_COLUMNS].to_numpy(dtype=float)).all(axis=1)
         & (prices > 0).all(axis=1).to_numpy()
         & (frame["Volume"] >= 0).to_numpy()
@@ -154,6 +162,72 @@ def _valid_ohlcv_rows(frame: pd.DataFrame) -> pd.Series:
         & (frame["High"] >= frame["Close"]).to_numpy()
         & (frame["Low"] <= frame["Open"]).to_numpy()
         & (frame["Low"] <= frame["Close"]).to_numpy()
+    )
+    return pd.Series(valid, index=frame.index, dtype=bool)
+
+
+def _valid_segments(
+    frame: pd.DataFrame, valid_rows: pd.Series
+) -> list[pd.DataFrame]:
+    """유효 행만 이어지는 구간을 분리해 invalid 행을 봉 연결로 취급하지 않는다."""
+
+    positions = np.flatnonzero(valid_rows.to_numpy(dtype=bool))
+    if len(positions) == 0:
+        return []
+    split_points = np.flatnonzero(np.diff(positions) > 1) + 1
+    groups = np.split(positions, split_points)
+    return [frame.iloc[group[0] : group[-1] + 1] for group in groups]
+
+
+def _parse_bound(name: str, value: pd.Timestamp | str | None) -> pd.Timestamp | None:
+    if value is None:
+        return None
+    try:
+        parsed = pd.Timestamp(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name}은 유효한 timestamp여야 합니다") from exc
+    if pd.isna(parsed):
+        raise ValueError(f"{name}은 유효한 timestamp여야 합니다")
+    return parsed
+
+
+def _timezone_label(timezone: object) -> str | None:
+    return None if timezone is None else str(timezone)
+
+
+def _validate_bound_timezones(
+    frame: pd.DataFrame,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+) -> None:
+    index_timezone = _timezone_label(frame.index.tz)
+    for name, bound in (("start", start), ("end", end)):
+        if bound is None:
+            continue
+        bound_timezone = _timezone_label(bound.tz)
+        if bound_timezone != index_timezone:
+            raise ValueError(
+                f"{name}과 OHLCV 인덱스의 timezone이 일치하지 않습니다"
+            )
+
+
+def _validate_bound_pair_timezones(
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+) -> None:
+    if start is not None and end is not None:
+        if _timezone_label(start.tz) != _timezone_label(end.tz):
+            raise ValueError("start와 end의 timezone이 일치하지 않습니다")
+
+
+def _in_bounds(
+    value: pd.Timestamp,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+) -> bool:
+    return (
+        (start is None or value >= start)
+        and (end is None or value <= end)
     )
 
 
@@ -229,8 +303,9 @@ def run_strategy_d_backtest(
 
     data = load_all() if data is None else data
     _validate_params(params)
-    start_ts = pd.Timestamp(start) if start is not None else None
-    end_ts = pd.Timestamp(end) if end is not None else None
+    start_ts = _parse_bound("start", start)
+    end_ts = _parse_bound("end", end)
+    _validate_bound_pair_timezones(start_ts, end_ts)
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
         raise ValueError("start는 end보다 늦을 수 없습니다")
 
@@ -244,26 +319,46 @@ def run_strategy_d_backtest(
     n_tickers = 0
     invalid_ohlcv_rows = 0
     months = set()
-    for ticker, frame in data.items():
-        window = frame
-        if start_ts is not None:
-            window = window[window.index >= start_ts]
-        if end_ts is not None:
-            window = window[window.index <= end_ts]
-        if window.empty:
-            continue
-        valid_rows = _valid_ohlcv_rows(window)
+    for ticker in sorted(data):
+        frame = data[ticker]
+        _validate_frame_layout(frame)
+        _validate_bound_timezones(frame, start_ts, end_ts)
+        valid_rows = _valid_ohlcv_rows(frame)
         invalid_ohlcv_rows += int((~valid_rows).sum())
-        window = window.loc[valid_rows]
-        if window.empty:
-            continue
-        n_tickers += 1
-        months.update(window.index.to_period("M"))
-        digest.update(ticker.encode("utf-8"))
-        digest.update(pd.util.hash_pandas_object(window, index=True).to_numpy().tobytes())
-        signals = strategy_d_signals(window, ticker=ticker, params=params)
-        signal_count += len(signals)
-        all_trades.extend(run_backtest(window, signals, trade_params, ticker=ticker))
+        ticker_bytes = ticker.encode("utf-8")
+        digest.update(len(ticker_bytes).to_bytes(4, "big"))
+        digest.update(ticker_bytes)
+        digest.update(pd.util.hash_pandas_object(frame, index=True).to_numpy().tobytes())
+
+        observed_rows = valid_rows.copy()
+        if start_ts is not None:
+            observed_rows &= frame.index >= start_ts
+        if end_ts is not None:
+            observed_rows &= frame.index <= end_ts
+        if observed_rows.any():
+            n_tickers += 1
+            months.update(frame.index[observed_rows].to_period("M"))
+
+        for segment in _valid_segments(frame, valid_rows):
+            signals = strategy_d_signals(segment, ticker=ticker, params=params)
+            observed_signals = [
+                signal
+                for signal in signals
+                if _in_bounds(signal.date, start_ts, end_ts)
+            ]
+            signal_count += len(observed_signals)
+            segment_trades = run_backtest(
+                segment, observed_signals, trade_params, ticker=ticker
+            )
+            all_trades.extend(
+                trade
+                for trade in segment_trades
+                if _in_bounds(trade.entry_date, start_ts, end_ts)
+            )
+
+    all_trades.sort(
+        key=lambda trade: (trade.entry_date, trade.ticker, trade.exit_date)
+    )
 
     performance = summarize(all_trades)
     result = {
@@ -323,7 +418,9 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([_baseline_row(result)]).to_csv(args.output, index=False)
     trades_output = args.output.with_name(f"{args.output.stem}_trades.csv")
-    pd.DataFrame(result["trades"]).to_csv(trades_output, index=False)
+    pd.DataFrame(result["trades"], columns=_TRADE_COLUMNS).to_csv(
+        trades_output, index=False
+    )
     print(f"저장: {args.output}")
     print(f"거래 상세 저장: {trades_output}")
 

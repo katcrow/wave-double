@@ -3,9 +3,9 @@ import type { TodayCandidateCardRow } from "./dashboard-types.ts";
 export type CandidateSignalStatus = "active" | "vanished" | "mixed";
 
 /**
- * Design Notes: 전략은 A~E까지 가변 개수로 태깅될 수 있다(현재 최대 5종).
+ * Design Notes: 전략은 A~F까지 가변 개수로 태깅될 수 있다(현재 최대 6종).
  * MAX_VISIBLE_TAGS를 초과하는 나머지는 태그 개수와 무관하게 "+N" 배지로 접힌다
- * (5태그 동시 존재 시 `+3`). 반응형 폭 측정(ResizeObserver 등)은 쓰지 않는 고정 임계값이다.
+ * (6태그 동시 존재 시 `+4`). 반응형 폭 측정(ResizeObserver 등)은 쓰지 않는 고정 임계값이다.
  */
 export const MAX_VISIBLE_TAGS = 2;
 

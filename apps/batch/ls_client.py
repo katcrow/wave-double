@@ -17,6 +17,20 @@ from typing import Any, Callable, Protocol
 import httpx
 
 
+# LS Open API는 TR 코드가 아니라 업무군 path로 REST 라우팅한다. 호출부가
+# 매번 path를 흘려보내지 않아도 공식 API 경로를 잃지 않도록 공통 client가
+# 소유한다. 알 수 없는 TR은 기존처럼 endpoint 자체를 사용해 확장 TR의
+# 명시적 호출(path=...)도 계속 지원한다.
+DEFAULT_PATH_BY_TR = {
+    "t1601": "/stock/investor",
+    "t1637": "/stock/program",
+    "t1702": "/stock/frgr-itt",
+    "t1856": "/stock/item-search",
+    "t1859": "/stock/item-search",
+    "t8410": "/stock/chart",
+}
+
+
 class TokenProvider(Protocol):
     def get_token(self) -> str: ...
 
@@ -161,7 +175,7 @@ class LsClient:
                 if remaining_budget <= 0:
                     return self._budget_result()
                 response = self._http.post(
-                    self._url(path),
+                    self._url(path or DEFAULT_PATH_BY_TR.get(tr_code)),
                     headers=self._headers(tr_code),
                     json=params,
                     timeout=remaining_budget,

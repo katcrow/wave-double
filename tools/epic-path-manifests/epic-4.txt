@@ -1,0 +1,32 @@
+# Epic 4 acceptance-remediation paths. Exact paths keep interleaved Epic 7
+# files from being silently attributed to this Epic.
+.github/workflows/scheduled-batch.yml
+_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md
+_bmad-output/implementation-artifacts/spec-4-1-t1702-종목별-가격-수급-수집.md
+_bmad-output/implementation-artifacts/spec-epic-4-acceptance-remediation.md
+_bmad-output/implementation-artifacts/sprint-status.yaml
+apps/batch/ls_client.py
+apps/batch/ls_market_program_supply_provider.py
+apps/batch/ls_supply_provider.py
+apps/batch/run_state.py
+apps/batch/supply_3day_repository.py
+apps/batch/supply_stage.py
+apps/web/components/dashboard/CandidateEvidencePanel.tsx
+apps/web/next-env.d.ts
+apps/web/next.config.ts
+e2e/authenticated-dashboard.spec.ts
+e2e/mock-supabase-server.mjs
+e2e/start-test-web.mjs
+infra/supabase/migrations/202609091100_harden_candidate_evidence_read_boundary.sql
+infra/supabase/migrations/202609091200_reapply_candidate_evidence_read_boundary.sql
+infra/supabase/migrations/202609091300_strict_adjusted_evidence_rate.sql
+playwright.config.ts
+tests/batch/test_ls_client.py
+tests/batch/test_ls_market_program_supply_provider.py
+tests/batch/test_ls_supply_provider.py
+tests/batch/test_run_state.py
+tests/batch/test_supply_3day_repository.py
+tests/batch/test_supply_stage.py
+tests/sql/test_get_candidate_evidence.sql
+tools/check_epic_scope.py
+tools/epic-path-manifests/epic-4.txt

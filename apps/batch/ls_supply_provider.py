@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import math
 from typing import Any, Protocol
 
 from .ls_client import LsResponse
@@ -34,6 +35,14 @@ class SupplyBar:
     individual_net: float
     foreign_net: float
     institution_net: float
+
+    def __post_init__(self) -> None:
+        for name in (
+            "close", "change_pct", "volume", "individual_net", "foreign_net", "institution_net",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not math.isfinite(value):
+                raise ValueError(f"t1702 {name} must be finite")
 
 
 class LsSupplyProvider:

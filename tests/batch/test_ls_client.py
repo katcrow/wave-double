@@ -54,6 +54,24 @@ def test_caller_can_select_api_path_and_optional_mac_address():
     assert seen[0].headers["mac_address"] == "00:11:22:33:44:55"
 
 
+@pytest.mark.parametrize(
+    ("tr_code", "path"),
+    [
+        ("t1859", "/stock/item-search"),
+        ("t1702", "/stock/frgr-itt"),
+        ("t8410", "/stock/chart"),
+        ("t1637", "/stock/program"),
+    ],
+)
+def test_known_tr_codes_use_their_official_api_path(tr_code, path):
+    seen = []
+    client = make_client(
+        lambda request: (seen.append(request) or httpx.Response(200, json={}))
+    )
+    client.request(tr_code, {})
+    assert seen[0].url == httpx.URL(f"https://openapi.ls-sec.co.kr:8080{path}")
+
+
 def test_buckets_are_independent_per_tr():
     clock = FakeClock()
     result_codes = []

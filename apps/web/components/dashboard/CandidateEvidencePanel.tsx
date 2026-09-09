@@ -38,7 +38,7 @@ export default function CandidateEvidencePanel({
     >
       <header className="candidate-evidence-panel__header">
         <div>
-          <p className="candidate-evidence-panel__eyebrow">3일 수급 근거</p>
+          <p className="candidate-evidence-panel__eyebrow">3일 수급 근거 · 종가·등락률 수정주가</p>
           <p className="candidate-evidence-panel__meta">
             원천: <span>{fetchFailed ? "확인 불가" : viewModel.sourceLabel}</span>
             <span aria-hidden="true"> · </span>

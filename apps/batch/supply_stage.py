@@ -214,17 +214,20 @@ def run_supply_stage(
                 if kind is BatchKind.INTRADAY:
                     status = "pending"
 
-        all_rows.extend(
-            _build_candidate_rows(
-                cand,
-                run_id_str,
-                ordered_days,
-                slot_by_day,
-                by_day,
-                program_by_day,
-                investor_net_status=status,
+        try:
+            all_rows.extend(
+                _build_candidate_rows(
+                    cand,
+                    run_id_str,
+                    ordered_days,
+                    slot_by_day,
+                    by_day,
+                    program_by_day,
+                    investor_net_status=status,
+                )
             )
-        )
+        except (TypeError, ValueError) as exc:
+            record_candidate_error(cand.ticker, f"supply invariant: {exc}")
 
     try:
         saved_count = supply_repo.upsert_rows(all_rows)

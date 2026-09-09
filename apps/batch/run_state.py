@@ -89,6 +89,11 @@ class RunStateGateway:
             error = response.get("error") if isinstance(response, dict) else getattr(response, "error", None)
             if error:
                 self._raise_error(error)
+            # SupabaseRpcClient returns a dict envelope, while SDK-like test
+            # clients expose a ``.data`` attribute. Unwrap both shapes before
+            # parsers consume the RPC payload.
+            if isinstance(response, dict) and "data" in response:
+                return response["data"]
             return getattr(response, "data", response)
         except RunStateError:
             raise

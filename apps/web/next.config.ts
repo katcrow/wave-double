@@ -49,6 +49,17 @@ async function headers() {
   // Next 공식 안내) -- 'unsafe-eval'을 프로덕션까지 열어두면 CSP의 실질적 방어력이 없어지므로
   // 개발 환경에서만 추가한다.
   const scriptSrc = process.env.NODE_ENV === "production" ? "'self' 'unsafe-inline'" : "'self' 'unsafe-inline' 'unsafe-eval'";
+  const connectSources = ["'self'", "https://*.supabase.co"];
+  // Deterministic authenticated E2E uses a loopback Supabase fixture. Keep this
+  // origin development-only so production CSP never trusts arbitrary local hosts.
+  if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    try {
+      const origin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin;
+      if (origin === "http://127.0.0.1:54321") connectSources.push(origin);
+    } catch {
+      // Runtime env validation remains the responsibility of the Supabase clients.
+    }
+  }
   return [
     {
       source: "/:path*",
@@ -61,7 +72,7 @@ async function headers() {
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "font-src 'self' https://cdn.jsdelivr.net",
             "img-src 'self' data:",
-            "connect-src 'self' https://*.supabase.co",
+            `connect-src ${connectSources.join(" ")}`,
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",

@@ -17,7 +17,7 @@ export default defineConfig({
     baseURL: BASE_URL,
   },
   webServer: {
-    command: `npm run dev -w apps/web -- --port ${PORT}`,
+    command: `node e2e/start-test-web.mjs`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

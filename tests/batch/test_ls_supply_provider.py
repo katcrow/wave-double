@@ -127,3 +127,13 @@ def test_fetch_raises_on_malformed_date_length_instead_of_silently_misparsing():
     short_provider = LsSupplyProvider(FakeClient(short_response))
     with pytest.raises(RuntimeError):
         short_provider.fetch("005930", date(2026, 8, 28), date(2026, 9, 1))
+
+
+@pytest.mark.parametrize("field", ["close", "diff", "volume", "tjj0008", "tjj0016", "tjj0018"])
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity"])
+def test_fetch_rejects_non_finite_numeric_fields(field, value):
+    response = LsResponse(data={"t1702OutBlock1": [_row(**{field: value})]})
+    provider = LsSupplyProvider(FakeClient(response))
+
+    with pytest.raises(RuntimeError, match="row malformed"):
+        provider.fetch("005930", date(2026, 8, 28), date(2026, 9, 1))

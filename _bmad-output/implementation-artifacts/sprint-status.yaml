@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-09-2026 09:37
+last_updated: 09-09-2026 14:30
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -74,7 +74,7 @@ development_status:
   3-10-outcome-projection-재구축-검증: done
   epic-3-retrospective: done
 
-  epic-4: in-progress
+  epic-4: done
   4-1-t1702-종목별-가격-수급-수집: done
   4-2-t1637-프로그램-순매수-수집-병합: done
   4-3-d0-당일-행-attempt별-누적-저장: done
@@ -85,7 +85,7 @@ development_status:
   4-8-시장-전체-수급-패널-ui: done
   4-9-좋은-수급-힌트-계산-view: done
   4-10-힌트-배지-통합-필터: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   epic-5: backlog
   5-1-bias_events-append-only-스키마: backlog
@@ -129,7 +129,7 @@ action_items:
     epic: 1
     action: "루트 TypeScript 게이트를 웹 tsconfig와 일치시키고 CI에서 녹색을 증명한다."
     owner: "개발"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
   - id: "epic-1-retro-item-2-운영-supabase에-202609012200-202609021100-m"
     epic: 1
@@ -143,13 +143,13 @@ action_items:
     action: "logical_runs·runs RLS 정책을 approved view/RPC 및 batch service-role 경계와
       함께 설계 적용 검증한다."
     owner: "개발"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
   - id: "epic-1-retro-item-4-pretendard-제공-방식을-csp와-일치시킨다"
     epic: 1
     action: "Pretendard 제공 방식을 CSP와 일치시킨다."
     owner: "프론트엔드"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
   - id: "epic-1-retro-item-5-clean-db-n-n-1-generated-read-model-type"
     epic: 1
@@ -183,7 +183,7 @@ action_items:
     action: "운영 Supabase에 Epic 2 migration을 적용하고 SQL fixture·RLS·function grants를
       실제 프로젝트에서 실행해 결과를 기록한다."
     owner: "운영/개발"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md"
   - id: "epic-2-retro-item-10-ls-sujung-y와-backtest-raw-fixture의-adjus"
     epic: 2
@@ -258,20 +258,20 @@ action_items:
     action: "strategy_d.py 러너를 strategy_e.py 수준으로 정렬한다(무효 구간 분리, order-invariant fingerprint,
       tz bound 사전 검증, zero-trade CSV 헤더, CLI 테스트 소급)."
     owner: "개발"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
   - id: "epic-6-retro-item-21-backtest-strategy_d-e_params-_strategy_p"
     epic: 6
     action: "backtest STRATEGY_D/E_PARAMS·_STRATEGY_PARAMS와 SQL outcome_strategy_rules를
       연결하는 parity 검증을 추가한다."
     owner: "개발"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
   - id: "epic-6-retro-item-22-epics-md의-story-6-7-중복-번호를-정리한다-ui-확장-6"
     epic: 6
     action: "epics.md의 Story 6.7 중복 번호를 정리한다(UI 확장=6.7, OOS=6.8)."
     owner: "PM"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
   - id: "epic-6-retro-item-23-6-6-운영-migration-drift-재발-전례를-근거로-epic-3"
     epic: 6
@@ -305,7 +305,7 @@ action_items:
     epic: 7
     action: "운영에 F migration을 순서대로 적용하고 production contract fixture와 grants를 재실행한다."
     owner: "운영/개발"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
   - id: "epic-7-retro-item-28-f의-rebuild_outcome_projection-sql-fixtur"
     epic: 7
@@ -329,5 +329,53 @@ action_items:
     epic: 7
     action: "candidate-cards.ts의 현재 최대 5종 stale 주석을 여섯 전략 기준으로 정리한다."
     owner: "프론트엔드"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+  - id: "epic-4-retro-item-32-get_candidate_evidence를-published-curren"
+    epic: 4
+    action: "get_candidate_evidence를 published/current-complete attempt와 supply stage
+      success에 한정하고 candidate-day join 및 negative fixture를 추가한다."
+    owner: "운영/개발"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"
+  - id: "epic-4-retro-item-33-evidence-rpc의-security-definer-search_pa"
+    epic: 4
+    action: "Evidence RPC의 SECURITY DEFINER search_path를 pg_catalog, public으로 통일하고
+      security-definer lint를 추가한다."
+    owner: "운영/개발"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"
+  - id: "epic-4-retro-item-34-t1702-supplybar-supplyrow에-finite-및-상태-i"
+    epic: 4
+    action: "t1702 SupplyBar/SupplyRow에 finite 및 상태 invariant를 추가하고 malformed response
+      격리 테스트를 추가한다."
+    owner: "배치/개발"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"
+  - id: "epic-4-retro-item-35-t1702-close-값의-수정주가-여부를-공식-계약-또는-실측-fixt"
+    epic: 4
+    action: "t1702 close 값의 수정주가 여부를 공식 계약 또는 실측 fixture로 결정하고 NFR-9 기준을 문서화한다."
+    owner: "데이터/개발"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"
+  - id: "epic-4-retro-item-36-인증된-playwright-fixture로-evidence-panel-v"
+    epic: 4
+    action: "인증된 Playwright fixture로 Evidence panel viewport/확대, market tab, hint
+      badge와 복합 필터를 HomePage에서 검증한다."
+    owner: "QA/프론트엔드"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"
+  - id: "epic-4-retro-item-37-운영-complete-snapshot을-생성한-뒤-kospi-kosdaq"
+    epic: 4
+    action: "운영 complete snapshot을 생성한 뒤 KOSPI/KOSDAQ 실제 값과 RPC lineage를 acceptance
+      evidence로 남긴다."
+    owner: "운영/개발"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"
+  - id: "epic-4-retro-item-38-interleaved-epic-delivery의-per-epic-diff"
+    epic: 4
+    action: "interleaved Epic delivery의 per-epic diff 범위와 path manifest를 sprint tooling에
+      추가한다."
+    owner: "개발 프로세스"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-09-09-2026.md"

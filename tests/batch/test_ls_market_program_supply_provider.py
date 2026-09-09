@@ -50,6 +50,15 @@ def test_fetch_identifies_total_row_without_relying_on_response_order():
     assert LsMarketProgramSupplyProvider(client).fetch("KOSPI") == MarketProgramSupplyBar("KOSPI", 99.0)
 
 
+def test_fetch_selects_integrated_total_from_current_nine_row_response():
+    rows = [
+        {"volume": 10}, {"volume": -55}, {"volume": -45},
+        {"volume": -914}, {"volume": 8}, {"volume": -906},
+        {"volume": -635}, {"volume": -316}, {"volume": -951},
+    ]
+    assert LsMarketProgramSupplyProvider(FakeClient(LsResponse(data={"t1631OutBlock1": rows}))).fetch("KOSPI") == MarketProgramSupplyBar("KOSPI", -951.0)
+
+
 @pytest.mark.parametrize("rows", [[], [{"volume": 1}], [{"volume": 1}, {"volume": 2}], [{"volume": 1}, "bad", {"volume": 3}]])
 def test_fetch_rejects_ambiguous_or_malformed_aggregate_rows(rows):
     with pytest.raises(RuntimeError):

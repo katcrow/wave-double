@@ -585,6 +585,35 @@ def test_duplicate_trading_day_in_response_is_error_not_silently_overwritten():
     assert all(row.candidate_id != "c1" for row in repo.saved)
 
 
+def test_supply_invariant_error_is_isolated_to_one_candidate():
+    class InvalidBar:
+        def __init__(self, trading_day, close):
+            self.trading_day = trading_day
+            self.close = close
+            self.change_pct = 1.0
+            self.volume = 1000.0
+            self.individual_net = -10.0
+            self.foreign_net = 20.0
+            self.institution_net = 30.0
+
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    provider = FakeSupplyProvider({
+        "005930": [InvalidBar(D2, float("nan")), InvalidBar(D1, 101.0), InvalidBar(D0, 102.0)],
+        "000660": _bars("000660"),
+    })
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, calendar, provider, repo)
+
+    assert result.status == "partial"
+    assert result.error_count == 1
+    assert result.unprocessed_tickers == ("005930",)
+    assert len([row for row in repo.saved if row.candidate_id == "c1"]) == 0
+    assert len([row for row in repo.saved if row.candidate_id == "c2"]) == 3
+
+
 def test_holiday_gap_calendar_mapping_is_exact_not_approximated_by_calendar_days():
     """연휴 직후: recent_open_days가 반환한 실제 거래일 3건을 그대로 D-2/D-1/D0에 매핑한다
     (달력일로 근사하지 않는다). 예: 목/금/월요일이 최근 3개장일이면 D-2=목, D-1=금, D0=월.

@@ -16,6 +16,11 @@ class FakeRpc:
         return {"ok": True}
 
 
+class EnvelopeRpc:
+    def rpc(self, function, params):
+        return {"data": {"run_id": "2e4c2d22-6ad4-4ac1-91b3-4b0f2214e58b"}}
+
+
 class ErrorResponse:
     error = {"code": "STALE_FENCE_OR_LEASE", "message": "lease expired", "retryable": False}
 
@@ -56,6 +61,12 @@ def test_gateway_passes_logical_key_and_trigger_to_start_rpc():
         "p_trigger": "manual",
         "p_lease_seconds": 300,
     })
+
+
+def test_gateway_unwraps_supabase_dict_response_envelope():
+    assert RunStateGateway(EnvelopeRpc())._call("start_attempt", {}) == {
+        "run_id": "2e4c2d22-6ad4-4ac1-91b3-4b0f2214e58b"
+    }
 
 
 def test_gateway_includes_fence_lease_and_expected_status_in_stage_write():

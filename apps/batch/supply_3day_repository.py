@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+import math
 from typing import Any, Protocol
 
 import httpx
@@ -29,6 +30,21 @@ class SupplyRow:
     individual_net: float | None
     program_net: float | None
     investor_net_status: str  # "confirmed" | "pending" | "missing"
+
+    def __post_init__(self) -> None:
+        if self.slot not in {"D-2", "D-1", "D0"}:
+            raise ValueError(f"invalid supply slot: {self.slot}")
+        if self.investor_net_status not in {"confirmed", "pending", "missing"}:
+            raise ValueError(f"invalid investor_net_status: {self.investor_net_status}")
+        for name in ("close", "volume", "change_pct"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not math.isfinite(value):
+                raise ValueError(f"supply {name} must be finite")
+        nets = (self.foreign_net, self.institution_net, self.individual_net, self.program_net)
+        if any(value is not None and (isinstance(value, bool) or not math.isfinite(value)) for value in nets):
+            raise ValueError("supply investor values must be finite or null")
+        if self.investor_net_status != "confirmed" and any(value is not None for value in nets):
+            raise ValueError("pending/missing supply rows must keep investor values null")
 
     def as_db_row(self) -> dict[str, Any]:
         return {
