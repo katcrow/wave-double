@@ -2,13 +2,27 @@
 title: 'Story 4.9: 좋은 수급 힌트 계산 view'
 type: 'feature'
 created: '2026-09-09'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: true
 context:
   - 'C:/dev/wave-double/_bmad-output/implementation-artifacts/epic-4-context.md'
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      CI SQL job은 운영 Supabase가 아닌 임시 PostgreSQL에서만 migration fixture를 실행한다.
+    evidence: |-
+      운영 Supabase catalog/ACL과 rollback fixture는 이번 실행에서 MCP로 별도 확인했지만, production secret을 CI에 제공하지 않는 기존 AD-11 구조는 유지했다.
+    location: >-
+      .github/workflows/test.yml:92-112
+    severity: low
+  - summary: >-
+      generated read-model 타입 자동 재생성·diff gate가 CI에 없다.
+    evidence: |-
+      이번 view/RPC 계약은 운영 catalog와 수동 반영 타입을 대조했으나, Supabase CLI가 없는 로컬 환경과 기존 CI 설계상 자동 생성 gate는 후속 개발 프로세스로 남겼다.
+    location: >-
+      packages/read-model/src/database.types.ts:649-710
+    severity: low
 baseline_revision: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 ---
@@ -82,6 +96,23 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 - Python/SQL 공유 fixture에 slot 및 foreign_net 0/음수 경계를 추가하고 SQL fixture와 CSV drift 검사를 고정했다.
 - RPC 전체 payload, authenticated role 조건부 호출, dashboard nullable 타입과 웹 runtime validator/literal narrowing 테스트를 추가했다.
 
+### 2026-09-09 — 최종 리뷰 판정
+- intent_gap: 0
+- bad_spec: 0
+- patch: 10 (medium 3, low 7)
+- defer: 2 (low 2)
+- dismissed:
+  - 인증된 브라우저 E2E 부재 — Story 4.9에는 브라우저에서 소비하는 UI가 없고 UI 통합은 Story 4.10 범위이며, RPC runtime validator와 SQL/운영 계약을 실제 실행해 해당 표면의 검증 범위를 충족했다.
+  - 초기 자체 review의 결론 문구 — 독립 리뷰 이전 시점의 역사적 기록이며, 독립 리뷰 결과·보완·재검증이 아래에 추가되어 현재 완료 판단을 오해하게 만들지 않는다.
+- addressed_findings:
+  - `[medium]` `[patch]` D0 없는 active 후보가 RPC에서 누락되던 문제를 missing/undetermined payload로 보완했다.
+  - `[medium]` `[patch]` view가 candidate trading_day와 다른 stale/future D0를 선택할 수 있던 문제를 candidate-day join으로 차단했다.
+  - `[medium]` `[patch]` RPC 전체 반환 필드 검증이 부족하던 문제를 good/not_met/undetermined 및 missing 행의 전체 payload assertion으로 보완했다.
+  - `[low]` `[patch]` Python slot 명시, Decimal/non-finite 경계, foreign 0/음수 경계를 추가했다.
+  - `[low]` `[patch]` SQL fixture가 CSV를 실제 로드하고 Python이 SQL fixture 경로/header를 확인하도록 drift를 차단했다.
+  - `[low]` `[patch]` authenticated RPC 실행 및 no-row/latest-day assertion의 NULL false-pass를 보완했다.
+  - `[low]` `[patch]` generated read-model/web nullable 계약과 runtime literal validator 및 잘못된 Code Map line anchor를 보완했다.
+
 ### 2026-09-09 — 후속 patch 보완
 - `compute_supply_hint`의 slot 기본값을 제거해 모든 호출자가 명시적인 D0/D-1/D-2를 전달하도록 고쳤다.
 - SQL fixture의 중복 case `VALUES`/comment block을 제거하고 psql `\copy`로 공유 CSV를 직접 소비하도록 바꿨다. MCP 검증은 동일 CSV 기반 equivalent INSERT로 실행한다.
@@ -101,12 +132,13 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 - `git diff --check` -- expected: whitespace 오류 없음.
 
 **실행 결과:**
-- `uv run --with pytest pytest tests/domain/test_supply_hint.py -q` — 3 passed.
-- `npm test` — 98 passed; `npm run typecheck` 및 `npm run build` 통과.
-- `python tools/check_migration_order.py` — 58 files 통과.
+- `uv run --with pytest pytest tests/domain/test_supply_hint.py -q` — 6 passed.
+- `npm test` — 101 passed; `npm run typecheck` 및 `npm run build` 통과.
+- `uv run --with pytest pytest tests/domain -q` — 33 passed; backtest — 152 passed.
+- `python tools/check_migration_order.py` — 59 files 통과.
 - 운영 Supabase MCP `apply_migration` — 성공; `execute_sql` rollback fixture — `story_4_9_supply_hints: pass`.
 - 운영 catalog/grant 확인 — anon/authenticated의 원본 table/view SELECT는 false, RPC EXECUTE는 anon/authenticated/service_role true, PUBLIC EXECUTE는 false.
-- 로컬 `psql`/Supabase CLI는 설치되어 있지 않아 SQL fixture는 운영 Supabase MCP로 검증했다.
+- 로컬 `psql`/Supabase CLI는 설치되어 있지 않아 CI용 `\\copy` fixture는 운영 Supabase MCP에서 CSV equivalent INSERT로 검증했다.
 
 ## Suggested Review Order
 
@@ -142,3 +174,12 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 
 - domain 및 SQL fixture가 CI에서 실행되도록 등록한다.
   [`test.yml:34`](../../.github/workflows/test.yml#L34)
+
+## Auto Run Result
+
+- implementation: `candidate_supply_hints` view와 `get_candidate_supply_hints(uuid)` RPC를 추가하고, close+confirmed에서 외인·기관·프로그램 모두 `> 0`인 경우만 `good`으로 판정하도록 했다. pending/missing/NULL/장중은 `undetermined`, 확정값 중 0 이하가 있으면 `not_met`이며 D0 없는 active 후보도 missing payload로 반환한다.
+- files: 순수 domain rule/export, forward-only hardening migration, shared CSV fixture, Python/SQL/web contract tests, generated read-model/web 타입, CI 등록, Story 4-9 spec 및 sprint status를 갱신했다.
+- review: 독립 리뷰에서 확인된 patch 10건을 모두 적용했다(중간 3, 낮음 7). 기존 CI의 production catalog 미검증과 generated type 자동 재생성 gate는 AD-11 및 기존 프로세스에 따른 pre-existing 항목으로 defer했다. 브라우저 E2E는 이 스토리에 UI consumer가 없어 실행하지 않았고 다음 UI 스토리의 범위로 dismiss했다.
+- follow-up review recommendation: true; patched counts medium=3, low=7, score=16이다.
+- verification: targeted Python 6 passed, domain 전체 33 passed, backtest 152 passed, web tests 101 passed, typecheck/build 통과, migration order 59 files 통과, git diff --check 통과. 운영 Supabase에 `202609091000` 및 forward-only `202609091001` 적용을 확인하고, CSV equivalent rollback fixture가 `story_4_9_supply_hints: pass`를 반환했다. 운영 catalog/ACL은 view/table direct SELECT false, anon/authenticated/service_role RPC EXECUTE true, PUBLIC EXECUTE false로 확인했다.
+- residual: 로컬에 psql/Supabase CLI가 없어 `\\copy` 자체는 CI에서 실행되며, 운영에서는 동일 CSV 값을 equivalent INSERT로 검증했다. Supabase advisor의 기존 SECURITY DEFINER 경고는 고정 search_path를 가진 의도된 read RPC 계약으로 남아 있다. 실제 힌트 배지 렌더링은 Story 4.10에서 수행한다.
