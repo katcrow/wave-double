@@ -234,6 +234,12 @@ def collect_local_from(*, files: list[Path]) -> dict:
     return {"migrations": migrations, "functions": exact}
 
 
+# api.supabase.com은 Cloudflare 뒤에 있고 기본 User-Agent(urllib/python-requests 등)를
+# 차단한다 -- 토큰이 유효해도 `error code: 1010`과 함께 403이 돌아온다. 인증 실패로 오인해
+# secret을 다시 발급하게 만드는 함정이라 UA를 명시한다(실제로 이 gate가 그렇게 죽었다).
+USER_AGENT = "wave-double-parity-gate/1.0"
+
+
 def management_query(token: str, sql: str) -> list[dict]:
     """Supabase Management API PostgreSQL 엔드포인트로 읽기 전용 조회."""
     request = urllib.request.Request(
@@ -242,11 +248,41 @@ def management_query(token: str, sql: str) -> list[dict]:
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
         },
         method="POST",
     )
     with urllib.request.urlopen(request) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def parse_live_search_path(proconfig: str) -> str | None:
+    """pg_proc.proconfig 텍스트에서 search_path 값을 뽑아낸다.
+
+    proconfig는 배열 리터럴이고, 값에 쉼표가 있으면 원소 전체가 따옴표로 감싸진다:
+
+        {search_path=public}                  -> "public"
+        {"search_path=pg_catalog, public"}    -> "pg_catalog, public"
+        {search_path=public,statement_timeout=5s} -> "public"
+
+    이전 구현은 먼저 쉼표로 쪼갠 뒤 `search_path=`로 시작하는 원소를 찾았다. 따옴표로 감싼
+    형태에서는 첫 조각이 `"search_path=pg_catalog`가 되어 접두사 검사에 실패하고 값이 통째로
+    None이 됐다 -- 즉 `pg_catalog, public`으로 통일한 함수(epic-4-retro-item-33)마다 매 실행
+    영구 WARN이 떠서 진짜 drift를 가렸다.
+    """
+    match = re.search(r'search_path=([^"}]*)', proconfig or "")
+    if not match:
+        return None
+    parts: list[str] = []
+    for token in match.group(1).split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "=" in token:
+            # 다음 설정(`statement_timeout=...`)의 시작 -- search_path 값은 여기서 끝난다.
+            break
+        parts.append(token)
+    return ", ".join(parts) or None
 
 
 def fetch_live_production(token: str) -> dict:
@@ -272,13 +308,7 @@ def fetch_live_production(token: str) -> dict:
 
     functions: dict[str, dict] = {}
     for row in func_rows:
-        search_path = None
-        for token_str in row["proconfig"].strip("{}").split(","):
-            if token_str.strip().startswith("search_path="):
-                raw = token_str.strip().removeprefix("search_path=").strip('"')
-                parts = [p.strip() for p in raw.split(",") if p.strip()]
-                search_path = ", ".join(parts)
-                break
+        search_path = parse_live_search_path(row["proconfig"])
         functions[row["proname"]] = {
             "security_definer": bool(row["prosecdef"]),
             "search_path": search_path,

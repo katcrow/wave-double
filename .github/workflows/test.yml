@@ -35,7 +35,12 @@ jobs:
         run: uv run --with pytest pytest tests/domain/test_calendar.py tests/domain/test_supply_hint.py tests/batch/test_calendar.py -q
 
       - name: Tooling gate tests (Python)
-        run: uv run --with pytest pytest tests/tools -q
+        run: uv run --with pytest --with pyyaml pytest tests/tools -q
+
+      # sprint-status.yaml은 손으로 편집하는 action item 원장이고 bmad 스킬이 파싱한다.
+      # 커밋된 상태로 유효하지 않은 YAML이었던 전례가 있어(잔여 쉼표) 계약을 게이트한다.
+      - name: Sprint status contract (Python)
+        run: uv run --with pyyaml python tools/check_sprint_status.py
 
       - name: Scheduler tests (Python)
         run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py tests/batch/test_supply_stage.py tests/batch/test_ls_supply_provider.py tests/batch/test_ls_market_supply_provider.py tests/batch/test_ls_market_program_supply_provider.py tests/batch/test_market_supply_stage.py tests/batch/test_market_supply_repository.py tests/batch/test_tagged_candidate_fetcher.py tests/batch/test_supply_3day_repository.py -q

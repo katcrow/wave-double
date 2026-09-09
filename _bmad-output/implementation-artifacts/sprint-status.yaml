@@ -139,9 +139,13 @@ action_items:
     owner: "운영/개발"
     status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-item-2-production-verification-2026-09-09.md
-      - 202609012200~202609021000은 운영 적용·RPC fixture PASS 확인(dashboard/dispatch/skip/fallback),
-      dispatch worker route의 WORKFLOW_REF 결함 수정.
-      202609021100(pg_cron)만 미적용: 배포 도메인/secret이 저장소에 없어 사람 작업으로 남김."
+      - 202609012200~202609021000은 운영 적용·RPC fixture PASS 확인. probe 중 dispatch worker route의
+      WORKFLOW_REF('main' -> master) 결함과 배포 gate의 live 경로 결함 2건(User-Agent 403,
+      다중 원소 search_path 미파싱)을 발견해 수정. 202609021100(pg_cron)만 미적용 —
+      pg_cron 1.6.4/pg_net 0.20.4는 설치 가능하지만 배포 도메인이 저장소/.env.local/Supabase
+      auth(site_url=localhost:3000) 어디에도 없고, CRON_CALLBACK_SECRET·GITHUB_DISPATCH_TOKEN·
+      GITHUB_REPO_OWNER·GITHUB_REPO_NAME 값이 .env.local에서 빈 문자열이다(키만 존재).
+      필요한 것은 문서 3절 참고."
   - id: "epic-1-retro-item-3-logical_runs-runs-rls-정책을-approved-view"
     epic: 1
     action: "logical_runs·runs RLS 정책을 approved view/RPC 및 batch service-role 경계와

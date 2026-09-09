@@ -1,7 +1,6 @@
 {
   "project_ref": "qqhjeumlecaudsiqhhdu",
   "captured_at": "2026-09-09",
-  "source": "supabase MCP execute_sql (supabase_migrations.schema_migrations + pg_proc/has_function_privilege)",
   "migrations": [
     "202609021500_create_daily_ohlcv",
     "202609021600_create_candidate_tags",

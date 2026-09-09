@@ -290,3 +290,83 @@ def test_committed_baseline_records_the_production_project() -> None:
 
     assert data["project_ref"] == parity.PROJECT_REF
     assert data["migrations"] == sorted(data["migrations"])
+
+# ── live 조회 경로 회귀 ────────────────────────────────────────────────────────
+# 이 두 결함은 오프라인 테스트로는 드러나지 않았고, 실제로 운영 토큰으로 --gate를 돌려보고
+# 나서야 발견됐다(403 그리고 영구 WARN 6건).
+
+
+@pytest.mark.parametrize(
+    ("proconfig", "expected"),
+    [
+        ("{search_path=public}", "public"),
+        # 값에 쉼표가 있으면 원소 전체가 따옴표로 감싸진다 -- 이 형태가 파싱되지 않아
+        # pg_catalog, public으로 통일한 함수마다 매 실행 WARN이 떴다.
+        ('{"search_path=pg_catalog, public"}', "pg_catalog, public"),
+        ("{search_path=pg_catalog}", "pg_catalog"),
+        # search_path 뒤에 다른 설정이 붙어도 그 값까지 삼키지 않는다.
+        ("{search_path=public,statement_timeout=5s}", "public"),
+        ('{"search_path=pg_catalog, public",statement_timeout=5s}', "pg_catalog, public"),
+        ("{}", None),
+        ("", None),
+        ("{statement_timeout=5s}", None),
+    ],
+)
+def test_live_proconfig_search_path_parsing(proconfig: str, expected: str | None) -> None:
+    assert parity.parse_live_search_path(proconfig) == expected
+
+
+def test_live_search_path_matches_the_local_normalized_form() -> None:
+    """live 파싱 결과와 로컬 파싱 결과가 같은 표기여야 비교가 성립한다."""
+    assert parity.parse_live_search_path('{"search_path=pg_catalog,  public"}') == parity._normalize_search_path(
+        "pg_catalog,  public"
+    )
+
+
+def test_management_api_request_sends_an_explicit_user_agent() -> None:
+    """api.supabase.com은 Cloudflare 뒤에 있고 기본 UA를 error code 1010으로 차단한다.
+
+    UA가 없으면 토큰이 유효해도 403이 돌아와, 배포 gate가 매번 "인증 실패"처럼 죽는다.
+    """
+    captured: dict = {}
+
+    class FakeResponse:
+        def read(self) -> bytes:
+            return b"[]"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+    def fake_urlopen(request):
+        captured["headers"] = dict(request.headers)
+        return FakeResponse()
+
+    original = parity.urllib.request.urlopen
+    parity.urllib.request.urlopen = fake_urlopen
+    try:
+        parity.management_query("token-abc", "select 1;")
+    finally:
+        parity.urllib.request.urlopen = original
+
+    # urllib은 헤더 이름을 Title-Case로 정규화한다.
+    headers = {key.lower(): value for key, value in captured["headers"].items()}
+    assert headers["user-agent"] == parity.USER_AGENT
+    assert headers["authorization"] == "Bearer token-abc"
+    assert headers["content-type"] == "application/json"
+
+
+def test_committed_baseline_records_multi_element_search_paths() -> None:
+    """baseline이 live에서 생성됐다면 pg_catalog, public 표기가 살아 있어야 한다."""
+    import json
+
+    data = json.loads(parity.DEFAULT_BASELINE.read_text(encoding="utf-8"))
+    multi = [
+        name
+        for name, info in data["functions"].items()
+        if info.get("search_path") == "pg_catalog, public"
+    ]
+
+    assert multi, "다중 원소 search_path가 baseline에 하나도 없다 -- live 파싱이 깨졌을 수 있다"

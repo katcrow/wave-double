@@ -45,8 +45,10 @@ tests/tools/test_backtest_results_dir.py
 tests/tools/test_check_epic_scope.py
 tests/tools/test_check_outcome_rebuild_fixture_drift.py
 tests/tools/test_check_production_parity.py
+tests/tools/test_check_sprint_status.py
 tools/check_epic_scope.py
 tools/check_outcome_rebuild_fixture_drift.py
 tools/check_production_parity.py
+tools/check_sprint_status.py
 tools/epic-path-manifests/epic-retro-2026-09-09.txt
 tools/production_parity_baseline.json
