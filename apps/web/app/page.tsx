@@ -1,11 +1,16 @@
-import CandidateCard from "@/components/dashboard/CandidateCard";
+import CandidateList from "@/components/dashboard/CandidateList";
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
 import MarketSupplyPanel from "@/components/dashboard/MarketSupplyPanel";
-import { buildCandidateCardViewModels } from "@/lib/candidate-cards";
+import { buildCandidateCardViewModels, isTodayCandidateCardRow } from "@/lib/candidate-cards";
 import { isCandidateEvidenceRpcRow } from "@/lib/candidate-evidence";
-import type { CandidateEvidenceRpcRow, MarketSupplyRpcRow } from "@/lib/dashboard-types";
+import { isCandidateSupplyHintRpcRow } from "@/lib/supply-hints";
+import type {
+  CandidateEvidenceRpcRow,
+  CandidateSupplyHintRpcRow,
+  MarketSupplyRpcRow,
+} from "@/lib/dashboard-types";
 import { isIntradaySnapshot } from "@/lib/dashboard-types";
 import { isMarketSupplyRpcRow } from "@/lib/market-supply";
 import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
@@ -43,6 +48,8 @@ export default async function HomePage() {
   let candidateEvidenceFetchFailed = false;
   let marketSupplyRows: MarketSupplyRpcRow[] = [];
   let marketSupplyFetchFailed = false;
+  let candidateSupplyHintRows: CandidateSupplyHintRpcRow[] = [];
+  let candidateSupplyHintsFetchFailed = false;
   if (snapshot.complete_snapshot) {
     const { data: cardRows, error: cardError } = await supabase.rpc("get_today_candidate_cards", {
       p_run_id: snapshot.complete_snapshot.run_id,
@@ -50,7 +57,7 @@ export default async function HomePage() {
     if (cardError) {
       candidateCardsFetchFailed = true;
       console.error("get_today_candidate_cards failed", cardError);
-    } else if (Array.isArray(cardRows)) {
+    } else if (Array.isArray(cardRows) && cardRows.every(isTodayCandidateCardRow)) {
       candidateCards = buildCandidateCardViewModels(cardRows as TodayCandidateCardRow[]);
     } else {
       candidateCardsFetchFailed = true;
@@ -70,6 +77,29 @@ export default async function HomePage() {
     } else {
       candidateEvidenceFetchFailed = true;
       console.error("unexpected get_candidate_evidence shape", evidenceRows);
+    }
+
+    const { data: supplyHintData, error: supplyHintError } = await supabase.rpc(
+      "get_candidate_supply_hints",
+      { p_run_id: snapshot.complete_snapshot.run_id },
+    );
+    if (supplyHintError) {
+      candidateSupplyHintsFetchFailed = true;
+      console.error("get_candidate_supply_hints failed", supplyHintError);
+    } else if (Array.isArray(supplyHintData) && supplyHintData.every(isCandidateSupplyHintRpcRow)) {
+      const typedHintRows = supplyHintData as CandidateSupplyHintRpcRow[];
+      if (typedHintRows.every(
+        (row) => row.attempt_run_id === snapshot.complete_snapshot?.run_id &&
+          row.trading_day === snapshot.complete_snapshot?.trading_day,
+      )) {
+        candidateSupplyHintRows = typedHintRows;
+      } else {
+        candidateSupplyHintsFetchFailed = true;
+        console.error("unexpected get_candidate_supply_hints lineage", supplyHintData);
+      }
+    } else {
+      candidateSupplyHintsFetchFailed = true;
+      console.error("unexpected get_candidate_supply_hints shape", supplyHintData);
     }
 
     const { data: marketSupplyData, error: marketSupplyError } = await supabase.rpc("get_market_supply", {
@@ -126,29 +156,19 @@ export default async function HomePage() {
       {candidateCardsFetchFailed && (
         <NoticeBanner message="오늘의 후보 카드를 불러오지 못했습니다." />
       )}
-
-      {candidateCards.length > 0 ? (
-        <ul className="candidate-card-grid" role="list">
-          {candidateCards.map((candidate) => (
-            <CandidateCard
-              key={candidate.candidateId}
-              candidate={candidate}
-              evidence={candidateEvidenceById.get(candidate.candidateId)}
-              evidenceFetchFailed={candidateEvidenceFetchFailed}
-            />
-          ))}
-        </ul>
-      ) : (
-        <div className="empty-state">
-          <p>오늘 태깅된 후보가 없습니다.</p>
-          <p>조건검색 결과 · 전략 시그널 기준으로 후보가 태깅됩니다.</p>
-          {!candidateCardsFetchFailed && typeof candidateCount === "number" && (
-            <p className="reference-text">
-              참고용 · 오늘 태깅 후보 {candidateCount}건
-            </p>
-          )}
-        </div>
+      {candidateSupplyHintsFetchFailed && (
+        <NoticeBanner message="수급 힌트를 불러오지 못했습니다. 힌트는 판정 불가로 표시합니다." />
       )}
+
+      <CandidateList
+        candidates={candidateCards}
+        evidenceRows={[...candidateEvidenceById.values()]}
+        evidenceFetchFailed={candidateEvidenceFetchFailed}
+        hintRows={candidateSupplyHintRows}
+        hintFetchFailed={candidateSupplyHintsFetchFailed}
+        candidateCardsFetchFailed={candidateCardsFetchFailed}
+        candidateCount={candidateCount}
+      />
 
       <DisappearedCandidatesNotice candidates={disappearedCandidates} />
       <MarketSupplyPanel rows={marketSupplyRows} fetchFailed={marketSupplyFetchFailed} />

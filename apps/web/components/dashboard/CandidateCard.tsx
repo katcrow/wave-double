@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { CandidateCardViewModel } from "@/lib/candidate-cards";
-import type { CandidateEvidenceRpcRow } from "@/lib/dashboard-types";
+import type { CandidateEvidenceRpcRow, SupplyHintStatus } from "@/lib/dashboard-types";
+import { HINT_STATUS_LABEL, SIGNAL_STATUS_LABEL } from "@/lib/candidate-filters";
 import { getStrategyLabel } from "@/lib/strategy-labels";
 import CandidateEvidencePanel from "./CandidateEvidencePanel";
 import StrategyTagList from "./StrategyTagList";
@@ -18,10 +19,14 @@ import StrategyTagList from "./StrategyTagList";
 export default function CandidateCard({
   candidate,
   evidence,
+  hintStatus = "undetermined",
+  supplyMissing = false,
   evidenceFetchFailed = false,
 }: {
   candidate: CandidateCardViewModel;
   evidence?: CandidateEvidenceRpcRow;
+  hintStatus?: SupplyHintStatus;
+  supplyMissing?: boolean;
   evidenceFetchFailed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -59,6 +64,7 @@ export default function CandidateCard({
         aria-expanded={open}
         aria-controls={panelId}
         aria-labelledby={`${headingId} ${panelId}-toggle-label`}
+        aria-describedby={`${panelId}-description`}
         onClick={(event) => {
           event.stopPropagation();
           setOpen((current) => !current);
@@ -68,9 +74,22 @@ export default function CandidateCard({
           {open ? "근거 닫기" : "근거 보기"}
         </span>
       </button>
-      {candidate.isFullyVanished && (
-        <p className="candidate-card__badge candidate-card__badge--vanished">시그널 소멸</p>
-      )}
+      <p id={`${panelId}-description`} className="sr-only">
+        종목 코드: {candidate.ticker}. 전략: {[...candidate.strategies, ...candidate.vanishedStrategies]
+          .map((strategy) => getStrategyLabel(strategy) ?? `전략 ${strategy}`)
+          .join(", ") || "없음"}. 시그널 상태: {SIGNAL_STATUS_LABEL[candidate.signalStatus]}. 수급 힌트: {HINT_STATUS_LABEL[hintStatus]}.
+      </p>
+      <p
+        className={`candidate-card__signal-badge candidate-card__signal-badge--${candidate.signalStatus}`}
+      >
+        시그널 {SIGNAL_STATUS_LABEL[candidate.signalStatus]}
+      </p>
+      <p
+        className={`candidate-card__hint-badge candidate-card__hint-badge--${hintStatus}`}
+        aria-label={`수급 힌트: ${HINT_STATUS_LABEL[hintStatus]}`}
+      >
+        {HINT_STATUS_LABEL[hintStatus]}
+      </p>
       <StrategyTagList
         visibleStrategies={candidate.visibleStrategies}
         hiddenCount={candidate.hiddenStrategyCount}
@@ -80,8 +99,10 @@ export default function CandidateCard({
           소멸: {candidate.vanishedStrategies.map((s) => getStrategyLabel(s) ?? `전략 ${s}`).join(", ")}
         </p>
       )}
-      {candidate.supplyPartialMissing && (
-        <p className="candidate-card__notice">수급 일부 미수집</p>
+      {(candidate.supplyPartialMissing || supplyMissing) && (
+        <p className="candidate-card__notice">
+          {candidate.supplyPartialMissing ? "수급 일부 미수집" : "수급 미수집"}
+        </p>
       )}
       <CandidateEvidencePanel
         id={panelId}

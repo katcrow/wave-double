@@ -410,6 +410,154 @@ a {
   color: var(--color-caution);
 }
 
+/* Story 4.10: 후보 힌트 배지와 조합 필터 */
+
+.candidate-card__signal-badge,
+.candidate-card__hint-badge {
+  align-self: flex-start;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-card__signal-badge--active {
+  color: var(--color-positive);
+  border-color: var(--color-positive);
+}
+
+.candidate-card__signal-badge--vanished,
+.candidate-card__signal-badge--mixed {
+  color: var(--color-caution);
+  border-color: var(--color-caution);
+}
+
+.candidate-card__hint-badge--good {
+  color: var(--color-positive);
+  border-color: var(--color-positive);
+}
+
+.candidate-card__hint-badge--not_met {
+  color: var(--color-negative);
+  border-color: var(--color-negative);
+}
+
+.candidate-card__hint-badge--undetermined {
+  color: var(--color-informational);
+  border-color: var(--color-informational);
+}
+
+.candidate-filter {
+  margin-top: var(--space-6);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.candidate-filter__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.candidate-filter__header h2 {
+  margin: 0;
+}
+
+.candidate-filter__description {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.candidate-filter__result-count {
+  margin: var(--space-4) 0 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.candidate-filter__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.candidate-filter__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-width: 150px;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.candidate-filter__group legend {
+  width: 100%;
+  padding: 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-filter__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  color: var(--color-ink-primary);
+  font-size: var(--font-size-label);
+  cursor: pointer;
+}
+
+.candidate-filter__option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent-strong);
+}
+
+.candidate-filter__unavailable {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.candidate-filter__reset {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-primary);
+  font: inherit;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+  cursor: pointer;
+}
+
+.candidate-filter__reset:hover {
+  border-color: var(--color-accent-strong);
+  color: var(--color-accent-strong);
+}
+
+.candidate-filter__empty {
+  margin-top: var(--space-4);
+}
+
+.candidate-filter__empty ul {
+  margin: var(--space-2) 0 var(--space-4);
+  padding-left: var(--space-5);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
 /* Story 4.6: 카드별 attempt-scoped 후보 근거 패널 */
 
 .candidate-evidence-panel {

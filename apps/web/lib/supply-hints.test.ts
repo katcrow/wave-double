@@ -43,6 +43,19 @@ test("accepts a complete good row with nullable field types", () => {
     investor_net_status: "confirmed",
     collected_at: "2099-08-01T03:00:00.000Z",
     hint_status: "good",
+}), true);
+});
+
+test("accepts a confirmed row whose SQL hint status is not_met", () => {
+  assert.equal(isCandidateSupplyHintRpcRow({
+    ...validRow,
+    foreign_net: 0,
+    institution_net: 0,
+    individual_net: 0,
+    program_net: 0,
+    investor_net_status: "confirmed",
+    collected_at: "2099-08-01T03:00:00.000Z",
+    hint_status: "not_met",
   }), true);
 });
 

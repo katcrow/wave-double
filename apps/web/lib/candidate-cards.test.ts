@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildCandidateCardViewModels, MAX_VISIBLE_TAGS } from "./candidate-cards.ts";
+import {
+  buildCandidateCardViewModels,
+  isTodayCandidateCardRow,
+  MAX_VISIBLE_TAGS,
+} from "./candidate-cards.ts";
 import type { TodayCandidateCardRow } from "./dashboard-types.ts";
 
 function row(overrides: Partial<TodayCandidateCardRow> = {}): TodayCandidateCardRow {
@@ -93,14 +97,23 @@ test("빈 배열 입력은 빈 배열을 반환한다", () => {
   assert.deepEqual(buildCandidateCardViewModels([]), []);
 });
 
+test("카드 RPC 행 가드는 필수 shape를 확인하고 malformed 행을 거부한다", () => {
+  const valid = row();
+  assert.equal(isTodayCandidateCardRow(valid), true);
+  assert.equal(isTodayCandidateCardRow({ ...valid, strategies: ["A", 1] }), false);
+  assert.equal(isTodayCandidateCardRow({ ...valid, supply_partial_missing: "false" }), false);
+});
+
 // I/O 매트릭스: 부분 재태깅 -- active(A) + vanished(B)가 함께 표시되고 카드는 정상 노출된다.
 test("부분 재태깅: strategies와 vanishedStrategies가 함께 보존되고 isFullyVanished는 false다", () => {
   const [vm] = buildCandidateCardViewModels([
     row({ strategies: ["A"], vanished_strategies: ["B"] }),
   ]);
   assert.deepEqual(vm.visibleStrategies, ["A"]);
+  assert.deepEqual(vm.strategies, ["A"]);
   assert.deepEqual(vm.vanishedStrategies, ["B"]);
   assert.equal(vm.isFullyVanished, false);
+  assert.equal(vm.signalStatus, "mixed");
 });
 
 // I/O 매트릭스: 완전 소멸 -- active 태그 0건 + vanished 태그 존재 -- isFullyVanished=true, 카드는 유지.
@@ -109,13 +122,16 @@ test("완전 소멸: active 태그가 없고 vanished만 있으면 isFullyVanish
     row({ strategies: [], vanished_strategies: ["A", "C"] }),
   ]);
   assert.deepEqual(vm.visibleStrategies, []);
+  assert.deepEqual(vm.strategies, []);
   assert.deepEqual(vm.vanishedStrategies, ["A", "C"]);
   assert.equal(vm.isFullyVanished, true);
+  assert.equal(vm.signalStatus, "vanished");
 });
 
 test("vanished 태그가 없으면 isFullyVanished는 false다(정상 케이스)", () => {
   const [vm] = buildCandidateCardViewModels([row({ strategies: ["A"], vanished_strategies: [] })]);
   assert.equal(vm.isFullyVanished, false);
+  assert.equal(vm.signalStatus, "active");
 });
 
 test("여러 후보를 순서대로 각각 변환한다", () => {
