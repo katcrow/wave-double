@@ -11,6 +11,11 @@ export default defineConfig({
   testIgnore: /production-smoke\.spec\.ts/,
   timeout: 60_000,
   fullyParallel: false,
+  // epic-2-retro-item-12: candidate-surface-scenarios.spec.ts는 mock Supabase의 활성 시나리오를
+  // 바꿔가며 렌더 결과를 검증한다. 그 상태는 mock 서버 프로세스 하나에 전역이므로, 파일이
+  // 서로 다른 worker에서 동시에 돌면 다른 스펙이 남의 시나리오를 보게 된다
+  // (`fullyParallel: false`는 파일 "안"의 순서만 보장하고 파일 "간" 병렬은 막지 않는다).
+  workers: 1,
   retries: 1,
   reporter: "list",
   use: {

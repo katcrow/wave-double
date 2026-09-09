@@ -342,5 +342,156 @@ begin
   ) then raise exception 'REBUILD[E]: OPEN strategy parameter snapshot was not preserved'; end if;
 end $$;
 
+-- ── epic-7-retro-item-28: 전략 F의 rebuild 계약, rule 누락, legacy 경계 ─────────
+-- D/E 선례(위 블록)는 F를 덮지 않는다. F는 cutoff_n이 sentinel 999999(무제한 보유)라
+-- "누락된 값을 legacy 기본값으로 조용히 복구"하면 30일 컷오프가 몰래 생기고 종결 판정
+-- 자체가 달라진다 -- rebuild가 F 스냅샷을 보존하고 누락은 거절하는지 명시적으로 고정한다.
+do $$
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values
+    ('close:2099-09-01', date '2099-09-01', 'close'),
+    ('close:2099-09-02', date '2099-09-02', 'close')
+  on conflict (logical_run_key) do nothing;
+
+  insert into public.outcome_events(event_id, ticker, strategy, command_type, logical_run_key, payload)
+  values
+    ('10000000-0000-0000-0000-0000000000f1', '100016', 'F', 'OPEN', 'close:2099-09-01',
+      '{"entry_date":"2099-09-01","entry_price":900,"tp_pct":3,"sl_pct":4,"cutoff_n":999999}'::jsonb),
+    ('10000000-0000-0000-0000-0000000000f2', '100017', 'F', 'OPEN', 'close:2099-09-01',
+      '{"entry_date":"2099-09-01","entry_price":1000,"tp_pct":3,"sl_pct":4,"cutoff_n":999999}'::jsonb),
+    ('10000000-0000-0000-0000-0000000000f3', '100017', 'F', 'TP', 'close:2099-09-02',
+      '{"trading_day":"2099-09-02","exit_price":1029,"return_pct":2.9,"holding_days":1}'::jsonb);
+
+  perform public.rebuild_outcome_projection();
+
+  -- OPEN만 있는 F: 세 규칙 값이 그대로 보존되고, sentinel cutoff이 30으로 축소되지 않는다.
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = '100016' and strategy = 'F' and status = 'OPEN'
+      and entry_price = 900 and tp_pct = 3 and sl_pct = 4 and cutoff_n = 999999
+      and exit_date is null and exit_price is null and return_pct is null and holding_days = 0
+  ) then raise exception 'REBUILD[F]: OPEN strategy parameter snapshot was not preserved'; end if;
+
+  -- 종결된 F: terminal payload가 반영되면서도 규칙 스냅샷은 그대로 남는다(재판정 없음).
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = '100017' and strategy = 'F' and status = 'TP'
+      and entry_price = 1000 and tp_pct = 3 and sl_pct = 4 and cutoff_n = 999999
+      and exit_date = date '2099-09-02' and exit_price = 1029 and return_pct = 2.9
+      and holding_days = 1
+  ) then raise exception 'REBUILD[F]: terminal replay drifted from the payload'; end if;
+end $$;
+
+-- rule 누락(payload): 세 규칙 키가 모두 없는 F OPEN은 legacy 3/3/30으로 복구되지 않는다.
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-09-03', date '2099-09-03', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100018', 'F', 'OPEN', 'close:2099-09-03', '{"entry_date":"2099-09-03","entry_price":900}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload missing strategy rules%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'legacy F OPEN without a parameter snapshot was accepted'; end if;
+end $$;
+
+-- rule 누락(부분): F도 D/E와 같이 부분 스냅샷을 조용히 기본값으로 채우지 않는다.
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-09-04', date '2099-09-04', 'close')
+  on conflict (logical_run_key) do nothing;
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100019', 'F', 'OPEN', 'close:2099-09-04',
+      '{"entry_date":"2099-09-04","entry_price":900,"tp_pct":3,"sl_pct":4}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload partial strategy rule snapshot%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'partial F OPEN snapshot was silently defaulted'; end if;
+end $$;
+
+-- legacy 경계: 같은 "세 키 모두 없음" payload가 A는 통과(3/3/30 fallback), F는 거절이다.
+-- 이 대비가 legacy fallback 집합이 A/B/C에서 F로 새지 않았음을 증명한다.
+do $$
+declare
+  caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-09-05', date '2099-09-05', 'close')
+  on conflict (logical_run_key) do nothing;
+
+  insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+  values ('100020', 'A', 'OPEN', 'close:2099-09-05', '{"entry_date":"2099-09-05","entry_price":900}'::jsonb);
+  perform public.rebuild_outcome_projection();
+  if not exists (
+    select 1 from public.candidate_outcome
+    where ticker = '100020' and strategy = 'A' and tp_pct = 3 and sl_pct = 3 and cutoff_n = 30
+  ) then raise exception 'REBUILD[legacy boundary]: A/B/C fallback stopped working'; end if;
+
+  begin
+    insert into public.outcome_events(ticker, strategy, command_type, logical_run_key, payload)
+    values ('100021', 'F', 'OPEN', 'close:2099-09-05', '{"entry_date":"2099-09-05","entry_price":900}'::jsonb);
+    perform public.rebuild_outcome_projection();
+  exception when others then
+    if sqlerrm like 'REBUILD: OPEN payload missing strategy rules%' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'REBUILD[legacy boundary]: F leaked into the A/B/C fallback set'; end if;
+end $$;
+
+-- rule 누락(lookup 테이블): outcome_strategy_rules에 F 행이 없으면 직접 INSERT는
+-- OUTCOME_STRATEGY_RULE_NOT_FOUND로 거절된다(guard_outcome_strategy_snapshot).
+do $$
+declare
+  caught boolean := false;
+begin
+  -- epic-6-retro-item-25 이후 rule 변경은 사유/변경자 없이는 거부된다(감사 경로).
+  perform set_config('wave_double.strategy_rule_reason', 'item-28 fixture: rule 누락 경계 검증', true);
+  perform set_config('wave_double.strategy_rule_changed_by', 'sql-fixture', true);
+  delete from public.outcome_strategy_rules where strategy = 'F';
+  begin
+    insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+    values ('100022', 'F', date '2099-09-06', 900, 'OPEN', 3, 4, 999999);
+  exception when others then
+    if sqlerrm = 'OUTCOME_STRATEGY_RULE_NOT_FOUND' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'missing outcome_strategy_rules row for F was accepted'; end if;
+
+  -- 이후 블록이 lookup을 다시 쓰므로 되돌린다(파일 전체는 rollback으로 감싸여 있다).
+  insert into public.outcome_strategy_rules(strategy, tp_pct, sl_pct, cutoff_n)
+  values ('F', 3.0, 4.0, 999999)
+  on conflict (strategy) do nothing;
+  perform set_config('wave_double.strategy_rule_reason', '', true);
+  perform set_config('wave_double.strategy_rule_changed_by', '', true);
+end $$;
+
+-- legacy 경계(cutoff 스냅샷 비교 대상): A/B/C는 cutoff_n을 비교하지 않지만 D/E/F는 비교한다.
+do $$
+declare
+  caught boolean := false;
+begin
+  -- A: cutoff_n이 lookup(30)과 달라도 통과한다(3.8 legacy cutoff correction 호환).
+  insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+  values ('100023', 'A', date '2099-09-06', 900, 'OPEN', 3, 3, 15);
+
+  -- F: cutoff_n이 lookup(999999)과 다르면 스냅샷 불일치로 거절된다.
+  begin
+    insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status, tp_pct, sl_pct, cutoff_n)
+    values ('100024', 'F', date '2099-09-06', 900, 'OPEN', 3, 4, 30);
+  exception when others then
+    if sqlerrm = 'OUTCOME_STRATEGY_SNAPSHOT_MISMATCH' then caught := true; else raise; end if;
+  end;
+  if not caught then raise exception 'F cutoff_n snapshot mismatch was accepted'; end if;
+end $$;
+
 select 'outcome_rebuild_contract' as fixture, 'pass' as result;
 rollback;

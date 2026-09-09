@@ -66,16 +66,19 @@ class FakeStrategyClient:
 
 
 class FakeTagsRepository:
-    def __init__(self, fail=False, *, sync_vanished_fail=False, vanished_count=0):
+    def __init__(self, fail=False, *, sync_vanished_fail=False, vanished_count=0, fail_candidate_ids=None):
         self.fail = fail
         self.sync_vanished_fail = sync_vanished_fail
         self.vanished_count = vanished_count
+        self.fail_candidate_ids = set(fail_candidate_ids or [])
         self.saved: list[CandidateTag] = []
         self.sync_vanished_calls: list[str] = []
 
     def upsert_tags(self, tags):
         if self.fail:
             raise RuntimeError("supabase upsert failed")
+        if tags and tags[0].candidate_id in self.fail_candidate_ids:
+            raise RuntimeError(f"supabase upsert failed for {tags[0].candidate_id}")
         self.saved.extend(tags)
         return len(tags)
 
@@ -614,3 +617,117 @@ def test_sync_vanished_failure_alongside_tagging_error_keeps_partial_tagging_cod
     assert result.vanished_sync_failed is True
     write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
     assert write_stage_calls[-1][1]["p_result"]["vanished_sync_failed"] is True
+
+
+# --- epic-2-retro item-11: 후보별 저장 격리 + heartbeat ------------------------
+
+
+def test_all_persist_failures_stay_failed_tags_persist_failed():
+    """모든 후보의 upsert가 실패하면(격리 후에도) 기존처럼 TAGS_PERSIST_FAILED로 실패 처리한다."""
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([
+        FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660"),
+    ])
+    loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
+    strategy = FakeStrategyClient({
+        "005930": _ready_result("005930", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus2=True),
+    })
+    tags_repo = FakeTagsRepository(fail_candidate_ids={"c1", "c2"})
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "failed"
+    assert result.result_code == "TAGS_PERSIST_FAILED"
+    assert result.persist_failed_count == 2
+    assert result.tagged_count == 0
+    assert len(tags_repo.saved) == 0
+    write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
+    assert [c[1]["p_status"] for c in write_stage_calls] == ["running", "failed"]
+    assert write_stage_calls[-1][1]["p_unprocessed_count"] == 2
+
+
+def test_partial_persist_failure_isolates_bad_candidate_and_keeps_rest():
+    """한 후보의 upsert 실패가 나머지 후보 저장을 막지 않고 partial로 기록한다(item-11 F4)."""
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([
+        FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660"), FakeCandidateRow("c3", "035720"),
+    ])
+    loader = FakeOhlcvLoader({"005930": frame, "000660": frame, "035720": frame})
+    strategy = FakeStrategyClient({
+        "005930": _ready_result("005930", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "035720": _ready_result("035720", 3, a_at_minus2=True),
+    })
+    tags_repo = FakeTagsRepository(fail_candidate_ids={"c2"})
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "partial"
+    assert result.result_code == "TAGS_PERSIST_PARTIAL"
+    assert result.persist_failed_count == 1
+    assert result.tagged_count == 2
+    assert {tag.candidate_id for tag in tags_repo.saved} == {"c1", "c3"}
+    assert {tag.strategy for tag in tags_repo.saved} == {"A"}
+    write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
+    assert [c[1]["p_status"] for c in write_stage_calls] == ["running", "partial"]
+    assert write_stage_calls[-1][1]["p_unprocessed_count"] == 1
+    # 부분 저장된 집합 기준으로 소멸 판정을 내리면 안 되므로 sync_vanished는 건너뛴다.
+    assert tags_repo.sync_vanished_calls == []
+
+
+def test_no_tags_skips_persist_entirely():
+    """태깅된 후보가 없으면 upsert 자체를 호출하지 않는다(item-11 F4: 빈 배치 실패 회피)."""
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=False)})
+
+    class ExplodingTagsRepository:
+        def upsert_tags(self, tags):
+            raise AssertionError("upsert_tags must not be called with empty tags")
+
+        def sync_vanished(self, run_id):
+            return {"vanished_count": 0}
+
+    rpc = FakeRpc()
+    result = _run(rpc, fetcher, loader, ExplodingTagsRepository(), strategy)
+
+    assert result.status == "success"
+    assert result.result_code == "OK"
+    assert result.tagged_count == 0
+
+
+def test_heartbeat_is_called_per_candidate_in_tags_stage():
+    """tags stage는 후보마다 heartbeat.beat()를 호출해 lease를 연장한다(item-11 F1)."""
+    frame = _frame(3)
+    fetcher = FakeCandidateFetcher([
+        FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660"),
+    ])
+    loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
+    strategy = FakeStrategyClient({
+        "005930": _ready_result("005930", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus2=True),
+    })
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    class RecordingHeartbeat:
+        def __init__(self):
+            self.beats = 0
+
+        def beat(self):
+            self.beats += 1
+
+    hb = RecordingHeartbeat()
+    run_id = uuid4()
+    gateway = RunStateGateway(rpc)
+    result = run_tags_stage(
+        gateway, fetcher, loader, tags_repo, run_id, 1, uuid4(), date(2026, 9, 1),
+        strategy_client=strategy, batch_kind="close", heartbeat=hb,
+    )
+
+    assert result.status == "success"
+    assert hb.beats == 2

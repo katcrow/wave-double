@@ -367,6 +367,50 @@ def test_success_candidates_stage_wires_ohlcv_and_tags_pipeline():
     assert [call[1]["p_status"] for call in supply_stage_calls] == ["running", "success"]
 
 
+def test_scheduler_beats_heartbeat_against_attempt_lease_during_long_stages():
+    """pipelines(ohlcv refresh + tags stage)가 실행되는 동안 같은 attempt로 heartbeat RPC를 보낸다.
+
+    item-11(F1, spec-2-5 deferred #2): 후보/신규 티커가 많아 기본 300초 lease 안에
+    tags stage가 끝나지 못할 위험을, 실행 중 heartbeat_attempt 호출로 연장한다. candidates
+    stage가 확정한 fence/lease token으로 호출돼야 한다.
+    """
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    from collections import namedtuple
+
+    CandidateRow = namedtuple("CandidateRow", ["candidate_id", "ticker"])
+    deps = tags_deps(candidate_rows=[CandidateRow("c1", "005930")])
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+    )
+
+    assert result.status == "success"
+    heartbeat_calls = [call for call in rpc.calls if call[0] == "heartbeat_attempt"]
+    assert heartbeat_calls, "long-stage 실행 중 heartbeat RPC가 한 번 이상 호출돼야 한다"
+    params = heartbeat_calls[0][1]
+    assert params["p_run_id"] == attempt["run_id"]
+    assert params["p_fence_token"] == attempt["fence_token"]
+    assert params["p_lease_token"] == attempt["lease_token"]
+    assert params["p_lease_seconds"] == 300
+
+
 # --- Story 4.1: supply stage 배선 --------------------------------------------
 
 
@@ -775,20 +819,51 @@ def test_tags_stage_failure_surfaces_in_scheduler_result_and_is_not_reported_as_
 
 
 def test_tags_persist_failure_surfaces_as_failed_scheduler_result():
-    """candidate_tags upsert 자체가 실패(TAGS_PERSIST_FAILED)하는 경로도 성공으로 보고되지 않는다."""
+    """candidate 태그 upsert 자체가 실패(TAGS_PERSIST_FAILED)하는 경로도 성공으로 보고되지 않는다."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
     attempt = attempt_payload()
     rpc = FakeRpc(attempt=attempt)
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    from collections import namedtuple
+    import pandas as pd
+
+    CandidateRow = namedtuple("CandidateRow", ["candidate_id", "ticker"])
+
+    class ReadyLoader:
+        def __init__(self):
+            self.calls = []
+
+        def load_ohlcv(self, ticker, cutoff):
+            self.calls.append((ticker, cutoff))
+            idx = pd.date_range("2026-08-01", periods=3, freq="D")
+            return pd.DataFrame(
+                {"Open": [1.0] * 3, "High": [1.0] * 3, "Low": [1.0] * 3,
+                 "Close": [1.0] * 3, "Volume": [1.0] * 3},
+                index=idx,
+            )
+
+    class ReadyStrategy:
+        def compute(self, frame, ticker):
+            idx = pd.date_range("2026-08-01", periods=3, freq="D")
+            signals = {
+                "A": pd.Series([False, True, False], index=idx),
+                "B": pd.Series([False, False, False], index=idx),
+                "C": pd.Series([False, False, False], index=idx),
+            }
+            from backtest.strategy_api import StrategyResult
+            return StrategyResult(ticker=ticker, status=OhlcvCacheStatus.READY, signals=signals, error=None)
 
     class RaisingTagsRepository:
         def upsert_tags(self, tags):
             raise RuntimeError("upsert boom")
+        def sync_vanished(self, run_id):
+            return {"vanished_count": 0}
 
-    deps = tags_deps()
+    deps = tags_deps(candidate_rows=[CandidateRow("c1", "005930")])
     deps["tags_repository"] = RaisingTagsRepository()
+    deps["ohlcv_loader"] = ReadyLoader()
 
     result = run_scheduled_batch(
         BatchKind.CLOSE,
@@ -804,10 +879,11 @@ def test_tags_persist_failure_surfaces_as_failed_scheduler_result():
         deps["tags_repository"],
         deps["tagged_candidate_fetcher"], deps["supply_provider"],
         deps["program_supply_provider"], deps["supply_repository"],
+        strategy_client=ReadyStrategy(),
     )
 
-    # tags_stage는 all_tags가 비어도(후보 0건) upsert_tags를 호출하므로, upsert 자체가 예외를
-    # 던지면 TAGS_PERSIST_FAILED로 종결되고 배치 전체 결과도 failed여야 한다.
+    # tags_stage는 후보별로 upsert를 분리하므로, 유일한 후보의 upsert가 예외를 던지면
+    # saved_count==0인 채 TAGS_PERSIST_FAILED로 실패로 종결되고 배치 전체 결과도 failed여야 한다.
     assert result.status == "failed"
     assert result.tags_status == "failed"
     assert result.tags_result_code == "TAGS_PERSIST_FAILED"
@@ -996,7 +1072,7 @@ def test_dispatch_receipt_recorded_after_open_day_success():
     attempt = attempt_payload()
     rpc = FakeRpc(attempt=attempt)
     gateway = RunStateGateway(rpc)
-    candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
     deps = tags_deps()
 
     result = run_scheduled_batch(

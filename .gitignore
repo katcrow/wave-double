@@ -21,3 +21,11 @@ playwright-report/
 .pytest_cache/
 __pycache__/
 *.py[cod]
+
+# 전략 실험 산출물 격리 (epic-7-retro-item-30)
+# 커밋된 baseline 증거는 backtest/results/ 에 그대로 남기고, 탐색적 실행은
+# WAVE_BACKTEST_RESULTS_DIR로 이 scratch 경로(또는 저장소 밖)로 보낸다.
+backtest/results/scratch/
+
+# supabase CLI 스크래치(npm run generate:read-model-types가 만든다)
+supabase/.temp/

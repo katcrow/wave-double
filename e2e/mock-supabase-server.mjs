@@ -49,6 +49,28 @@ function decodeJwt(token) {
 let dispatchCounter = 0;
 const dispatchByIdempotency = new Map();
 
+/**
+ * epic-2-retro-item-12 / epic-7-retro-item-29: 시나리오 스위치.
+ *
+ * 후보 카드의 부분/완전 소멸, 모집단 이탈, 수집 실패, 장중 라벨, 전략 F 배지는 모두 같은
+ * 화면의 다른 RPC 응답 조합이라 fixture 하나로는 렌더 결과를 검증할 수 없다. webServer는
+ * 스위트당 하나만 뜨므로 프로세스 재시작 대신 제어 엔드포인트로 활성 시나리오를 바꾼다.
+ *
+ *   await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "partial-vanish" } });
+ *
+ * 알 수 없는 시나리오 이름은 400으로 거부한다(오타가 조용히 default를 검증하는 것을 막는다).
+ */
+const SCENARIOS = new Set([
+  "default",
+  "partial-vanish",
+  "complete-vanish",
+  "population-dropout",
+  "collection-failure",
+  "intraday",
+  "strategy-f",
+]);
+let activeScenario = "default";
+
 function sendJson(response, status, body) {
   response.writeHead(status, {
     "content-type": "application/json",
@@ -78,22 +100,26 @@ function rpcPayload(name, body = {}) {
     return created;
   }
   if (name === "get_dashboard_snapshot") {
+    // 장중 시나리오는 complete_snapshot과 latest_attempt의 batch_kind만 바꾼다
+    // (isIntradaySnapshot이 그 값으로 "장중 참고 · 최종 추천 미확정" 라벨을 고정 표시한다).
+    const batchKind = activeScenario === "intraday" ? "intraday" : "close";
+    const logicalRunKey = `${batchKind}:${TRADING_DAY}`;
     return {
       no_snapshot: false,
       result_code: "OK",
       complete_snapshot: {
-        logical_run_key: "close:2026-09-09",
+        logical_run_key: logicalRunKey,
         run_id: RUN_ID,
         trading_day: TRADING_DAY,
-        batch_kind: "close",
+        batch_kind: batchKind,
         published_at: new Date().toISOString(),
         sections: { candidates: { candidate_count: 1, truncated_count: 0, original_count: 1, excluded_count: 0 } },
       },
       latest_attempt: {
         run_id: RUN_ID,
-        logical_run_key: "close:2026-09-09",
+        logical_run_key: logicalRunKey,
         trading_day: TRADING_DAY,
-        batch_kind: "close",
+        batch_kind: batchKind,
         status: "published",
         trigger: "manual",
         started_at: new Date().toISOString(),
@@ -111,7 +137,22 @@ function rpcPayload(name, body = {}) {
     };
   }
   if (name === "get_today_candidate_cards") {
-    return [{ candidate_id: "00000000-0000-4000-8000-000000000401", ticker: "005930", name: "조정후보", strategies: ["A"], vanished_strategies: [], supply_partial_missing: false }];
+    const base = { candidate_id: "00000000-0000-4000-8000-000000000401", ticker: "005930", name: "조정후보", strategies: ["A"], vanished_strategies: [], supply_partial_missing: false };
+    if (activeScenario === "partial-vanish") {
+      // active 태그와 vanished 태그가 함께 있는 상태 -> 카드는 남고 "소멸: 전략 B" 문구가 붙는다.
+      return [{ ...base, strategies: ["A"], vanished_strategies: ["B"] }];
+    }
+    if (activeScenario === "complete-vanish") {
+      // active 태그 0건 + vanished만 -> 카드는 목록에 남고 시그널이 "소멸"이다.
+      return [{ ...base, strategies: [], vanished_strategies: ["A", "B"] }];
+    }
+    if (activeScenario === "collection-failure") {
+      return [{ ...base, supply_partial_missing: true }];
+    }
+    if (activeScenario === "strategy-f") {
+      return [{ ...base, name: "F후보", strategies: ["F"], vanished_strategies: [] }];
+    }
+    return [base];
   }
   if (name === "get_candidate_evidence") {
     return [{
@@ -133,7 +174,15 @@ function rpcPayload(name, body = {}) {
       { market: "KOSDAQ", trading_day: TRADING_DAY, foreign_net: -10, institution_net: 30, individual_net: 40, program_net: -5, collected_at: new Date().toISOString() },
     ];
   }
-  if (name === "get_today_disappeared_candidates") return [];
+  if (name === "get_today_disappeared_candidates") {
+    if (activeScenario === "population-dropout") {
+      return [{ ticker: "000660", name: "이탈종목", reason: "population_dropout", strategies: ["A"] }];
+    }
+    if (activeScenario === "collection-failure") {
+      return [{ ticker: "035420", name: "수집실패종목", reason: "collection_failure", strategies: ["B"] }];
+    }
+    return [];
+  }
   return null;
 }
 
@@ -178,6 +227,18 @@ const server = http.createServer((request, response) => {
       return sendJson(response, 200, USER);
     }
     return sendJson(response, 401, { error: "invalid_token" });
+  }
+
+  if (url.pathname === "/__e2e/scenario") {
+    if (request.method === "GET") return sendJson(response, 200, { scenario: activeScenario });
+    return readRequestBody(request).then((body) => {
+      const requested = body?.scenario ?? "default";
+      if (!SCENARIOS.has(requested)) {
+        return sendJson(response, 400, { message: `unknown scenario: ${requested}`, known: [...SCENARIOS] });
+      }
+      activeScenario = requested;
+      return sendJson(response, 200, { scenario: activeScenario });
+    });
   }
 
   if (url.pathname.startsWith("/rest/v1/rpc/")) {

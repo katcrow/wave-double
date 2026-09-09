@@ -16,6 +16,7 @@ from domain.run_state import BatchKind, LogicalRunKey, Stage, StageStatus, Trigg
 from .calendar import CalendarRepository, DailyBarProvider, resolve_for_schedule
 from .candidate_stage import CandidateClient, CandidateStageResult, run_candidate_stage
 from .candidate_tags_repository import TagsRepositoryProtocol
+from .heartbeat import HeartbeatPolicy, LeaseHeartbeat
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository, initialize_new_ticker_history, update_existing_ticker_history
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway, parse_attempt, safe_record_dispatch_receipt
@@ -215,9 +216,23 @@ def run_scheduled_batch(
     supply_result: SupplyStageResult | None = None
     market_supply_result: MarketSupplyStageResult | None = None
     if result.status in ("success", "partial") and result.fence_token is not None:
+        # item-11(F1, spec-2-5 deferred #2): 후보 수가 많거나 OHLCV 신규 적재가 길어지면
+        # 기본 300초 lease 안에 tags stage가 끝나지 못할 수 있다. 같은 attempt로
+        # 주기적으로 heartbeat를 보내 lease를 연장한다. refresh(종목 루프)와 tags stage의
+        # 두 윈도우 모두 같은 policy 인스턴스를 공유하므로 lease 연장 주기가 중복되지
+        # 않는다(LeaseHeartbeat가 내부적으로 마지막 beat를 기준으로 건너뛴다).
+        heartbeat: HeartbeatPolicy | None = None
+        if result.lease_token is not None:
+            heartbeat = LeaseHeartbeat(
+                gateway,
+                result.run_id,
+                result.fence_token,
+                result.lease_token,
+                lease_seconds=lease_seconds,
+            )
         tickers = [candidate.ticker for candidate in result.selection.candidates] if result.selection else []
-        initialize_new_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day)
-        update_existing_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day)
+        initialize_new_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day, heartbeat=heartbeat)
+        update_existing_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day, heartbeat=heartbeat)
         tags_result = run_tags_stage(
             gateway,
             candidate_fetcher,
@@ -229,6 +244,7 @@ def run_scheduled_batch(
             key.trading_day,
             strategy_client=strategy_client,
             batch_kind=kind.value,
+            heartbeat=heartbeat,
         )
         # Story 4.1 review patch: close/intraday에서만 tags stage 직후 supply stage를 실행한다
         # (Story 4.3 장중 D0 누적 전제). premarket은 당일(D0) 거래 데이터가 아직 없어 t1702

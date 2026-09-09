@@ -16,6 +16,7 @@ import httpx
 from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS, AdjustmentFlag, OhlcvCacheStatus
 
 from .ls_client import LsResponse
+from .heartbeat import HeartbeatPolicy
 
 TR_CODE = "t8410"
 QRYCNT = 120
@@ -250,12 +251,15 @@ def initialize_new_ticker_history(
     provider: LsOhlcvCacheProvider,
     repository: SupabaseOhlcvCacheRepository,
     cutoff: date,
+    *,
+    heartbeat: HeartbeatPolicy | None = None,
 ) -> dict[str, OhlcvCacheResult]:
     """이미 이력이 있는 티커는 건너뛰고, 신규 편입 종목만 전체 이력을 적재한다.
 
     한 종목의 실패가 나머지 종목 처리를 막지 않는다(부분 성공 허용). 신규 티커 호출은
     순차 실행이며, ``LsClient``의 TR별 token bucket이 이미 1건/초를 강제하므로
-    별도의 처리량 제한 로직을 추가하지 않는다(NFR-3).
+    별도의 처리량 제한 로직을 추가하지 않는다(NFR-3). ``heartbeat``가 주어지면 종목
+    하나를 처리할 때마다 ``beat()``를 호출해 lease를 연장한다(epic-2-retro item-11).
     """
     deduped_candidates = list(dict.fromkeys(candidates))
 
@@ -271,6 +275,8 @@ def initialize_new_ticker_history(
 
     results: dict[str, OhlcvCacheResult] = {}
     for ticker in new_tickers:
+        if heartbeat is not None:
+            heartbeat.beat()
         try:
             rows = provider.fetch_full_history(ticker, cutoff)
         except Exception as exc:
@@ -316,6 +322,8 @@ def update_existing_ticker_history(
     provider: LsOhlcvCacheProvider,
     repository: SupabaseOhlcvCacheRepository,
     cutoff: date,
+    *,
+    heartbeat: HeartbeatPolicy | None = None,
 ) -> IncrementalUpdateResult:
     """이미 캐시된 각 종목의 마지막 저장 거래일 다음부터 cutoff까지만 증분 조회한다.
 
@@ -325,6 +333,8 @@ def update_existing_ticker_history(
     재조회 없이 소비). corporate-action(신규 행 중 하나 이상 ``pricechk`` 관측)이 감지되면
     가용 전체 이력(최대 500거래일)을 재조회·재저장하고 ``adjustment_version``을 1
     증가시킨다. 한 종목의 실패가 나머지 종목 처리를 막지 않는다(부분 성공 허용).
+    ``heartbeat``가 주어지면 종목 하나를 처리할 때마다 ``beat()``를 호출해 lease를
+    연장한다(epic-2-retro item-11).
     """
     deduped_tickers = list(dict.fromkeys(tickers))
 
@@ -346,6 +356,8 @@ def update_existing_ticker_history(
         state = states.get(ticker)
         if state is None:
             continue
+        if heartbeat is not None:
+            heartbeat.beat()
 
         if state.last_trading_day >= cutoff:
             results[ticker] = OhlcvCacheResult(ticker, OhlcvCacheStatus.READY, 0)

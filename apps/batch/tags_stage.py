@@ -27,6 +27,7 @@ from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS, OhlcvCacheStatus
 from domain.run_state import Stage, StageStatus
 
 from .candidate_tags_repository import CandidateTag, TagsRepositoryProtocol
+from .heartbeat import HeartbeatPolicy
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway
 
@@ -65,6 +66,7 @@ class TagsStageResult:
     error_count: int = 0
     ineligible_count: int = 0
     vanished_count: int = 0
+    persist_failed_count: int = 0
     batch_kind: str = "close"
     tagged_candidates: list[TaggedCandidate] = field(default_factory=list)
     run_id: str | None = None
@@ -90,6 +92,7 @@ def run_tags_stage(
     *,
     strategy_client: TagsClient | None = None,
     batch_kind: str = "close",
+    heartbeat: HeartbeatPolicy | None = None,
 ) -> TagsStageResult:
     """tags stage를 실행한다.
 
@@ -131,6 +134,8 @@ def run_tags_stage(
     ineligible_count = 0
 
     for cand in candidates:
+        if heartbeat is not None:
+            heartbeat.beat()
         load_result = ohlcv_loader.load_ohlcv(cand.ticker, trading_day)
         if isinstance(load_result, OhlcvCacheStatus):
             if load_result is OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY:
@@ -173,25 +178,71 @@ def run_tags_stage(
                 )
             )
 
-    try:
-        saved_count = tags_repo.upsert_tags(all_tags)
-    except Exception as exc:
+    # 저장 실패 격리(epic-2-retro item-11, F4): 태그 전체를 단일 batch로 보내면
+    # 한 행의 실패(FK 위반 등)가 다른 종목의 계산 결과까지 폐기한다. 후보별로
+    # 그룹핑해 각 후보의 태그를 따로 upsert하고, 실패한 후보만 격리해 나머지는
+    # 보존한다. 전부 실패하면 기존과 동일하게 TAGS_PERSIST_FAILED로 종료하고,
+    # 일부만 실패하면 해당 후보 수를 persist_failed_count로 노출해 partial로 기록한다.
+    saved_count = 0
+    persist_failed_count = 0
+    persist_error_message: str | None = None
+    if all_tags:
+        tags_by_candidate: dict[str, list[CandidateTag]] = {}
+        for tag in all_tags:
+            tags_by_candidate.setdefault(tag.candidate_id, []).append(tag)
+        for candidate_id, candidate_tags in tags_by_candidate.items():
+            try:
+                saved_count += tags_repo.upsert_tags(candidate_tags)
+            except Exception as exc:
+                persist_failed_count += 1
+                persist_error_message = str(exc)
+
+    if persist_failed_count > 0 and saved_count == 0:
         result = {
             "result_code": "TAGS_PERSIST_FAILED",
-            "message": str(exc),
+            "message": persist_error_message or "all candidate tag upserts failed",
             "tagged_count": 0,
             "error_count": error_count,
             "ineligible_count": ineligible_count,
+            "persist_failed_count": persist_failed_count,
             "batch_kind": batch_kind,
         }
         gateway.write_stage(
             run_uuid, Stage.TAGS, fence_int, lease_uuid,
             StageStatus.RUNNING, StageStatus.FAILED,
-            result=result, unprocessed_count=error_count,
+            result=result, unprocessed_count=error_count + persist_failed_count,
         )
         return TagsStageResult(
             "failed", "TAGS_PERSIST_FAILED",
             tagged_count=0, error_count=error_count, ineligible_count=ineligible_count,
+            persist_failed_count=persist_failed_count,
+            batch_kind=batch_kind, tagged_candidates=tagged_candidates, run_id=run_id_str,
+        )
+
+    if persist_failed_count > 0 and saved_count > 0:
+        # 일부 후보만 저장에 실패했다. 실패한 후보를 격리해 나머지는 보존된 상태이므로
+        # partial로 기록한다. 부분 저장된 active 태그만으로 소멸 판정을 수행하면 불완전한
+        # 집합을 기준으로 잘못 vanished로 표시할 수 있어 소멸 동기화는 건너뛴다(후속 배치가
+        # 재동기화한다).
+        result = {
+            "result_code": "TAGS_PERSIST_PARTIAL",
+            "message": persist_error_message or "some candidate tag upserts failed",
+            "tagged_count": saved_count,
+            "candidate_count": len(candidates),
+            "error_count": error_count,
+            "ineligible_count": ineligible_count,
+            "persist_failed_count": persist_failed_count,
+            "batch_kind": batch_kind,
+        }
+        gateway.write_stage(
+            run_uuid, Stage.TAGS, fence_int, lease_uuid,
+            StageStatus.RUNNING, StageStatus.PARTIAL,
+            result=result, unprocessed_count=error_count + persist_failed_count,
+        )
+        return TagsStageResult(
+            "partial", "TAGS_PERSIST_PARTIAL",
+            tagged_count=saved_count, error_count=error_count, ineligible_count=ineligible_count,
+            persist_failed_count=persist_failed_count,
             batch_kind=batch_kind, tagged_candidates=tagged_candidates, run_id=run_id_str,
         )
 

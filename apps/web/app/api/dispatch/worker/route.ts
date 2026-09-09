@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { timingSafeEqualStrings } from "@/lib/dispatch";
 import { getSupabaseServiceClient } from "@/lib/supabase-service";
-import { decideOutboxAction, shouldDeadLetterAfterDispatchFailure } from "@/lib/dispatch-outbox-worker";
+import {
+  decideOutboxAction,
+  resolveWorkflowRef,
+  shouldDeadLetterAfterDispatchFailure,
+} from "@/lib/dispatch-outbox-worker";
 
 /**
  * Story 1.10 (AD-18): pg_cron이 매 1분 `x-cron-secret` 헤더로 깨우는 server-only outbox worker.
@@ -21,7 +25,7 @@ export const dynamic = "force-dynamic";
 const WORKER_LEASE_SECONDS = 120;
 const MAX_CLAIM = 20;
 const WORKFLOW_FILE = "scheduled-batch.yml";
-const WORKFLOW_REF = "main";
+const WORKFLOW_REF = resolveWorkflowRef(process.env.GITHUB_DISPATCH_REF);
 
 interface ClaimedOutboxRow {
   outbox_id: string;

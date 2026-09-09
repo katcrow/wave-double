@@ -22,8 +22,9 @@ from ..data.loader import load_all
 from ..engine import TradeParams, run_backtest
 from ..metrics import summarize
 from ..signals import DoubleWaveParams, detect_entries
+from ..results_dir import results_root
 
-RESULTS_DIR = Path(__file__).parent.parent / "results"
+RESULTS_DIR = results_root()
 
 # 시그널 키 순서: L, S, W, k, eps, rise, max_rise
 SIG_KEYS = ["L", "S", "W", "k", "eps", "pullback_rise_pct", "max_rise_pct"]

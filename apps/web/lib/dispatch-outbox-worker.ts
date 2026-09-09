@@ -46,3 +46,18 @@ export function decideOutboxAction(row: OutboxAttemptState): OutboxDecision {
 export function shouldDeadLetterAfterDispatchFailure(attempts: number): boolean {
   return attempts >= MAX_DISPATCH_ATTEMPTS;
 }
+
+/**
+ * workflow_dispatch가 겨냥할 git ref. 이 저장소의 default branch는 `master`다.
+ *
+ * 하드코딩된 "main"은 존재하지 않는 ref라서 GitHub이 422로 거부하고, 그 실패가
+ * `shouldDeadLetterAfterDispatchFailure` 경로를 타 수동 dispatch가 영구히 실행되지 않는다
+ * (epic-1-retro-item-2에서 발견). 브랜치 전략이 바뀌면 코드 수정 없이 GITHUB_DISPATCH_REF로
+ * 덮어쓴다.
+ */
+export const DEFAULT_WORKFLOW_REF = "master";
+
+export function resolveWorkflowRef(ref: string | undefined): string {
+  const trimmed = ref?.trim();
+  return trimmed ? trimmed : DEFAULT_WORKFLOW_REF;
+}

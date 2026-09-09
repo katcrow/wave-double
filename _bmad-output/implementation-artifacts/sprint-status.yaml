@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 12:00
-last_updated: 09-09-2026 14:30
+last_updated: 09-09-2026 22:10
 project: wave-double
 project_key: NOKEY
 tracking_system: file-system
@@ -137,8 +137,11 @@ action_items:
     action: "운영 Supabase에 202609012200~202609021100 migration을 순서대로 적용하고 dashboard/dispatch
       RPC와 worker cron을 fixture로 검증한다."
     owner: "운영/개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+    status: in-progress
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-item-2-production-verification-2026-09-09.md
+      - 202609012200~202609021000은 운영 적용·RPC fixture PASS 확인(dashboard/dispatch/skip/fallback),
+      dispatch worker route의 WORKFLOW_REF 결함 수정.
+      202609021100(pg_cron)만 미적용: 배포 도메인/secret이 저장소에 없어 사람 작업으로 남김."
   - id: "epic-1-retro-item-3-logical_runs-runs-rls-정책을-approved-view"
     epic: 1
     action: "logical_runs·runs RLS 정책을 approved view/RPC 및 batch service-role 경계와
@@ -198,20 +201,23 @@ action_items:
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md, tools/verify_adjustment_equivalence.py,
       _bmad-output/implementation-artifacts/adjustment-equivalence-2026-08-26.json (게이트 FAIL:
       B/D/F Jaccard 0.875/0.667/0.714, yfinance vs LS 수정주가 불일치 53종·점프 19종 —
-      판정 기준 '골든 gate는 미검증 상태 유지, fixture LS 기준 재생성은 backlog)",
+      판정 기준: 골든 gate는 미검증 상태 유지, fixture LS 기준 재생성은 backlog)"
   - id: "epic-2-retro-item-11-장시간-tags-stage에-heartbeat-lease-연장과-저장-실"
     epic: 2
     action: "장시간 tags stage에 heartbeat/lease 연장과 저장 실패 격리 정책을 설계한다."
     owner: "배치/개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/design-epic-2-item-11-heartbeat-저장-격리.md,
+      apps/batch/heartbeat.py"
   - id: "epic-2-retro-item-12-인증-세션을-포함한-playwright-mcp-smoke에서-카드-부분"
     epic: 2
     action: "인증 세션을 포함한 Playwright MCP smoke에서 카드·부분/완전 소멸·모집단 이탈·수집 실패·장중 라벨을 실제
       렌더 결과로 검증한다."
     owner: "QA/프론트엔드"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md"
+    status: done
+    ref: "e2e/candidate-surface-scenarios.spec.ts(부분/완전 소멸·모집단 이탈·수집 실패·장중 라벨 8개 시나리오),
+      e2e/mock-supabase-server.mjs(POST /__e2e/scenario 시나리오 스위치),
+      playwright.config.ts(workers:1 - 전역 시나리오 상태 경합 방지)"
   - id: "epic-3-retro-item-13-운영-supabase에-epic-3-migration을-순서대로-적용하고"
     epic: 3
     action: "운영 Supabase에 Epic 3 migration을 순서대로 적용하고 각 RPC/function grant 및 전체 outcome
@@ -231,35 +237,52 @@ action_items:
     action: "default-branch 배포 gate에 local migration 목록과 production schema_migrations/RPC
       grants parity 검사를 추가해 로컬 fixture pass와 운영 함수 부재의 불일치를 차단한다."
     owner: "개발/운영"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+    status: done
+    ref: "tools/check_production_parity.py(파서 결함 3건 수정: 역할 목록 절단, SECURITY DEFINER 윈도우 유출,
+      revoke-from-public 의미), tools/production_parity_baseline.json(운영 실측 스냅샷),
+      tests/tools/test_check_production_parity.py(22개),
+      .github/workflows/test.yml(offline 점검 + production-parity-gate 잡)"
   - id: "epic-3-retro-item-16-correction-반복-충돌-정책-terminal-불변성-event-o"
     epic: 3
     action: "correction 반복/충돌 정책, terminal 불변성, event ordering, version 증가 및 동시성 경합을
       명시적 SQL fixture로 추가하고 raw PostgreSQL 오류를 도메인 오류로 정규화할 범위를 결정한다."
     owner: "개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+    status: done
+    ref: "infra/supabase/migrations/202609091500_close_outcome_correction_policy.sql,
+      infra/supabase/migrations/202609091501_normalize_correction_repeat_conflict.sql,
+      tests/sql/test_outcome_correction_policy.sql(반복·충돌·terminal 불변성·event ordering·정규화 5개 시나리오, 운영 PASS).
+      정규화 범위 결정: 호출자가 인자를 고쳐 해결 가능한 오류만 도메인 오류(LOGICAL_RUN_NOT_FOUND,
+      CORRECTION_ALREADY_APPLIED_FOR_RUN), 불변식 위반(55000)은 원본 SQLSTATE 유지.
+      DELISTED 탈출 전이는 DELISTED_IS_TERMINAL로 차단."
   - id: "epic-3-retro-item-17-daily_ohlcv-close-0-invariant와-rebuild-j"
     epic: 3
     action: "daily_ohlcv.close > 0 invariant와 rebuild JSON-SQL fixture drift 방지 및
       fixture 자동 수집을 추가한다."
     owner: "데이터/개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-3-retro-09-04-2026.md"
+    status: done
+    ref: "infra/supabase/migrations/202609091400_enforce_daily_ohlcv_positive_prices.sql(운영 적용),
+      tests/sql/test_daily_ohlcv.sql(0·음수 가격·음수 volume 거절, volume 0 허용),
+      tools/check_outcome_rebuild_fixture_drift.py + tests/tools(JSON-SQL drift 게이트),
+      .github/workflows/test.yml(tests/sql/test_*.sql glob 자동 수집)"
   - id: "epic-3-retro-item-18-suspended-github-issue-생성-close-14일-esca"
     epic: 3
     action: "SUSPENDED GitHub Issue 생성·close·14일 escalation과 LS 상태 기반 자동 DELISTED
       감지를 구현한다."
     owner: "PM/개발/운영"
     status: open
-    ref: "_bmad-output/implementation-artifacts/spec-epic-3-acceptance-remediation.md"
+    ref: "_bmad-output/implementation-artifacts/spec-epic-3-acceptance-remediation.md
+      - 미해결(제품 결정 대기). 자동 DELISTED 감지의 데이터 원천은 확인됨:
+      LS t1405 투자경고/매매정지/정리매매조회(jongchk=3 정리매매,
+      docs/api/ls-openapi/03-domestic-stock/market-data.md:1731). 남은 결정은
+      (1) 정리매매 지정만으로 추적 중인 outcome을 DELISTED로 종결할지 아니면 상장폐지 확정까지 기다릴지,
+      (2) 14일 escalation의 수신자/채널. 둘 다 실전 손익 확정 규칙을 바꾸므로 Neo 승인 없이 구현하지 않는다."
   - id: "story-6-8-item-1-전략-e-oos-홀드아웃-거래-20건-누적-시-재평가"
     epic: 6
     action: "전략 E의 OOS(holdout) 실전 거래가 20건 이상 누적되면 승률/PF 열화 여부를 재평가하고 유지/재조정/보류를 재결정한다."
     owner: "Neo"
     status: open
-    ref: "_bmad-output/specs/spec-wave-double/backtest-baseline.md"
+    ref: "_bmad-output/specs/spec-wave-double/backtest-baseline.md
+      - 차단됨: OOS 홀드아웃 실전 거래 20건 누적이 선행 조건이다(코드로 해결할 수 없음)."
   - id: "epic-6-retro-item-20-strategy_d-py-러너를-strategy_e-py-수준으로-정렬한"
     epic: 6
     action: "strategy_d.py 러너를 strategy_e.py 수준으로 정렬한다(무효 구간 분리, order-invariant fingerprint,
@@ -285,29 +308,35 @@ action_items:
     action: "6-6 운영 migration drift 재발 전례를 근거로 epic-3 item-15(parity gate)를 다음 스프린트에
       착수한다."
     owner: "PM/개발/운영"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+    status: done
+    ref: "epic-3-retro-item-15와 함께 해결 - production-parity-gate 잡이 default branch에서
+      live 운영 대비 미배포 migration/함수를 차단한다(.github/workflows/test.yml)"
   - id: "epic-6-retro-item-24-6-5-review-patch-migration-051700-052100"
     epic: 6
     action: "6-5 review-patch migration(051700~052100)의 guard 재정의·의미 전환을 문서화하고, 리뷰
       반복 migration squash/pin 정책을 검토한다."
     owner: "개발 프로세스"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/decision-epic-6-item-24-review-migration-squash-policy.md
+      - guard 재정의 사슬(051600~052100) 의미 전환 표 + squash하지 않는 정책 확정"
   - id: "epic-6-retro-item-25-outcome_strategy_rules에-감사-가능한-수정-경로-ser"
     epic: 6
     action: "outcome_strategy_rules에 감사 가능한 수정 경로(service_role 전용 upsert RPC 또는 변경
       이력 보존)를 설계한다."
     owner: "운영/개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-6-retro-09-07-2026.md"
+    status: done
+    ref: "infra/supabase/migrations/202609091600_audit_outcome_strategy_rules.sql(운영 적용:
+      append-only outcome_strategy_rule_history + 사유/변경자 강제 트리거 +
+      service_role 전용 set_outcome_strategy_rule RPC),
+      tests/sql/test_outcome_strategy_rule_audit.sql"
   - id: "story-7-7-item-1-전략-f-oos-홀드아웃-거래-200건-누적-시-재평가"
     epic: 7
     action: "전략 F의 OOS(holdout) 실전 거래가 200건 이상 누적되면 승률/PF 열화 여부를 재평가하고 유지/재조정/보류를
       재결정한다."
     owner: "Neo"
     status: open
-    ref: "_bmad-output/implementation-artifacts/spec-7-7-oos-워크포워드-검증-전략-f.md"
+    ref: "_bmad-output/implementation-artifacts/spec-7-7-oos-워크포워드-검증-전략-f.md
+      - 차단됨: OOS 홀드아웃 실전 거래 200건 누적이 선행 조건이다(코드로 해결할 수 없음)."
   - id: "epic-7-retro-item-27-운영에-f-migration을-순서대로-적용하고-production-co"
     epic: 7
     action: "운영에 F migration을 순서대로 적용하고 production contract fixture와 grants를 재실행한다."
@@ -318,20 +347,23 @@ action_items:
     epic: 7
     action: "F의 rebuild_outcome_projection SQL fixture와 rule 누락 및 legacy 경계를 추가 검증한다."
     owner: "개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+    status: done
+    ref: "tests/sql/test_outcome_rebuild.sql(F 스냅샷 보존·rule 누락·부분 스냅샷·legacy fallback 경계·
+      lookup 행 누락·cutoff 비교 대상 경계, 운영 PASS)"
   - id: "epic-7-retro-item-29-인증된-playwright-mcp로-f-카드-배지와-g-404-회귀를-검"
     epic: 7
     action: "인증된 Playwright MCP로 F 카드 배지와 G 404 회귀를 검증한다."
     owner: "QA/프론트엔드"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+    status: done
+    ref: "e2e/candidate-surface-scenarios.spec.ts(전략 F 카드 배지·F 라우트, G not-found 회귀)"
   - id: "epic-7-retro-item-30-전략-실험-산출물-격리와-epic-story-scoped-clean-tr"
     epic: 7
     action: "전략 실험 산출물 격리와 Epic story-scoped clean-tree/diff-check 게이트를 표준화한다."
     owner: "개발 프로세스"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-7-retro-09-08-2026.md"
+    status: done
+    ref: "backtest/results_dir.py(WAVE_BACKTEST_RESULTS_DIR 격리 규약, 러너 4곳 배선),
+      .gitignore(backtest/results/scratch/), tools/check_epic_scope.py(--epic/--clean-tree 표준화),
+      tools/epic-path-manifests/epic-retro-2026-09-09.txt, tests/tools(20개)"
   - id: "epic-7-retro-item-31-candidate-cards-ts의-현재-최대-5종-stale-주석을-여"
     epic: 7
     action: "candidate-cards.ts의 현재 최대 5종 stale 주석을 여섯 전략 기준으로 정리한다."

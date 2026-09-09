@@ -1,0 +1,380 @@
+{
+  "project_ref": "qqhjeumlecaudsiqhhdu",
+  "captured_at": "2026-09-09",
+  "source": "supabase MCP execute_sql (supabase_migrations.schema_migrations + pg_proc/has_function_privilege)",
+  "migrations": [
+    "202609021500_create_daily_ohlcv",
+    "202609021600_create_candidate_tags",
+    "202609021700_add_tags_to_publish_and_snapshot",
+    "202609021800_allow_multistage_write_stage",
+    "202609021900_write_stage_reacts_to_tags_completion",
+    "202609022000_create_supply_3day",
+    "202609022100_create_get_today_candidate_cards",
+    "202609022200_fix_get_today_candidate_cards_d0_dedupe",
+    "202609031000_create_sync_vanished_tags",
+    "202609031100_add_vanished_strategies_to_get_today_candidate_cards",
+    "202609031200_create_get_today_disappeared_candidates",
+    "202609031300_create_outcome_schema",
+    "202609031400_harden_outcome_schema_invariants",
+    "202609031500_create_emit_open_command",
+    "202609031501_fix_emit_open_command_review_patch",
+    "202609031600_link_publish_attempt_to_outcome",
+    "202609031700_record_close_batch_observations",
+    "202609031800_detect_price_adjustment_suspension",
+    "202609032000_judge_tp_sl_outcomes",
+    "202609032100_confirm_timeout_cutoff",
+    "202609032101_fix_timeout_cutoff_review_patch",
+    "202609051200_create_rebuild_outcome_projection",
+    "202609051300_harden_price_adjustment_search_path",
+    "202609051400_expand_candidate_tags_strategy_check",
+    "202609051500_finalize_candidate_tags_strategy_contract",
+    "202609051600_parameterize_outcome_strategy_rules",
+    "202609051700_harden_outcome_strategy_snapshot_contract",
+    "202609051800_preserve_outcome_strategy_check_order",
+    "202609051900_revoke_outcome_snapshot_trigger_execute",
+    "202609052000_harden_outcome_strategy_snapshot_contract",
+    "202609052100_preserve_legacy_outcome_snapshot_compatibility",
+    "202609070900_supply_3day_publish_guard",
+    "202609070901_relax_supply_3day_confirmed_program_net",
+    "202609071000_expand_candidate_tags_strategy_check_f",
+    "202609080900_parameterize_outcome_strategy_rules_f",
+    "202609081000_create_market_supply",
+    "202609081100_harden_market_supply_data_guard",
+    "202609081200_create_get_candidate_evidence",
+    "202609081201_harden_get_candidate_evidence_attempt_scope",
+    "202609081300_create_get_market_supply",
+    "202609081301_harden_market_supply_read_acl",
+    "202609091000_create_candidate_supply_hints",
+    "202609091001_harden_candidate_supply_hints",
+    "202609091100_harden_candidate_evidence_read_boundary",
+    "202609091200_reapply_candidate_evidence_read_boundary",
+    "202609091300_strict_adjusted_evidence_rate",
+    "202609091400_enforce_daily_ohlcv_positive_prices",
+    "202609091500_close_outcome_correction_policy",
+    "202609091501_normalize_correction_repeat_conflict",
+    "202609091600_audit_outcome_strategy_rules",
+    "add_outcome_correction_mechanism",
+    "add_skip_attempt_rpc",
+    "create_rebuild_outcome_projection",
+    "epic1_fix_add_run_lineage_and_dashboard_snapshot",
+    "epic4-091300-strict-adjusted-evidence-rate",
+    "fix_outcome_correction_review_patch"
+  ],
+  "functions": {
+    "advance_dispatch_outbox": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "apply_outcome_correction": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "claim_dispatch_outbox": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "emit_open_command": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "enforce_market_supply_before_publish": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "get_candidate_evidence": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_candidate_supply_hints": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_dashboard_snapshot": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_market_supply": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_today_candidate_cards": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_today_disappeared_candidates": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "guard_candidate_outcome_mutation": {
+      "security_definer": false,
+      "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "guard_outcome_strategy_snapshot": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "heartbeat_attempt": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "price_adjustment_gap_threshold": {
+      "security_definer": false,
+      "search_path": "pg_catalog",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "publish_attempt": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "reap_expired_attempts": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "rebuild_outcome_projection": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "reconcile_dispatch_outbox": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "record_dispatch_receipt": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "record_outcome_observation": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "record_outcome_strategy_rule_history": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "reject_outcome_ledger_mutation": {
+      "security_definer": false,
+      "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "reject_outcome_ledger_truncate": {
+      "security_definer": false,
+      "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "reject_outcome_open_projection_conflict": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "reject_outcome_strategy_rule_history_mutation": {
+      "security_definer": false,
+      "search_path": null,
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "request_manual_dispatch": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "require_outcome_strategy_rule_reason": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "rls_auto_enable": {
+      "security_definer": true,
+      "search_path": "pg_catalog",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "set_outcome_strategy_rule": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "skip_attempt": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "start_attempt": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "sync_vanished_tags": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "write_candidates": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "write_stage": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    }
+  }
+}

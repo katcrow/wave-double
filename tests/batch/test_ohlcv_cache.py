@@ -693,3 +693,49 @@ def test_corporate_action_success_includes_pricechk_flag_in_adjustment_flags():
     result = update_existing_ticker_history(["005930"], provider, repository, date(2026, 9, 2))
     assert result.results["005930"].status == OhlcvCacheStatus.READY
     assert AdjustmentFlag("005930", date(2026, 9, 2), True, -0.48) in result.adjustment_flags
+
+
+# --- epic-2-retro item-11: refresh 루프 heartbeat -----------------------------
+
+
+class RecordingHeartbeat:
+    def __init__(self):
+        self.beats = 0
+
+    def beat(self):
+        self.beats += 1
+
+
+def test_new_ticker_history_beats_per_new_ticker_when_heartbeat_given():
+    provider = FakeProvider(
+        {"005930": _rows(MIN_HISTORY_TRADING_DAYS), "000660": _rows(MIN_HISTORY_TRADING_DAYS)}
+    )
+    repository = FakeRepository(existing=set())
+    hb = RecordingHeartbeat()
+    initialize_new_ticker_history(["005930", "000660"], provider, repository, date(2026, 9, 2), heartbeat=hb)
+    assert hb.beats == 2
+
+
+def test_new_ticker_history_skips_heartbeat_for_already_cached_tickers():
+    provider = FakeProvider({})
+    repository = FakeRepository(existing={"005930"})
+    hb = RecordingHeartbeat()
+    initialize_new_ticker_history(["005930"], provider, repository, date(2026, 9, 2), heartbeat=hb)
+    assert hb.beats == 0
+
+
+def test_update_existing_history_beats_per_known_ticker_when_heartbeat_given():
+    states = {
+        "005930": CachedTickerState(date(2026, 8, 31), 100.0, 1),
+        "000660": CachedTickerState(date(2026, 8, 31), 50.0, 1),
+    }
+    repository = FakeStateRepository(states)
+    provider = FakeRangeProvider(
+        {
+            ("005930", date(2026, 9, 1)): [{"trading_day": date(2026, 9, 1), "close": 101, "pricechk": 0}],
+            ("000660", date(2026, 9, 1)): [{"trading_day": date(2026, 9, 1), "close": 51, "pricechk": 0}],
+        }
+    )
+    hb = RecordingHeartbeat()
+    update_existing_ticker_history(["005930", "000660"], provider, repository, date(2026, 9, 2), heartbeat=hb)
+    assert hb.beats == 2

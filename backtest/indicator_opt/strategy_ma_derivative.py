@@ -28,10 +28,11 @@ import pandas as pd
 from ..data.loader import load_all
 from ..indicators import sma
 from ..metrics import summarize
+from ..results_dir import results_root
 
 BASELINE_START = pd.Timestamp("2020-08-03")
 BASELINE_END = pd.Timestamp("2026-08-27")
-RESULTS_DIR = Path(__file__).parent.parent / "results"
+RESULTS_DIR = results_root()
 
 _OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _PRICE_COLUMNS = ("Open", "High", "Low", "Close")

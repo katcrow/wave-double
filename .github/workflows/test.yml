@@ -34,6 +34,9 @@ jobs:
       - name: Domain and calendar tests (Python)
         run: uv run --with pytest pytest tests/domain/test_calendar.py tests/domain/test_supply_hint.py tests/batch/test_calendar.py -q
 
+      - name: Tooling gate tests (Python)
+        run: uv run --with pytest pytest tests/tools -q
+
       - name: Scheduler tests (Python)
         run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py tests/batch/test_supply_stage.py tests/batch/test_ls_supply_provider.py tests/batch/test_ls_market_supply_provider.py tests/batch/test_ls_market_program_supply_provider.py tests/batch/test_market_supply_stage.py tests/batch/test_market_supply_repository.py tests/batch/test_tagged_candidate_fetcher.py tests/batch/test_supply_3day_repository.py -q
 
@@ -170,10 +173,64 @@ jobs:
       - name: Generated read-model type drift lint (offline)
         run: python tools/check_generated_types_drift.py
 
+      # epic-3-retro-item-15 / epic-6-retro-item-23: 커밋된 프로덕션 스냅샷 대비 역방향 drift 차단.
+      # 로컬이 baseline보다 앞선 것(배포 대기)은 WARN이므로 PR에서 통과한다.
+      - name: Production parity check (offline, baseline)
+        run: python tools/check_production_parity.py
+
+      # epic-3-retro-item-17: rebuild fixture의 JSON 사본이 SQL과 갈라지는 것을 차단한다
+      # (JSON 쪽은 어떤 코드도 읽지 않으므로 한쪽만 고쳐도 아무도 알아채지 못했다).
+      - name: Outcome rebuild fixture drift check
+        run: python tools/check_outcome_rebuild_fixture_drift.py
+
+      # epic-3-retro-item-17 (fixture 자동 수집): 이전에는 fixture 경로를 이 자리에 손으로
+      # 나열했다 -- 새 fixture를 추가하고 이 목록에 넣는 것을 잊으면 CI가 조용히 통과했다.
+      # 이제 tests/sql/*.sql 전체를 정렬해 돌리므로 파일을 두는 것만으로 게이트에 들어온다.
       - name: Run schema SQL fixtures
         env:
           PGPASSWORD: postgres
         run: |
-          for f in tests/sql/test_run_lineage.sql tests/sql/test_candidates.sql tests/sql/test_candidates_fallback.sql tests/sql/test_skip_attempt.sql tests/sql/test_dashboard_snapshot.sql tests/sql/test_dispatch_outbox.sql tests/sql/test_daily_ohlcv.sql tests/sql/test_candidate_tags.sql tests/sql/test_candidate_tags_upgrade.sql tests/sql/test_supply_3day.sql tests/sql/test_market_supply.sql tests/sql/test_get_market_supply.sql tests/sql/test_get_today_candidate_cards.sql tests/sql/test_get_candidate_evidence.sql tests/sql/test_sync_vanished_tags.sql tests/sql/test_get_today_disappeared_candidates.sql tests/sql/test_outcome_schema.sql tests/sql/test_outcome_open_command.sql tests/sql/test_outcome_rebuild.sql tests/sql/test_supply_3day_publish_guard.sql tests/sql/test_supply_hints.sql; do
+          set -euo pipefail
+          shopt -s nullglob
+          fixtures=(tests/sql/test_*.sql)
+          if [ ${#fixtures[@]} -eq 0 ]; then
+            echo "::error::tests/sql에 SQL fixture가 없다 -- 수집 경로가 잘못됐다"
+            exit 1
+          fi
+          echo "collected ${#fixtures[@]} SQL fixtures"
+          for f in $(printf '%s\n' "${fixtures[@]}" | sort); do
+            echo "running $f"
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done
+
+  # epic-3-retro-item-15 / epic-6-retro-item-23: default-branch 배포 gate.
+  # "로컬 SQL fixture는 pass인데 운영에 함수/migration이 없다"는 6-6 drift 재발 전례를
+  # 차단한다. sql-schema-tests(로컬 fixture)가 녹색인 것만으로 배포를 허용하지 않고,
+  # live 프로덕션(qqhjeumlecaudsiqhhdu)의 schema_migrations와 public 함수 catalog를
+  # 실측 조회해 로컬 선언과 대조한다. 읽기 전용 SQL만 실행한다.
+  #
+  # PR/fork에는 SUPABASE_ACCESS_TOKEN이 없으므로 default branch(및 수동 실행)에서만 돈다.
+  # baseline 갱신이 필요하면 `python tools/check_production_parity.py --write-baseline`.
+  production-parity-gate:
+    needs: sql-schema-tests
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.14"
+
+      - name: Production parity gate (live)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "${SUPABASE_ACCESS_TOKEN}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN secret이 없어 배포 gate를 실행할 수 없다"
+            exit 1
+          fi
+          python tools/check_production_parity.py --gate

@@ -21,8 +21,9 @@ from ..data.loader import load_all
 from ..engine import TradeParams, run_backtest
 from ..metrics import summarize
 from ._signals import SimpleSignal, get_signal_fn, label, param_grid, param_names
+from ..results_dir import results_root
 
-RESULTS_DIR = Path(__file__).parent.parent / "results" / "indicator_opt"
+RESULTS_DIR = results_root() / "indicator_opt"
 
 _SHARED: dict = {}
 

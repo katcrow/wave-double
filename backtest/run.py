@@ -15,8 +15,9 @@ from .data.loader import load_all
 from .engine import TradeParams, Trade, run_backtest
 from .metrics import summarize
 from .signals import DoubleWaveParams, detect_entries
+from .results_dir import results_root
 
-RESULTS_DIR = Path(__file__).parent / "results"
+RESULTS_DIR = results_root()
 
 
 def parse_args() -> argparse.Namespace:

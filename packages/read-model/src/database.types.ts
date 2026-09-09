@@ -1,4 +1,3 @@
-// Generated from Supabase project qqhjeumlecaudsiqhhdu on 2026-09-04. Do not edit by hand.
 export type Json =
   | string
   | number
@@ -97,6 +96,13 @@ export type Database = {
             foreignKeyName: "candidate_source_contrib_candidate_id_attempt_run_id_fkey"
             columns: ["candidate_id", "attempt_run_id"]
             isOneToOne: false
+            referencedRelation: "candidate_supply_hints"
+            referencedColumns: ["candidate_id", "attempt_run_id"]
+          },
+          {
+            foreignKeyName: "candidate_source_contrib_candidate_id_attempt_run_id_fkey"
+            columns: ["candidate_id", "attempt_run_id"]
+            isOneToOne: false
             referencedRelation: "candidates"
             referencedColumns: ["candidate_id", "attempt_run_id"]
           },
@@ -134,6 +140,13 @@ export type Database = {
           tagged_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "candidate_tags_candidate_id_attempt_run_id_fkey"
+            columns: ["candidate_id", "attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "candidate_supply_hints"
+            referencedColumns: ["candidate_id", "attempt_run_id"]
+          },
           {
             foreignKeyName: "candidate_tags_candidate_id_attempt_run_id_fkey"
             columns: ["candidate_id", "attempt_run_id"]
@@ -363,6 +376,47 @@ export type Database = {
           },
         ]
       }
+      market_supply: {
+        Row: {
+          attempt_run_id: string
+          collected_at: string
+          foreign_net: number
+          individual_net: number
+          institution_net: number
+          market: string
+          program_net: number
+          trading_day: string
+        }
+        Insert: {
+          attempt_run_id: string
+          collected_at?: string
+          foreign_net: number
+          individual_net: number
+          institution_net: number
+          market: string
+          program_net: number
+          trading_day: string
+        }
+        Update: {
+          attempt_run_id?: string
+          collected_at?: string
+          foreign_net?: number
+          individual_net?: number
+          institution_net?: number
+          market?: string
+          program_net?: number
+          trading_day?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_supply_attempt_run_id_fkey"
+            columns: ["attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["run_id"]
+          },
+        ]
+      }
       outcome_events: {
         Row: {
           command_type: string
@@ -425,6 +479,51 @@ export type Database = {
           low?: number
           outcome_id?: string
           result_code?: string
+        }
+        Relationships: []
+      }
+      outcome_strategy_rule_history: {
+        Row: {
+          changed_at: string
+          changed_by: string
+          history_id: string
+          new_cutoff_n: number | null
+          new_sl_pct: number | null
+          new_tp_pct: number | null
+          operation: string
+          previous_cutoff_n: number | null
+          previous_sl_pct: number | null
+          previous_tp_pct: number | null
+          reason: string
+          strategy: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by: string
+          history_id?: string
+          new_cutoff_n?: number | null
+          new_sl_pct?: number | null
+          new_tp_pct?: number | null
+          operation: string
+          previous_cutoff_n?: number | null
+          previous_sl_pct?: number | null
+          previous_tp_pct?: number | null
+          reason: string
+          strategy: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string
+          history_id?: string
+          new_cutoff_n?: number | null
+          new_sl_pct?: number | null
+          new_tp_pct?: number | null
+          operation?: string
+          previous_cutoff_n?: number | null
+          previous_sl_pct?: number | null
+          previous_tp_pct?: number | null
+          reason?: string
+          strategy?: string
         }
         Relationships: []
       }
@@ -526,47 +625,6 @@ export type Database = {
           },
         ]
       }
-      market_supply: {
-        Row: {
-          attempt_run_id: string
-          collected_at: string
-          foreign_net: number
-          individual_net: number
-          institution_net: number
-          market: string
-          program_net: number
-          trading_day: string
-        }
-        Insert: {
-          attempt_run_id: string
-          collected_at?: string
-          foreign_net: number
-          individual_net: number
-          institution_net: number
-          market: string
-          program_net: number
-          trading_day: string
-        }
-        Update: {
-          attempt_run_id?: string
-          collected_at?: string
-          foreign_net?: number
-          individual_net?: number
-          institution_net?: number
-          market?: string
-          program_net?: number
-          trading_day?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "market_supply_attempt_run_id_fkey"
-            columns: ["attempt_run_id"]
-            isOneToOne: false
-            referencedRelation: "runs"
-            referencedColumns: ["run_id"]
-          },
-        ]
-      }
       supply_3day: {
         Row: {
           attempt_run_id: string
@@ -618,6 +676,13 @@ export type Database = {
             foreignKeyName: "supply_3day_candidate_id_attempt_run_id_fkey"
             columns: ["candidate_id", "attempt_run_id"]
             isOneToOne: false
+            referencedRelation: "candidate_supply_hints"
+            referencedColumns: ["candidate_id", "attempt_run_id"]
+          },
+          {
+            foreignKeyName: "supply_3day_candidate_id_attempt_run_id_fkey"
+            columns: ["candidate_id", "attempt_run_id"]
+            isOneToOne: false
             referencedRelation: "candidates"
             referencedColumns: ["candidate_id", "attempt_run_id"]
           },
@@ -648,21 +713,29 @@ export type Database = {
     Views: {
       candidate_supply_hints: {
         Row: {
-          attempt_run_id: string
-          batch_kind: string
-          candidate_id: string
+          attempt_run_id: string | null
+          batch_kind: string | null
+          candidate_id: string | null
           collected_at: string | null
           foreign_net: number | null
-          hint_status: string
+          hint_status: string | null
           individual_net: number | null
           institution_net: number | null
-          investor_net_status: string
+          investor_net_status: string | null
           program_net: number | null
-          slot: string
-          ticker: string
-          trading_day: string
+          slot: string | null
+          ticker: string | null
+          trading_day: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "candidates_attempt_run_id_fkey"
+            columns: ["attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["run_id"]
+          },
+        ]
       }
     }
     Functions: {
@@ -704,10 +777,10 @@ export type Database = {
         }
         Returns: Json
       }
-      get_dashboard_snapshot: { Args: never; Returns: Json }
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
-      get_market_supply: { Args: { p_run_id: string }; Returns: Json }
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
+      get_dashboard_snapshot: { Args: never; Returns: Json }
+      get_market_supply: { Args: { p_run_id: string }; Returns: Json }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
       get_today_disappeared_candidates: {
         Args: { p_run_id: string }
@@ -756,6 +829,26 @@ export type Database = {
           p_payload_hash: string
           p_requested_by: string
           p_trading_day: string
+        }
+        Returns: Json
+      }
+      set_outcome_strategy_rule: {
+        Args: {
+          p_changed_by: string
+          p_cutoff_n: number
+          p_reason: string
+          p_sl_pct: number
+          p_strategy: string
+          p_tp_pct: number
+        }
+        Returns: Json
+      }
+      skip_attempt: {
+        Args: {
+          p_fence_token: number
+          p_lease_token: string
+          p_run_id: string
+          p_skip_reason: string
         }
         Returns: Json
       }

@@ -1,0 +1,52 @@
+# 스프린트 회고 action item 정리(2026-09-09) 경로 manifest.
+# Epic 산출물이 아니라 회고 action item 해결 범위이므로 별도 manifest로 둔다
+# (epic-7-retro-item-30: 범위 게이트를 Epic 단위로 표준화하되, 회고 정리 작업도
+#  같은 도구로 게이트할 수 있게 한다).
+#   python tools/check_epic_scope.py --epic retro-2026-09-09 --range <base> --worktree --clean-tree
+.github/workflows/test.yml
+.gitignore
+_bmad-output/implementation-artifacts/decision-epic-6-item-24-review-migration-squash-policy.md
+_bmad-output/implementation-artifacts/design-epic-2-item-11-heartbeat-저장-격리.md
+_bmad-output/implementation-artifacts/epic-1-retro-item-2-production-verification-2026-09-09.md
+_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md
+_bmad-output/implementation-artifacts/sprint-status.yaml
+apps/batch/heartbeat.py
+apps/batch/ohlcv_cache.py
+apps/batch/scheduler.py
+apps/batch/tags_stage.py
+apps/web/app/api/dispatch/worker/route.ts
+apps/web/lib/dispatch-outbox-worker.test.ts
+apps/web/lib/dispatch-outbox-worker.ts
+backtest/ensemble/grid_search.py
+backtest/indicator_opt/run.py
+backtest/indicator_opt/strategy_ma_derivative.py
+backtest/results_dir.py
+backtest/run.py
+e2e/candidate-surface-scenarios.spec.ts
+e2e/mock-supabase-server.mjs
+infra/supabase/migrations/202609091400_enforce_daily_ohlcv_positive_prices.sql
+infra/supabase/migrations/202609091500_close_outcome_correction_policy.sql
+infra/supabase/migrations/202609091501_normalize_correction_repeat_conflict.sql
+infra/supabase/migrations/202609091600_audit_outcome_strategy_rules.sql
+packages/read-model/src/database.types.ts
+playwright.config.ts
+supabase/.temp/cli-latest
+supabase/.temp/linked-project.json
+tests/batch/test_heartbeat.py
+tests/batch/test_ohlcv_cache.py
+tests/batch/test_scheduler.py
+tests/batch/test_tags_stage.py
+tests/sql/test_daily_ohlcv.sql
+tests/sql/test_outcome_correction_policy.sql
+tests/sql/test_outcome_rebuild.sql
+tests/sql/test_outcome_strategy_rule_audit.sql
+tests/tools/__init__.py
+tests/tools/test_backtest_results_dir.py
+tests/tools/test_check_epic_scope.py
+tests/tools/test_check_outcome_rebuild_fixture_drift.py
+tests/tools/test_check_production_parity.py
+tools/check_epic_scope.py
+tools/check_outcome_rebuild_fixture_drift.py
+tools/check_production_parity.py
+tools/epic-path-manifests/epic-retro-2026-09-09.txt
+tools/production_parity_baseline.json
