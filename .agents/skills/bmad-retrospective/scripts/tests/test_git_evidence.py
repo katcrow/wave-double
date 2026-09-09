@@ -172,6 +172,66 @@ def test_story_attribution_respects_word_boundary(tmp_path):
     assert out["commits"][0]["stories"] == []
 
 
+def test_story_attribution_normalizes_key_spelling(tmp_path):
+    # Epic-1 retro F9: subjects mixed "story 4.2", "story-4-7", "스토리 1-1" while the
+    # sprint-status key is a slug("2-4-운영-백테스트-..."). The short key of each slug must
+    # match across those spellings so the next retro's 자동 귀속이 복구된다.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "f.py").write_text("a\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    (repo / "f.py").write_text("a\nb\n")
+    _git(repo, "commit", "-qam", "feat(batch): implement story 4.2 t1637 supply merge")
+    (repo / "f.py").write_text("a\nb\nc\n")
+    _git(repo, "commit", "-qam", "fix(story-4-7): harden responsive evidence panel")
+    (repo / "f.py").write_text("a\nb\nc\nd\n")
+    _git(repo, "commit", "-qam", "chore: 스토리 1-1 스캐폴딩 동기화")
+
+    out = _json(
+        _proc(
+            "--repo",
+            str(repo),
+            "--range",
+            "HEAD~3..HEAD",
+            "--stories",
+            "1-1-프로젝트-스캐폴딩,4-2-공급-수급-머지,4-7-반응형-패널",
+        )
+    )
+    by_subject = {c["subject"]: c for c in out["commits"]}
+    assert by_subject["feat(batch): implement story 4.2 t1637 supply merge"]["stories"] == ["4-2-공급-수급-머지"]
+    assert by_subject["fix(story-4-7): harden responsive evidence panel"]["stories"] == ["4-7-반응형-패널"]
+    assert by_subject["chore: 스토리 1-1 스캐폴딩 동기화"]["stories"] == ["1-1-프로젝트-스캐폴딩"]
+    # Story 4-3 등 언급되지 않은 slug key는 매칭되지 않는다(단문 key ambiguity 부재).
+    assert by_subject["feat(batch): implement story 4.2 t1637 supply merge"]["stories"] != ["4-7-반응형-패널"]
+
+
+def test_story_attribution_slug_matches_only_its_own_short_key(tmp_path):
+    # A slug's short key must not bleed onto a sibling story: leading tokens
+    # "2-3" only ever name the "2-3" story, never "2-3x-split" or "23-x".
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "f.py").write_text("a\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    (repo / "f.py").write_text("a\nb\n")
+    _git(repo, "commit", "-qam", "merge story 2-3")
+
+    out = _json(
+        _proc(
+            "--repo",
+            str(repo),
+            "--range",
+            "HEAD~1..HEAD",
+            "--stories",
+            "2-3-후보-태깅-stage-저장,23-2-무관,2-3x-split",
+        )
+    )
+    assert out["commits"][0]["stories"] == ["2-3-후보-태깅-stage-저장"]
+
+
 def test_bad_range_errors_as_json(tmp_path):
     repo = _make_repo(tmp_path)
     code, out = _run("--repo", str(repo), "--range", "nope..alsonope")

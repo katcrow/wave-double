@@ -25,6 +25,7 @@
 ## Conventions that differ from defaults
 
 - 전략 A/B/C 태깅은 `specs/spec-wave-double/backtest-baseline.md`의 룰과 일치해야 하고 `backtest/` 커널을 깨뜨리지 말 것 — 커널 테스트가 회귀망이다.
+- 스토리 작업 커밋 제목과 build/review evidence에는 스토리 key를 `story <에픽>-<스토리>` 형식으로 넣는다(예: `feat(story 2-5): ...`). 키는 `_bmad-output/implementation-artifacts/sprint-status.yaml`의 스토리 key slug("2-5-후보-태깅-stage-저장")의 선두 토큰이며, 점(`story 4.2`)이나 하이픈 접미사(`story-2-5`) 등 표기 변형은 회고 `git_evidence.py`가 정규화해 자동 귀속한다.
 
 ## Known pitfalls
 

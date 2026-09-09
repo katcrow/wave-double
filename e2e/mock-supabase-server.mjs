@@ -1,8 +1,53 @@
 import http from "node:http";
+import crypto from "node:crypto";
 
 const USER = { id: "e2e-user", email: "neo@example.test" };
 const RUN_ID = "00000000-0000-4000-8000-000000000004";
 const TRADING_DAY = "2026-09-09";
+const BASE_URL = "http://127.0.0.1:54321";
+const ISS = `${BASE_URL}/auth/v1`;
+const AUD = "authenticated";
+const KID = "e2e-kid";
+
+// Retro epic-1-retro-item-6: 인증된 수동 dispatch 흐름을 e2e에서 자동 검증하기 위해 mock이
+// 실제 Supabase Auth처럼 RS256 서명 JWT를 발급한다. 웹 서버(jwt-verify)는 이 mock이 서빙하는
+// JWKS로 서명을 검증하므로, dispatch 인증 게이트가 운영 배포 전에 끝까지 동작함을 확인할 수 있다.
+const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+
+function b64url(value) {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+function signJwt(overrides = {}) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", kid: KID, typ: "JWT" };
+  const payload = {
+    sub: USER.id,
+    email: USER.email,
+    iss: ISS,
+    aud: AUD,
+    iat: nowSec,
+    exp: nowSec + 3600,
+    role: "authenticated",
+    ...overrides,
+  };
+  const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
+  const signature = crypto.sign("RSA-SHA256", Buffer.from(signingInput, "utf8"), privateKey);
+  return `${signingInput}.${signature.toString("base64url")}`;
+}
+
+function decodeJwt(token) {
+  const parts = String(token ?? "").split(".");
+  if (parts.length !== 3) return null;
+  try {
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+let dispatchCounter = 0;
+const dispatchByIdempotency = new Map();
 
 function sendJson(response, status, body) {
   response.writeHead(status, {
@@ -15,7 +60,23 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
-function rpcPayload(name) {
+function rpcPayload(name, body = {}) {
+  if (name === "request_manual_dispatch") {
+    const idempotencyKey = body?.p_idempotency_key;
+    if (idempotencyKey && dispatchByIdempotency.has(idempotencyKey)) {
+      const existing = dispatchByIdempotency.get(idempotencyKey);
+      return { status: existing.status, dispatch_request_id: existing.dispatch_request_id, reason: "replayed" };
+    }
+    dispatchCounter += 1;
+    const created = {
+      status: "created",
+      dispatch_request_id: `00000000-0000-4000-8000-00000000040${dispatchCounter}`,
+      outbox_id: `00000000-0000-4000-8000-00000000050${dispatchCounter}`,
+      reason: "created",
+    };
+    if (idempotencyKey) dispatchByIdempotency.set(idempotencyKey, created);
+    return created;
+  }
   if (name === "get_dashboard_snapshot") {
     return {
       no_snapshot: false,
@@ -76,20 +137,57 @@ function rpcPayload(name) {
   return null;
 }
 
+function readRequestBody(request) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      if (!chunks.length) return resolve({});
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch {
+        resolve({});
+      }
+    });
+  });
+}
+
 const server = http.createServer((request, response) => {
   if (request.method === "OPTIONS") return sendJson(response, 204, {});
-  const url = new URL(request.url, "http://127.0.0.1");
-  if (url.pathname === "/auth/v1/token") {
-    return sendJson(response, 200, { access_token: "e2e-access-token", refresh_token: "e2e-refresh-token", token_type: "bearer", expires_in: 3600, user: USER });
+  const url = new URL(request.url, BASE_URL);
+
+  if (url.pathname === "/auth/v1/.well-known/jwks.json") {
+    const jwk = { ...publicKey.export({ format: "jwk" }), kid: KID, alg: "RS256", use: "sig" };
+    return sendJson(response, 200, { keys: [jwk] });
   }
+
+  if (url.pathname === "/auth/v1/token") {
+    return sendJson(response, 200, {
+      access_token: signJwt(),
+      refresh_token: "e2e-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      user: USER,
+    });
+  }
+
   if (url.pathname === "/auth/v1/user") {
-    if (request.headers.authorization === "Bearer e2e-access-token") return sendJson(response, 200, USER);
+    const token = request.headers.authorization?.replace(/^Bearer /, "");
+    const claims = decodeJwt(token);
+    if (claims && claims.sub === USER.id && typeof claims.exp === "number" && claims.exp * 1000 > Date.now()) {
+      return sendJson(response, 200, USER);
+    }
     return sendJson(response, 401, { error: "invalid_token" });
   }
+
   if (url.pathname.startsWith("/rest/v1/rpc/")) {
-    const payload = rpcPayload(url.pathname.split("/").pop());
-    return payload === null ? sendJson(response, 404, { message: "unknown rpc" }) : sendJson(response, 200, payload);
+    const name = url.pathname.split("/").pop();
+    return readRequestBody(request).then((body) => {
+      const payload = rpcPayload(name, body);
+      return payload === null ? sendJson(response, 404, { message: "unknown rpc" }) : sendJson(response, 200, payload);
+    });
   }
+
   return sendJson(response, 404, { message: "not found" });
 });
 

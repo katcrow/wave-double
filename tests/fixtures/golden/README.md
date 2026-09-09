@@ -81,6 +81,17 @@ uv run --with pandas --with numpy --with pyarrow \
   `sujung` 플래그, 액면분할 위주)의 조정 방식론이 신호 재현에 무시할 수 있는 수준으로
   동등함을 **별도 단발성 조정-방식론 동등성 검증**으로 확인한 뒤에만 이 gate가 유효하다.
   미검증 상태에서는 Jaccard 통과를 배포 승인의 근거로 신뢰하지 않는다.
+- **검증 현황(2026-08-26)**: `tools/verify_adjustment_equivalence.py`가 98종목 LS
+  `t8410 sujung=Y` 실측과 이 fixture를 동일 창·동일 웜업(`2025-01-01`~)으로 대조해
+  전략별 Jaccard를 산출했다. 결과 A=0.9167/C=0.9167/E=1.0은 통과, **B=0.8750 /
+  D=0.6667 / F=0.7143은 미달**이었다(evidence:
+  `_bmad-output/implementation-artifacts/adjustment-equivalence-2026-08-26.json`).
+  원인은 yfinance와 LS 수정주가의 조정 불일치로, 98종목 중 53종목이 가격 비율 CV>1%
+  (무점프 상수 체계 45종 — 배당조정 방식 차이 ratio 1.02~1.05)이고 19종목은 분할·무상증자
+  점프(091810 전 구간 4.78배 분할 미반영, 000070 2025-11-24 무상증자, 009160 0.72배 등)가
+  관측됐다. 이에 따라 **본 gate는 현재 '미검증 상태'로 유지**하며, fixture를 LS sujung
+  기준으로 재생성하고 재검증하는 것을 backlog로 남긴다. 아래 재생성 후에는 이 항목을
+  재실행해 갱신해야 한다.
 
 ## 게이트 포함
 

@@ -27,6 +27,41 @@ UNIT_SEP = "\x1f"
 # sha, space-separated parents (empty for a root commit), subject.
 LOG_FORMAT = f"--format=%H{UNIT_SEP}%P{UNIT_SEP}%s"
 
+# Epic-1 retro item-7: 자동 귀속을 복구하기 위한 표기 정규화. 스토리 key는 sprint-status의 slug
+# ("2-5-후보-태깅-stage-저장")이고 커밋 제목은 "story 2-5", "story 2.5", "story-2-5",
+# "스토리 2-5" 따위로 표기되어 왔다. 아래 helper들이 제목과 key를 공통 하이픈 단문 기준으로 맞춘다.
+SEPARATOR_VARIANT_RE = re.compile(r"[._]")
+
+
+def _normalize_story_ref(text):
+    """점/밑줄 표기("story 4.2")를 하이픈 표기("story 4-2")로 통일한다."""
+    return SEPARATOR_VARIANT_RE.sub("-", text)
+
+
+def _short_story_key(sid):
+    """sprint-status slug key에서 선두 `<epic>-<story>` 토큰만 남긴다.
+    "2-5-후보-태깅-stage-저장" -> "2-5"; 이미 단문인 key("2-5")는 그대로 둔다."""
+    parts = sid.split("-")
+    if len(parts) >= 2:
+        return "-".join(parts[:2])
+    return sid
+
+
+def _attributed_story_ids(subject, stories):
+    """A subject's story ids, in `--stories` order. Matches the full slug when a
+    subject names it; otherwise its stable short key, across the spelling variants
+    Epic-1 retro F9 documented ("story 4.2", "story-4-7", "스토리 1-1")."""
+    normalized = _normalize_story_ref(subject)
+    matched = []
+    for sid in stories:
+        if re.search(rf"\b{re.escape(sid)}\b", normalized):
+            matched.append(sid)
+            continue
+        short = _short_story_key(sid)
+        if short != sid and re.search(rf"\b{re.escape(short)}\b", normalized):
+            matched.append(sid)
+    return matched
+
 
 def _emit(obj, code=0):
     sys.stdout.write(json.dumps(obj))
@@ -145,12 +180,9 @@ def _parse_log(output, stories):
                     "subject": subject,
                     # Every id the subject names, in --stories order: a commit
                     # spanning two stories belongs to both. Word-boundary match
-                    # so a story id like "1-2" does not also match "11-2".
-                    "stories": [
-                        sid
-                        for sid in stories
-                        if re.search(rf"\b{re.escape(sid)}\b", subject)
-                    ],
+                    # so a story id like "1-2" does not also match "11-2", with
+                    # 표기 변형 정규화(점/밑줄/하이픈, slug 대 단문 key).
+                    "stories": _attributed_story_ids(subject, stories),
                     "is_merge": len(parents.split()) > 1,
                 }
             )

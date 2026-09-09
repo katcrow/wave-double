@@ -14,6 +14,13 @@ const next = spawn(npm, ["run", "dev", "-w", "apps/web", "--", "--port", "3000"]
     ...process.env,
     NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "e2e-publishable-key",
+    // Story 1.10 dispatch 인증 게이트(JWKS/issuer/allowlist/service client)를 e2e에서 가동하도록
+    // mock Supabase(BASE 입력부)와 매칭되는 server-only 환경변수를 함께 주입한다.
+    SUPABASE_JWKS_URL: "http://127.0.0.1:54321/auth/v1/.well-known/jwks.json",
+    SUPABASE_JWT_ISSUER: "http://127.0.0.1:54321/auth/v1",
+    SUPABASE_URL: "http://127.0.0.1:54321",
+    SUPABASE_SERVICE_ROLE_KEY: "e2e-service-role-key",
+    OPERATOR_ALLOWLIST: "neo@example.test",
   },
 });
 

@@ -56,6 +56,21 @@ jobs:
       - name: Build web
         run: npm run build -w apps/web
 
+      # epic-1-retro-item-5 (F6): committed read-model 타입과 프로덕션 스키마의 diff gate.
+      # SUPABASE_ACCESS_TOKEN(기본 브랜치/수동 실행에만 존재)이 있을 때만 재생성해서
+      # git diff --exit-code로 drift를 차단한다. PR에서 token이 없으면 offline lint
+      # (sql-schema-tests 잡)로 대체된다.
+      - name: Regenerate read-model types and diff (production)
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          npm run generate:read-model-types
+          if ! git diff --exit-code -- packages/read-model/src/database.types.ts; then
+            echo "::error::generated read-model types differ from production schema; run npm run generate:read-model-types and commit"
+            exit 1
+          fi
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
@@ -103,6 +118,57 @@ jobs:
             echo "applying $f"
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
           done
+
+      # epic-1-retro-item-5 (F5/F6): N/N-1 forward-upgrade 호환성 gate.
+      # 마지막 migration을 제외한(N-1) DB에 새 migration 하나(N)를 적용했을 때,
+      # clean DB에 전체 migration을 순서대로 적용했을 때와 동일한 스키마가 되는지
+      # pg_dump --schema-only diff로 검증한다. forward-only migration이 이전 스키마를
+      # 깨뜨리거나 clean apply에만 성립하는 순서 의존을 만드는 drift를 PR CI에서 차단한다.
+      - name: N/N-1 forward-upgrade schema parity
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -d postgres -c "create database nm1;"
+          psql -h localhost -U postgres -d postgres -c "create database full_apply;"
+
+          # N-1: 마지막 migration을 제외하고 적용
+          last=$(ls infra/supabase/migrations/*.sql | sort | tail -n 1)
+          lastname=$(basename "$last")
+          for f in $(ls infra/supabase/migrations/*.sql | sort); do
+            case "$(basename "$f")" in
+              *schedule_dispatch_worker_cron.sql) continue ;;
+              "$lastname") echo "N-1: excluding $lastname"; continue ;;
+            esac
+            psql -h localhost -U postgres -d nm1 -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+          # full_apply: 전체 migration 적용 (기준 스킴, N)
+          for f in $(ls infra/supabase/migrations/*.sql | sort); do
+            case "$(basename "$f")" in
+              *schedule_dispatch_worker_cron.sql) continue ;;
+            esac
+            psql -h localhost -U postgres -d full_apply -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+          pg_dump -h localhost -U postgres -d nm1 --schema-only --no-owner --no-comments > /tmp/nm1_before.sql
+          psql -h localhost -U postgres -d nm1 -v ON_ERROR_STOP=1 -f "$last"
+          pg_dump -h localhost -U postgres -d nm1 --schema-only --no-owner --no-comments > /tmp/nm1_after.sql
+          pg_dump -h localhost -U postgres -d full_apply --schema-only --no-owner --no-comments > /tmp/full_apply.sql
+
+          if ! diff -u /tmp/nm1_after.sql /tmp/full_apply.sql; then
+            echo "::error::N-1 + '$lastname' upgrade schema != clean full-apply schema"
+            exit 1
+          fi
+          if diff -u /tmp/nm1_before.sql /tmp/nm1_after.sql > /tmp/n_change.diff; then
+            echo "::warning::N-1 -> N upgrade produced no schema change for '$lastname'"
+          else
+            echo "N-1 -> N schema delta lines: $(wc -l < /tmp/n_change.diff)"
+          fi
+          echo "N/N-1 forward-upgrade parity passed (last=$lastname)"
+
+      - name: Generated read-model type drift lint (offline)
+        run: python tools/check_generated_types_drift.py
 
       - name: Run schema SQL fixtures
         env:

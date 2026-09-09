@@ -59,6 +59,7 @@ development_status:
   2-6-supply_3day-스키마: done
   2-7-오늘의-후보-카드-ui: done
   2-8-장중-시그널-유지-소멸-표시: done
+  2-9-골든-픽스처-ls-sujung-기준-재생성-및-조정-동등성-재검증: backlog
   epic-2-retrospective: done
 
   epic-3: in-progress
@@ -156,20 +157,23 @@ action_items:
     action: "clean DB N/N-1 generated read-model type diff SQL fixture를 포괄하는 migration
       CI를 구현한다."
     owner: "개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md, .github/workflows/test.yml(N/N-1
+      forward-upgrade parity + tools/check_generated_types_drift.py)"
   - id: "epic-1-retro-item-6-운영-배포-전-인증된-수동-dispatch-및-csp를-다루는-playw"
     epic: 1
     action: "운영 배포 전 인증된 수동 dispatch 및 CSP를 다루는 Playwright MCP smoke를 추가한다."
     owner: "QA/개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md, e2e/dispatch-smoke.spec.ts(JWKS
+      mock + 202/403/401/CSP 4테스트)"
   - id: "epic-1-retro-item-7-스토리-key를-커밋-제목과-build-review-evidence에-표"
     epic: 1
     action: "스토리 key를 커밋 제목과 build/review evidence에 표준화한다."
     owner: "개발 프로세스"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-02-2026.md, AGENTS.md(Conventions
+      bullet), .agents/.claude skills bmad-retrospective git_evidence.py 표기 정규화 + 테스트"
   - id: "epic-2-retro-item-8-공통-scheduler-fake와-batch-regression을-syn"
     epic: 2
     action: "공통 scheduler fake와 batch regression을 sync_vanished protocol에 맞게 수정하고
@@ -190,8 +194,11 @@ action_items:
     action: "LS sujung=Y와 backtest raw fixture의 adjustment equivalence 검증을 Epic 3
       진입 gate로 추가한다."
     owner: "전략/개발"
-    status: open
-    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-03-2026.md, tools/verify_adjustment_equivalence.py,
+      _bmad-output/implementation-artifacts/adjustment-equivalence-2026-08-26.json (게이트 FAIL:
+      B/D/F Jaccard 0.875/0.667/0.714, yfinance vs LS 수정주가 불일치 53종·점프 19종 —
+      판정 기준 '골든 gate는 미검증 상태 유지, fixture LS 기준 재생성은 backlog)",
   - id: "epic-2-retro-item-11-장시간-tags-stage에-heartbeat-lease-연장과-저장-실"
     epic: 2
     action: "장시간 tags stage에 heartbeat/lease 연장과 저장 실패 격리 정책을 설계한다."
