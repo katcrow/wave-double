@@ -651,7 +651,7 @@ export type Database = {
           attempt_run_id: string
           batch_kind: string
           candidate_id: string
-          collected_at: string
+          collected_at: string | null
           foreign_net: number | null
           hint_status: string
           individual_net: number | null

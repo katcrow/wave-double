@@ -2,7 +2,7 @@
 title: 'Story 4.9: 좋은 수급 힌트 계산 view'
 type: 'feature'
 created: '2026-09-09'
-status: 'done'
+status: 'in-review'
 review_loop_iteration: 0
 followup_review_recommended: true
 context:
@@ -44,7 +44,7 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 - `infra/supabase/migrations/202609081201_harden_get_candidate_evidence_attempt_scope.sql:6-103` -- published read RPC의 security-definer, 복합 attempt 경계, anon/authenticated execute grant 패턴을 재사용한다.
 - `infra/supabase/migrations/202609070900_supply_3day_publish_guard.sql:215-347` -- `runs`의 stage/publish/current-complete 구조와 `batch_kind`를 확인하는 기존 계약이다.
 - `packages/domain/domain/__init__.py` 및 `packages/domain/domain/*.py` -- 외부 I/O 없는 Python 도메인 규칙의 공개/테스트 패턴이다.
-- `packages/read-model/src/database.types.ts:1700-1740` -- generated read-model의 `Views`/`Functions` 계약을 새 view와 RPC에 맞춰 갱신한다.
+- `packages/read-model/src/database.types.ts:649-710` -- generated read-model의 `Views`/`Functions` 계약을 새 view와 RPC에 맞춰 갱신한다.
 - `tests/fixtures/supply_hint_cases.csv` -- Python 단위 테스트와 SQL migration gate가 공유하는 양수/0/음수/NULL/장중 fixture다.
 - `tests/sql/test_supply_hints.sql` -- view 계산, RPC attempt 격리, NULL/0 구분, ACL을 rollback fixture로 검증한다.
 - `.github/workflows/test.yml` -- domain 테스트와 SQL fixture 실행 목록에 새 검증을 등록한다.
@@ -76,6 +76,12 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 - 자체 검토에서 임계값(`> 0`), NULL/상태 구분, close/intraday 분기, 최신 D0 선택, active tag, published/current-complete attempt, 원본 table/view ACL을 diff와 운영 fixture로 재확인했다.
 - 운영 fixture 작성 중 발견한 provenance·market publish 선행계약 누락과 close/intraday attempt 혼합을 fixture에 보완했으며, 제품 코드의 triage 대상 결함은 남지 않았다.
 
+### 2026-09-09 — 독립 리뷰 patch 보완
+- 운영 적용 migration `202609091000`과 intent-contract는 보존하고 `202609091001_harden_candidate_supply_hints.sql`을 forward-only로 추가했다.
+- candidate trading_day와 일치하는 D0만 view가 선택하고, D0가 없는 active 후보는 `missing`/`undetermined` nullable payload로 RPC에 포함되도록 보완했다.
+- Python/SQL 공유 fixture에 slot 및 foreign_net 0/음수 경계를 추가하고 SQL fixture와 CSV drift 검사를 고정했다.
+- RPC 전체 payload, authenticated role 조건부 호출, dashboard nullable 타입과 웹 runtime validator/literal narrowing 테스트를 추가했다.
+
 ## Design Notes
 
 `good`/`not_met`/`undetermined`는 저장·전송용 안정적 코드이며 한국어 라벨은 Story 4.10 UI가 매핑한다. SQL view가 `batch_kind='close'`까지 확인하므로 upstream 상태가 잘못 확정된 장중 행도 좋은 수급으로 노출되지 않는다. RPC는 후보의 `trading_day`와 D0를 묶어 같은 attempt의 과거 행이나 다른 attempt의 후보가 섞이지 않게 한다.
@@ -102,18 +108,18 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 **SQL 판정 및 공개 경계**
 
 - 최신 D0와 세 투자자 임계값을 한 view에서 계산한다.
-  [`202609091000_create_candidate_supply_hints.sql:5`](../../infra/supabase/migrations/202609091000_create_candidate_supply_hints.sql#L5)
+  [`202609091001_harden_candidate_supply_hints.sql:5`](../../infra/supabase/migrations/202609091001_harden_candidate_supply_hints.sql#L5)
 
 - published current complete attempt와 active tag 후보만 RPC로 제한한다.
-  [`202609091000_create_candidate_supply_hints.sql:67`](../../infra/supabase/migrations/202609091000_create_candidate_supply_hints.sql#L67)
+  [`202609091001_harden_candidate_supply_hints.sql:76`](../../infra/supabase/migrations/202609091001_harden_candidate_supply_hints.sql#L76)
 
 - 원본 table/view 직접 SELECT를 차단하고 RPC 실행 권한만 부여한다.
-  [`202609091000_create_candidate_supply_hints.sql:130`](../../infra/supabase/migrations/202609091000_create_candidate_supply_hints.sql#L130)
+  [`202609091001_harden_candidate_supply_hints.sql:132`](../../infra/supabase/migrations/202609091001_harden_candidate_supply_hints.sql#L132)
 
 **Python 기준 규칙**
 
 - SQL과 동일한 close·confirmed·엄격한 양수 판정을 순수 함수로 고정한다.
-  [`supply_hint.py:20`](../../packages/domain/domain/supply_hint.py#L20)
+  [`supply_hint.py:33`](../../packages/domain/domain/supply_hint.py#L33)
 
 **회귀·소비 계약**
 
@@ -125,6 +131,9 @@ baseline_commit: '6810878917cfbf6e2fa74d7d93e7add242b961ea'
 
 - 다음 UI 스토리가 사용할 view/RPC 반환 shape와 3상태를 확인한다.
   [`dashboard-types.ts:74`](../../apps/web/lib/dashboard-types.ts#L74)
+
+- RPC row의 nullable missing payload와 literal narrowing을 웹 경계에서 검증한다.
+  [`supply-hints.ts:38`](../../apps/web/lib/supply-hints.ts#L38)
 
 - domain 및 SQL fixture가 CI에서 실행되도록 등록한다.
   [`test.yml:34`](../../.github/workflows/test.yml#L34)

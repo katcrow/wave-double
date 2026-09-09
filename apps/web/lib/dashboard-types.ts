@@ -83,7 +83,7 @@ export interface CandidateSupplyHintRpcRow {
   individual_net: number | null;
   program_net: number | null;
   investor_net_status: EvidenceInvestorStatus;
-  collected_at: string;
+  collected_at: string | null;
   hint_status: SupplyHintStatus;
 }
 
