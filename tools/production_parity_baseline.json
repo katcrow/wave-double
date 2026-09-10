@@ -1,6 +1,6 @@
 {
   "project_ref": "qqhjeumlecaudsiqhhdu",
-  "captured_at": "2026-09-09",
+  "captured_at": "2026-09-10",
   "migrations": [
     "202609021500_create_daily_ohlcv",
     "202609021600_create_candidate_tags",
@@ -57,6 +57,9 @@
     "202609101300_create_outcome_win_rate_pf_gated",
     "202609101400_fix_gated_profit_factor_comment",
     "202609101500_create_outcome_win_rate_pf_ci_gated",
+    "202609101600_create_outcome_win_rate_pf_threshold_gated",
+    "202609101601_harden_outcome_win_rate_pf_threshold_gated",
+    "202609101602_finalize_outcome_win_rate_pf_threshold_comment",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_outcome_win_rate_pf",

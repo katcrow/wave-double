@@ -61,3 +61,11 @@ tests/fixtures/outcome_win_rate_pf_ci_gated/input_cases.json
 tests/sql/test_outcome_win_rate_pf_ci_gated.sql
 tools/check_outcome_win_rate_pf_ci_parity.py
 tests/tools/test_check_outcome_win_rate_pf_ci_parity.py
+_bmad-output/implementation-artifacts/spec-5-9-이탈-임계값-보조-표시.md
+infra/supabase/migrations/202609101600_create_outcome_win_rate_pf_threshold_gated.sql
+infra/supabase/migrations/202609101601_harden_outcome_win_rate_pf_threshold_gated.sql
+infra/supabase/migrations/202609101602_finalize_outcome_win_rate_pf_threshold_comment.sql
+tests/fixtures/outcome_win_rate_pf_threshold_gated/input_cases.json
+tests/sql/test_outcome_win_rate_pf_threshold_gated.sql
+tools/check_outcome_win_rate_pf_threshold_parity.py
+tests/tools/test_check_outcome_win_rate_pf_threshold_parity.py
