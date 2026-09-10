@@ -28,3 +28,9 @@
 
 - `revoke select on table ... from public, anon, authenticated`가 실제로 anon/authenticated 역할의 SELECT를 차단하는지 검증하는 자동 테스트가 없다(`infra/supabase/migrations/202609101200_create_outcome_win_rate_pf_by_strategy_source.sql`). 현재는 Supabase 대시보드 수동 확인에만 의존한다("Manual checks" 섹션). Story 5-5의 동일 view(`candidate_outcome_win_rate_pf`)부터 있던 기존 gap으로, 향후 migration이 실수로 재부여(re-grant)해도 CI가 잡지 못한다. 두 view를 함께 다루는 별도 스토리/작업에서 anon/authenticated role로 실제 select 시도 후 실패를 assert하는 SQL 테스트를 추가해야 한다.
 - `tools/check_outcome_win_rate_pf_source_parity.py`의 SQL 리터럴 파서(`_extract_value_tuples`/`_split_preserving_quotes`)가 이스케이프된 따옴표(`''`)나 따옴표로 감싼 문자열 안의 괄호를 처리하지 못한다. 5-5의 `check_outcome_win_rate_pf_parity.py`에서 그대로 상속된 패턴이며, 두 도구 모두 현재 fixture 데이터(티커 등)에는 해당 문자가 없어 실제로 유발되지 않는다. fixture에 특수문자가 포함된 값이 추가될 일이 생기면 두 도구를 함께 강화해야 한다.
+
+## Deferred from: code review of story-5-7 (2026-09-10)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-7-표본-게이트-30건-처리.md`
+  summary: `tools/production_parity_baseline.json`에 이번 스토리와 무관한 사전 drift(주로 `write_stage` 함수의 `search_path`가 `public`에서 `pg_catalog`로 바뀐 것)가 `--write-baseline` 갱신 과정에서 함께 반영됐다 — 원인을 확인하고 의도된 변경인지 문서화한다.
+  evidence: 운영 DB에 `pg_proc.proconfig`를 직접 질의해 `write_stage`의 실제 `search_path`가 이미 `pg_catalog`임을 확인했다. 이 스토리의 마이그레이션(`202609101300_create_outcome_win_rate_pf_gated.sql`, `202609101400_fix_gated_profit_factor_comment.sql`)은 `write_stage`를 전혀 건드리지 않으므로, 이 값 변경은 이전 스토리(추정: 5-4 전후)에서 발생한 뒤 baseline에 반영되지 않고 있던 drift가 이번 갱신에서 우연히 함께 포착된 것이다. code review 3개 레이어(blind-hunter, edge-case-hunter, verification-gap) 모두 독립적으로 이 변경을 지적했다.

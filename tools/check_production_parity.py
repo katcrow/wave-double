@@ -66,6 +66,9 @@ LOCAL_ONLY_MIGRATIONS = {
     "202609032200_add_outcome_correction_mechanism": "prod는 add_outcome_correction_mechanism이라는 다른 이름으로 적용",
     "202609032201_fix_outcome_correction_review_patch": "prod는 fix_outcome_correction_review_patch라는 다른 이름으로 적용",
     "202609042200_enforce_delisted_termination": "prod 적용 시 이름/스쿼시 경로가 다름(운영 반영 확인됨)",
+    "202609100200_bias_close_stage": "prod는 20260910020000_bias_close_stage라는 다른 timestamp로 적용(운영 반영 확인됨)",
+    "202609101100_create_outcome_win_rate_pf": "prod는 create_outcome_win_rate_pf라는 timestamp 접두사 없는 이름으로 적용(운영 반영 확인됨)",
+    "202609101200_create_outcome_win_rate_pf_by_strategy_source": "prod는 create_outcome_win_rate_pf_by_strategy_source라는 timestamp 접두사 없는 이름으로 적용(운영 반영 확인됨)",
 }
 
 # prod에는 있고 로컬 파일이 없는 migration. 다른 이름/스쿼시로 적용된 것.
@@ -76,6 +79,9 @@ PROD_ONLY_MIGRATIONS = {
     "add_skip_attempt_rpc": "로컬 202609012300_add_skip_attempt의 운영명",
     "epic4-091300-strict-adjusted-evidence-rate": "운영 수동 보정 migration(스토리 4.13 계약)",
     "epic1_fix_add_run_lineage_and_dashboard_snapshot": "초기 13개 migration을 스쿼시한 운영 migration",
+    "20260910020000_bias_close_stage": "로컬 202609100200_bias_close_stage 적용 시 timestamp가 다르게 기록된 운영명(story 5-4)",
+    "create_outcome_win_rate_pf": "로컬 202609101100_create_outcome_win_rate_pf 적용 시 timestamp 접두사 없이 기록된 운영명(story 5-5)",
+    "create_outcome_win_rate_pf_by_strategy_source": "로컬 202609101200_create_outcome_win_rate_pf_by_strategy_source 적용 시 timestamp 접두사 없이 기록된 운영명(story 5-6)",
 }
 
 # prod에만 존재하고 로컬 migration이 선언하지 않아도 정상인 함수.

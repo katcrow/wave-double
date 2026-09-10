@@ -855,6 +855,25 @@ export type Database = {
         }
         Relationships: []
       }
+      candidate_outcome_win_rate_pf_by_strategy_gated: {
+        Row: {
+          delisted_count: number | null
+          gross_loss: number | null
+          gross_win: number | null
+          losses: number | null
+          open_count: number | null
+          profit_factor: number | null
+          sample_gate_label: string | null
+          sample_gate_min_required: number | null
+          sample_gate_passed: boolean | null
+          strategy: string | null
+          suspended_count: number | null
+          total_settled: number | null
+          win_rate: number | null
+          wins: number | null
+        }
+        Relationships: []
+      }
       candidate_outcome_win_rate_pf_by_strategy_source: {
         Row: {
           delisted_count: number | null

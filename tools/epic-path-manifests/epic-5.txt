@@ -47,3 +47,11 @@ tests/fixtures/outcome_win_rate_pf_by_strategy_source/input_cases.json
 tests/sql/test_outcome_win_rate_pf_by_strategy_source.sql
 tools/check_outcome_win_rate_pf_source_parity.py
 tests/tools/test_check_outcome_win_rate_pf_source_parity.py
+_bmad-output/implementation-artifacts/spec-5-7-표본-게이트-30건-처리.md
+infra/supabase/migrations/202609101300_create_outcome_win_rate_pf_gated.sql
+infra/supabase/migrations/202609101400_fix_gated_profit_factor_comment.sql
+tests/fixtures/outcome_win_rate_pf_gated/input_cases.json
+tests/sql/test_outcome_win_rate_pf_gated.sql
+tools/check_outcome_win_rate_pf_gate_parity.py
+tests/tools/test_check_outcome_win_rate_pf_gate_parity.py
+tools/check_production_parity.py
