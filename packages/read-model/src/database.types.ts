@@ -891,6 +891,29 @@ export type Database = {
         }
         Relationships: []
       }
+      candidate_outcome_win_rate_pf_ci_gated: {
+        Row: {
+          ci_lower: number | null
+          ci_upper: number | null
+          delisted_count: number | null
+          expected_in_ci: boolean | null
+          expected_win_rate: number | null
+          gross_loss: number | null
+          gross_win: number | null
+          losses: number | null
+          open_count: number | null
+          profit_factor: number | null
+          sample_gate_label: string | null
+          sample_gate_min_required: number | null
+          sample_gate_passed: boolean | null
+          strategy: string | null
+          suspended_count: number | null
+          total_settled: number | null
+          win_rate: number | null
+          wins: number | null
+        }
+        Relationships: []
+      }
       candidate_supply_hints: {
         Row: {
           attempt_run_id: string | null

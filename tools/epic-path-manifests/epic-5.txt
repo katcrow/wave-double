@@ -55,3 +55,9 @@ tests/sql/test_outcome_win_rate_pf_gated.sql
 tools/check_outcome_win_rate_pf_gate_parity.py
 tests/tools/test_check_outcome_win_rate_pf_gate_parity.py
 tools/check_production_parity.py
+_bmad-output/implementation-artifacts/spec-5-8-95-신뢰구간-계산-기대치-판정.md
+infra/supabase/migrations/202609101500_create_outcome_win_rate_pf_ci_gated.sql
+tests/fixtures/outcome_win_rate_pf_ci_gated/input_cases.json
+tests/sql/test_outcome_win_rate_pf_ci_gated.sql
+tools/check_outcome_win_rate_pf_ci_parity.py
+tests/tools/test_check_outcome_win_rate_pf_ci_parity.py
