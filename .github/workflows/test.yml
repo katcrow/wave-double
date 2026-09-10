@@ -211,6 +211,11 @@ jobs:
       - name: Outcome win_rate_pf threshold gated parity check
         run: python tools/check_outcome_win_rate_pf_threshold_parity.py
 
+      # story 5-10: 5-9 성과 판정을 보존한 컷오프 편향 고지의 JSON ↔ SQL ↔ Python
+      # 기준값·정밀도·A/B/C 매핑·D/E/F/rollup NULL 계약 동등성 검증
+      - name: Outcome cutoff bias notice parity check
+        run: python tools/check_outcome_cutoff_bias_notice_parity.py
+
       # epic-3-retro-item-17 (fixture 자동 수집): 이전에는 fixture 경로를 이 자리에 손으로
       # 나열했다 -- 새 fixture를 추가하고 이 목록에 넣는 것을 잊으면 CI가 조용히 통과했다.
       # 이제 tests/sql/*.sql 전체를 정렬해 돌리므로 파일을 두는 것만으로 게이트에 들어온다.
