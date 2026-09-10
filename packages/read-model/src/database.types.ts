@@ -840,6 +840,21 @@ export type Database = {
           },
         ]
       }
+      candidate_outcome_win_rate_pf: {
+        Row: {
+          delisted_count: number | null
+          gross_loss: number | null
+          gross_win: number | null
+          losses: number | null
+          open_count: number | null
+          profit_factor: number | null
+          suspended_count: number | null
+          total_settled: number | null
+          win_rate: number | null
+          wins: number | null
+        }
+        Relationships: []
+      }
       candidate_supply_hints: {
         Row: {
           attempt_run_id: string | null
@@ -878,6 +893,18 @@ export type Database = {
         }
         Returns: Json
       }
+      append_bias_event: {
+        Args: {
+          p_calculation_meta: Json
+          p_event_id: string
+          p_fence_token: number
+          p_lease_token: string
+          p_rows: Json
+          p_run_id: string
+          p_status: string
+        }
+        Returns: Json
+      }
       apply_outcome_correction: {
         Args: {
           p_expected_version: number
@@ -904,6 +931,10 @@ export type Database = {
           p_strategy: string
           p_ticker: string
         }
+        Returns: Json
+      }
+      get_bias_population: {
+        Args: { p_fence_token: number; p_lease_token: string; p_run_id: string }
         Returns: Json
       }
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }

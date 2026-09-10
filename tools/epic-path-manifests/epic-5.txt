@@ -34,3 +34,10 @@ tests/batch/test_scheduler.py
 tests/batch/test_main.py
 tests/domain/test_run_state.py
 tests/sql/test_bias_close_stage.sql
+_bmad-output/implementation-artifacts/spec-5-5-승률-pf-핵심-산식-view-전체-기준.md
+.github/workflows/test.yml
+infra/supabase/migrations/202609101100_create_outcome_win_rate_pf.sql
+tests/fixtures/outcome_win_rate_pf/input_cases.json
+tests/sql/test_outcome_win_rate_pf.sql
+tools/check_outcome_win_rate_pf_parity.py
+tests/tools/test_check_outcome_win_rate_pf_parity.py
