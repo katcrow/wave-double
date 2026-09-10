@@ -304,7 +304,12 @@ def compare_gate_rows(a_rows: list[dict], b_rows: list[dict], a_label: str, b_la
     for key in sorted((set(by_a) & set(by_b)), key=str):
         a_row, b_row = by_a[key], by_b[key]
         for f in int_fields:
-            av, bv = int(a_row[f]), int(b_row[f])
+            av, bv = a_row.get(f), b_row.get(f)
+            if av is None or bv is None:
+                if av != bv:
+                    errors.append(f"strategy={key!r} {f} 불일치: {a_label}={av!r} vs {b_label}={bv!r}")
+                continue
+            av, bv = int(av), int(bv)
             if av != bv:
                 errors.append(f"strategy={key!r} {f} 불일치: {a_label}={av} vs {b_label}={bv}")
         for f in gross_fields:

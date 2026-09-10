@@ -216,6 +216,23 @@ def test_all_loss_gate_passed_group_has_null_profit_factor() -> None:
     assert z_row["profit_factor"] is None
 
 
+def test_zero_settled_group_has_null_gate_fields() -> None:
+    """종결 거래가 0건(전부 OPEN)인 전략은 게이트를 통과할 수 없고 win_rate/profit_factor는
+    NULL이어야 한다 — SQL fixture의 NO_SETTLED 시나리오(`tests/sql/test_outcome_win_rate_pf_gated.sql`)를
+    Python 기준값 계산에도 동일하게 고정한다."""
+    rows = [
+        {"strategy": "NOSETTLE", "status": "OPEN", "return_pct": None}
+        for _ in range(3)
+    ]
+    ref_rows = parity.compute_reference_rows(rows)
+    row = next(r for r in ref_rows if r["strategy"] == "NOSETTLE")
+    assert row["total_settled"] == 0
+    assert row["sample_gate_passed"] is False
+    assert row["win_rate"] is None
+    assert row["profit_factor"] is None
+    assert row["sample_gate_label"] == "표본 부족 (0/30)"
+
+
 def test_rounding_equal_values_are_not_drift(repo_fixtures: dict) -> None:
     """round 4 결과가 같은 값(0.5 vs 0.5000)은 drift로 잡지 않는다."""
     fixture = copy.deepcopy(repo_fixtures["fixture"])
