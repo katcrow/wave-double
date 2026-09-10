@@ -1,0 +1,61 @@
+{
+  "outcomes": [
+    {"ticker": "A0001", "strategy": "A", "entry_date": "2098-05-01", "entry_price": 1000, "status": "TP", "exit_date": "2098-05-03", "exit_price": 1029, "return_pct": 2.9, "cutoff_n": 30, "holding_days": 2, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0002", "strategy": "B", "entry_date": "2098-05-01", "entry_price": 2000, "status": "SL", "exit_date": "2098-05-03", "exit_price": 1940, "return_pct": -3.0, "cutoff_n": 30, "holding_days": 2, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0003", "strategy": "C", "entry_date": "2098-05-02", "entry_price": 5000, "status": "TIMEOUT", "exit_date": "2098-06-01", "exit_price": 5075, "return_pct": 1.5, "cutoff_n": 30, "holding_days": 30, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0004", "strategy": "A", "entry_date": "2098-05-02", "entry_price": 1000, "status": "TIMEOUT", "exit_date": "2098-06-01", "exit_price": 980, "return_pct": -2.0, "cutoff_n": 30, "holding_days": 30, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0005", "strategy": "B", "entry_date": "2098-05-03", "entry_price": 3000, "status": "TP", "exit_date": "2098-05-05", "exit_price": 3060, "return_pct": 2.0, "cutoff_n": 30, "holding_days": 2, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0006", "strategy": "C", "entry_date": "2098-05-03", "entry_price": 4000, "status": "SL", "exit_date": "2098-05-05", "exit_price": 3840, "return_pct": -4.0, "cutoff_n": 30, "holding_days": 2, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0007", "strategy": "A", "entry_date": "2098-05-04", "entry_price": 1000, "status": "OPEN", "exit_date": null, "exit_price": null, "return_pct": null, "cutoff_n": 30, "holding_days": 0, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0008", "strategy": "B", "entry_date": "2098-05-04", "entry_price": 2000, "status": "SUSPENDED", "exit_date": null, "exit_price": null, "return_pct": null, "cutoff_n": 30, "holding_days": 0, "tp_pct": 3.0, "sl_pct": 3.0},
+    {"ticker": "A0009", "strategy": "C", "entry_date": "2098-05-05", "entry_price": 5000, "status": "DELISTED", "exit_date": "2098-05-10", "exit_price": 4800, "return_pct": null, "cutoff_n": 30, "holding_days": 5, "tp_pct": 3.0, "sl_pct": 3.0}
+  ],
+  "logical_runs": [
+    {"logical_run_key": "close:2098-05-01", "trading_day": "2098-05-01", "batch_kind": "close"},
+    {"logical_run_key": "close:2098-05-02", "trading_day": "2098-05-02", "batch_kind": "close"},
+    {"logical_run_key": "close:2098-05-03", "trading_day": "2098-05-03", "batch_kind": "close"},
+    {"logical_run_key": "close:2098-05-04", "trading_day": "2098-05-04", "batch_kind": "close"}
+  ],
+  "canonicals": [
+    {"trading_day": "2098-05-01", "attempt_run_id": "10000000-0000-0000-0000-000000000001"},
+    {"trading_day": "2098-05-02", "attempt_run_id": "10000000-0000-0000-0000-000000000002"},
+    {"trading_day": "2098-05-03", "attempt_run_id": "10000000-0000-0000-0000-000000000003"},
+    {"trading_day": "2098-05-04", "attempt_run_id": "10000000-0000-0000-0000-000000000004"}
+  ],
+  "candidates": [
+    {"candidate_id": "00000000-0000-0000-0000-000000000001", "ticker": "A0001", "trading_day": "2098-05-01", "attempt_run_id": "10000000-0000-0000-0000-000000000001", "trading_value": 1000000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000002", "ticker": "A0002", "trading_day": "2098-05-01", "attempt_run_id": "10000000-0000-0000-0000-000000000001", "trading_value": 2000000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000003", "ticker": "A0003", "trading_day": "2098-05-02", "attempt_run_id": "10000000-0000-0000-0000-000000000002", "trading_value": 3000000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000004", "ticker": "A0004", "trading_day": "2098-05-02", "attempt_run_id": "10000000-0000-0000-0000-000000000002", "trading_value": 1500000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000005", "ticker": "A0005", "trading_day": "2098-05-03", "attempt_run_id": "10000000-0000-0000-0000-000000000003", "trading_value": 2500000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000006", "ticker": "A0006", "trading_day": "2098-05-03", "attempt_run_id": "10000000-0000-0000-0000-000000000003", "trading_value": 4000000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000007", "ticker": "A0007", "trading_day": "2098-05-04", "attempt_run_id": "10000000-0000-0000-0000-000000000004", "trading_value": 3500000000},
+    {"candidate_id": "00000000-0000-0000-0000-000000000008", "ticker": "A0008", "trading_day": "2098-05-04", "attempt_run_id": "10000000-0000-0000-0000-000000000004", "trading_value": 4500000000}
+  ],
+  "contributors": [
+    {"ticker": "A0001", "source": "t1859", "contribution_weight": 1.0},
+    {"ticker": "A0002", "source": "t1852", "contribution_weight": 1.0},
+    {"ticker": "A0003", "source": "t1852", "contribution_weight": 0.7},
+    {"ticker": "A0003", "source": "t1859", "contribution_weight": 0.3},
+    {"ticker": "A0004", "source": "t1859", "contribution_weight": 0.5},
+    {"ticker": "A0004", "source": "t1852", "contribution_weight": 0.5},
+    {"ticker": "A0005", "source": "t1856", "contribution_weight": 1.0},
+    {"ticker": "A0006", "source": "t1859", "contribution_weight": 1.0},
+    {"ticker": "A0007", "source": "t1859", "contribution_weight": 1.0},
+    {"ticker": "A0008", "source": "t1852", "contribution_weight": 1.0}
+  ],
+  "expected_cells": [
+    {"strategy": "A", "source": "t1859", "total_settled": 2, "wins": 1, "losses": 1, "open_count": 1, "suspended_count": 0, "delisted_count": 0, "gross_win": 2.9, "gross_loss": 2.0, "win_rate": 0.5000, "profit_factor": 1.4500},
+    {"strategy": "B", "source": "t1852", "total_settled": 1, "wins": 0, "losses": 1, "open_count": 0, "suspended_count": 1, "delisted_count": 0, "gross_win": null, "gross_loss": 3.0, "win_rate": 0.0000, "profit_factor": null},
+    {"strategy": "B", "source": "t1856", "total_settled": 1, "wins": 1, "losses": 0, "open_count": 0, "suspended_count": 0, "delisted_count": 0, "gross_win": 2.0, "gross_loss": null, "win_rate": 1.0000, "profit_factor": null},
+    {"strategy": "C", "source": "t1852", "total_settled": 1, "wins": 1, "losses": 0, "open_count": 0, "suspended_count": 0, "delisted_count": 0, "gross_win": 1.5, "gross_loss": null, "win_rate": 1.0000, "profit_factor": null},
+    {"strategy": "C", "source": "t1859", "total_settled": 1, "wins": 0, "losses": 1, "open_count": 0, "suspended_count": 0, "delisted_count": 0, "gross_win": null, "gross_loss": 4.0, "win_rate": 0.0000, "profit_factor": null},
+    {"strategy": "C", "source": null, "total_settled": 0, "wins": 0, "losses": 0, "open_count": 0, "suspended_count": 0, "delisted_count": 1, "gross_win": null, "gross_loss": null, "win_rate": null, "profit_factor": null}
+  ],
+  "expected_overall": {
+    "total_settled": 6, "wins": 3, "losses": 3,
+    "open_count": 1, "suspended_count": 1, "delisted_count": 1,
+    "gross_win": 6.4, "gross_loss": 9.0,
+    "win_rate": 0.5000, "profit_factor": 0.7111
+  }
+}

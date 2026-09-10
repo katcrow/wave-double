@@ -41,3 +41,9 @@ tests/fixtures/outcome_win_rate_pf/input_cases.json
 tests/sql/test_outcome_win_rate_pf.sql
 tools/check_outcome_win_rate_pf_parity.py
 tests/tools/test_check_outcome_win_rate_pf_parity.py
+_bmad-output/implementation-artifacts/spec-5-6-전략별-원천별-분리-view.md
+infra/supabase/migrations/202609101200_create_outcome_win_rate_pf_by_strategy_source.sql
+tests/fixtures/outcome_win_rate_pf_by_strategy_source/input_cases.json
+tests/sql/test_outcome_win_rate_pf_by_strategy_source.sql
+tools/check_outcome_win_rate_pf_source_parity.py
+tests/tools/test_check_outcome_win_rate_pf_source_parity.py

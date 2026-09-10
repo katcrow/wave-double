@@ -23,3 +23,8 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-1-epic7-계약-보강.md`
   summary: 컴파일된 Epic 4 context의 수동 보강 내용을 원천 planning artifact와 동기화하는 생성 파이프라인을 정리한다.
   evidence: `epic-4-context.md`는 planning artifact에서 재생성되는 캐시 문서이므로 수동으로 추가한 운영/전략 계약이 재생성 시 덮어써질 수 있다. 이번 보강에서는 유효한 최신 context를 유지했지만, 생성기 입력과 캐시 동기화 정책은 별도 프로세스 작업이다.
+
+## Deferred from: code review of story-5-6 (2026-09-10)
+
+- `revoke select on table ... from public, anon, authenticated`가 실제로 anon/authenticated 역할의 SELECT를 차단하는지 검증하는 자동 테스트가 없다(`infra/supabase/migrations/202609101200_create_outcome_win_rate_pf_by_strategy_source.sql`). 현재는 Supabase 대시보드 수동 확인에만 의존한다("Manual checks" 섹션). Story 5-5의 동일 view(`candidate_outcome_win_rate_pf`)부터 있던 기존 gap으로, 향후 migration이 실수로 재부여(re-grant)해도 CI가 잡지 못한다. 두 view를 함께 다루는 별도 스토리/작업에서 anon/authenticated role로 실제 select 시도 후 실패를 assert하는 SQL 테스트를 추가해야 한다.
+- `tools/check_outcome_win_rate_pf_source_parity.py`의 SQL 리터럴 파서(`_extract_value_tuples`/`_split_preserving_quotes`)가 이스케이프된 따옴표(`''`)나 따옴표로 감싼 문자열 안의 괄호를 처리하지 못한다. 5-5의 `check_outcome_win_rate_pf_parity.py`에서 그대로 상속된 패턴이며, 두 도구 모두 현재 fixture 데이터(티커 등)에는 해당 문자가 없어 실제로 유발되지 않는다. fixture에 특수문자가 포함된 값이 추가될 일이 생기면 두 도구를 함께 강화해야 한다.
