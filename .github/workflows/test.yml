@@ -32,7 +32,7 @@ jobs:
         run: uv run --with pandas --with numpy --with pyarrow --with pytest pytest backtest -q
 
       - name: Domain and calendar tests (Python)
-        run: uv run --with pytest pytest tests/domain/test_calendar.py tests/domain/test_supply_hint.py tests/batch/test_calendar.py -q
+        run: uv run --with pytest pytest tests/domain/test_calendar.py tests/domain/test_supply_hint.py tests/domain/test_run_state.py tests/batch/test_calendar.py -q
 
       - name: Tooling gate tests (Python)
         run: uv run --with pytest --with pyyaml pytest tests/tools -q
@@ -43,7 +43,7 @@ jobs:
         run: uv run --with pyyaml python tools/check_sprint_status.py
 
       - name: Scheduler tests (Python)
-        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py tests/batch/test_supply_stage.py tests/batch/test_ls_supply_provider.py tests/batch/test_ls_market_supply_provider.py tests/batch/test_ls_market_program_supply_provider.py tests/batch/test_market_supply_stage.py tests/batch/test_market_supply_repository.py tests/batch/test_tagged_candidate_fetcher.py tests/batch/test_supply_3day_repository.py -q
+        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py tests/batch/test_supply_stage.py tests/batch/test_ls_supply_provider.py tests/batch/test_ls_market_supply_provider.py tests/batch/test_ls_market_program_supply_provider.py tests/batch/test_market_supply_stage.py tests/batch/test_market_supply_repository.py tests/batch/test_tagged_candidate_fetcher.py tests/batch/test_supply_3day_repository.py tests/batch/test_bias_repository.py tests/batch/test_bias_stage.py -q
 
       - name: Set up Node
         uses: actions/setup-node@v4

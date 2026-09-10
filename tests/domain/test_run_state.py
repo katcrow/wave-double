@@ -27,9 +27,9 @@ def test_invalid_logical_key_slot_is_rejected():
         LogicalRunKey.parse("close:2026-09-01:14:30")
 
 
-def test_initial_stage_registry_has_exactly_five_pending_stages():
+def test_initial_stage_registry_includes_optional_bias():
     assert set(initial_stage_status()) == {
-        "candidates", "tags", "supply_3day", "market_supply", "outcome_tracking"
+        "candidates", "tags", "supply_3day", "market_supply", "outcome_tracking", "bias"
     }
     assert all(value is StageStatus.PENDING for value in initial_stage_status().values())
 
@@ -78,3 +78,9 @@ def test_default_registry_has_candidates_tags_and_market_supply_verifiers():
     assert default_registry.verify(uuid4(), "market_supply") is True
     with pytest.raises(KeyError, match="supply_3day"):
         default_registry.verify(uuid4(), "supply_3day")
+
+
+def test_bias_failure_does_not_affect_required_publish_stages():
+    from domain.run_state import REQUIRED_STAGES, Stage
+    assert Stage.BIAS not in REQUIRED_STAGES
+    assert can_publish({**{s.value: "success" for s in REQUIRED_STAGES}, "bias": "failed"})

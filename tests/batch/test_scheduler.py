@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timezone
 from uuid import uuid4
+import pytest
 
 from apps.batch.ls_client import LsResponse
 from apps.batch.run_state import RunStateGateway
@@ -1318,3 +1319,55 @@ def test_publish_failure_marks_outcome_tracking_failed_and_fails_batch():
     # 성공 시 outcome_tracking success는 publish_attempt 내부(DB 트랜잭션)가 기록하므로,
     # 오케스트레이터는 실패 시에만 failed로 기록한다(running 기록 없음).
     assert [call[1]["p_status"] for call in outcome_calls] == ["failed"]
+
+
+@pytest.mark.parametrize("bias_status", ["success", "partial", "failed", "exception"])
+def test_story_5_4_bias_runs_after_publish_without_changing_batch_success(monkeypatch, bias_status):
+    from apps.batch import scheduler
+    from apps.batch.bias_stage import BiasStageResult
+    rpc = FakeRpc(attempt=attempt_payload())
+    seen = []
+
+    def bias(*args, **kwargs):
+        assert _publish_attempt_calls(rpc)
+        seen.append((args, kwargs))
+        if bias_status == "exception":
+            raise RuntimeError("unexpected option failure")
+        return BiasStageResult(bias_status, "BIAS_TEST")
+
+    monkeypatch.setattr(scheduler, "run_bias_stage", bias)
+    deps = tags_deps()
+    result = run_scheduled_batch(
+        BatchKind.CLOSE, datetime(2026, 9, 1, 16), FakeRepository(), FakeProvider(),
+        RunStateGateway(rpc), FakeCandidateClient(), **deps,
+        market_supply_provider=FakeMarketSupplyProvider(),
+        market_program_supply_provider=FakeMarketProgramSupplyProvider(),
+        market_supply_repository=FakeMarketSupplyRepository(), bias_repository=object(),
+    )
+    assert len(seen) == 1
+    assert seen[0][0][9] == ()  # 동일 selection의 절단 후보(빈 경우)
+    assert "heartbeat" not in seen[0][1]
+    assert result.status == "success" and result.published
+    assert result.outcome_tracking_status == "success"
+    assert result.bias_status == ("failed" if bias_status == "exception" else bias_status)
+
+
+@pytest.mark.parametrize("scenario", ["premarket", "intraday", "holiday", "replay", "publish_failure"])
+def test_story_5_4_bias_and_its_backfill_are_not_called_on_skipped_paths(monkeypatch, scenario):
+    from apps.batch import scheduler
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("bias stage must not be called")
+
+    monkeypatch.setattr(scheduler, "run_bias_stage", forbidden)
+    rpc = FakeRpc(attempt=attempt_payload(), replayed=scenario == "replay",
+                  raise_on={"publish_attempt"} if scenario == "publish_failure" else set())
+    repo = FakeRepository(cached={date(2026, 9, 1): TradingCalendarEntry(date(2026, 9, 1), scenario != "holiday")})
+    result = run_scheduled_batch(
+        scenario if scenario in ("premarket", "intraday") else "close",
+        datetime(2026, 9, 1, 16), repo, FakeProvider(), RunStateGateway(rpc),
+        FakeCandidateClient(), **tags_deps(), market_supply_provider=FakeMarketSupplyProvider(),
+        market_program_supply_provider=FakeMarketProgramSupplyProvider(),
+        market_supply_repository=FakeMarketSupplyRepository(), bias_repository=object(),
+    )
+    assert result.bias_status is None

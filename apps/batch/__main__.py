@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from domain.run_state import Trigger
 
 from .candidate_fetcher import CandidateFetcher
+from .bias_repository import SupabaseBiasRepository
 from .candidate_tags_repository import SupabaseCandidateTagsRepository
 from .ls_auth import LsOAuthTokenProvider
 from .ls_client import LsClient, LsClientConfig
@@ -71,6 +72,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
         )
         daily_bar_provider = LsDailyBarProvider(ls_client)
         gateway = RunStateGateway(rpc_client)
+        bias_repository = SupabaseBiasRepository(rpc_client)
 
         ohlcv_provider = LsOhlcvCacheProvider(ls_client)
         ohlcv_repository = stack.enter_context(
@@ -121,6 +123,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             market_program_supply_provider,
             market_supply_repository,
             query_index=query_index,
+            bias_repository=bias_repository,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,
         )
@@ -141,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
         id_fields += f" run_id={result.run_id}"
     if result.logical_run_key is not None:
         id_fields += f" logical_run_key={result.logical_run_key}"
+    if result.bias_status is not None:
+        id_fields += f" bias_status={result.bias_status} bias_result_code={result.bias_result_code}"
     print(f"batch_kind={args.batch_kind} status={result.status} result_code={result.result_code}{id_fields}")
     return 1 if result.status == "failed" else 0
 

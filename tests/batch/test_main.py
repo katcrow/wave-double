@@ -73,6 +73,13 @@ def test_main_catches_exception_from_run_and_reports_failed(monkeypatch, capsys)
     assert "status=failed" in captured.out
 
 
+def test_bias_failure_is_visible_but_cli_success_is_preserved(monkeypatch, capsys):
+    monkeypatch.setattr(batch_main, "run", lambda args: SchedulerResult(
+        "success", "OK", published=True, bias_status="failed", bias_result_code="BIAS_FAILED"))
+    assert batch_main.main(["--batch-kind", "close"]) == 0
+    assert "bias_status=failed bias_result_code=BIAS_FAILED" in capsys.readouterr().out
+
+
 def test_parse_args_defaults_trigger_to_schedule_with_no_dispatch_request_id():
     args = batch_main._parse_args(["--batch-kind", "close"])
     assert args.trigger == "schedule"
@@ -113,7 +120,8 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None, bias_repository=None):
+        captured["bias_repository"] = bias_repository
         captured["batch_kind"] = batch_kind
         captured["ls_client"] = ls_client
         captured["supply_provider"] = supply_provider
@@ -132,6 +140,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     assert result.status == "success"
     assert captured["batch_kind"] == "close"
+    assert isinstance(captured["bias_repository"], batch_main.SupabaseBiasRepository)
     assert captured["supply_provider"]._client is captured["ls_client"]
     assert captured["program_supply_provider"]._client is captured["ls_client"]
     assert captured["trigger"] == Trigger.MANUAL
@@ -151,7 +160,7 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None, bias_repository=None):
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
         return SchedulerResult("success", "OK")

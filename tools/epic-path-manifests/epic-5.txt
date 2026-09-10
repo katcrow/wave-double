@@ -20,3 +20,17 @@ tests/fixtures/generate_backtest_universe.py
 tests/sql/test_bias_events.sql
 tools/epic-path-manifests/epic-5.txt
 tools/production_parity_baseline.json
+AGENTS.md
+_bmad-output/implementation-artifacts/spec-5-4-편향-계산-close-배치-연결-append.md
+apps/batch/bias_repository.py
+apps/batch/bias_stage.py
+apps/batch/scheduler.py
+apps/batch/__main__.py
+packages/domain/domain/run_state.py
+infra/supabase/migrations/202609100200_bias_close_stage.sql
+tests/batch/test_bias_repository.py
+tests/batch/test_bias_stage.py
+tests/batch/test_scheduler.py
+tests/batch/test_main.py
+tests/domain/test_run_state.py
+tests/sql/test_bias_close_stage.sql

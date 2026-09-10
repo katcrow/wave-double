@@ -14,6 +14,8 @@ from domain.calendar import CalendarStatus, floor_to_half_hour
 from domain.run_state import BatchKind, LogicalRunKey, Stage, StageStatus, Trigger
 
 from .calendar import CalendarRepository, DailyBarProvider, resolve_for_schedule
+from .bias_repository import BiasRepositoryProtocol
+from .bias_stage import BiasStageResult, run_bias_stage
 from .candidate_stage import CandidateClient, CandidateStageResult, run_candidate_stage
 from .candidate_tags_repository import TagsRepositoryProtocol
 from .heartbeat import HeartbeatPolicy, LeaseHeartbeat
@@ -58,6 +60,8 @@ class SchedulerResult:
     market_supply_result_code: str | None = None
     published: bool = False
     outcome_tracking_status: str | None = None
+    bias_status: str | None = None
+    bias_result_code: str | None = None
 
 
 def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalRunKey:
@@ -75,6 +79,7 @@ def _from_candidate_result(
     market_supply_result: MarketSupplyStageResult | None = None,
     *,
     published: bool = False,
+    bias_result: BiasStageResult | None = None,
 ) -> SchedulerResult:
     """candidates stage 결과와(있다면) tags/supply stage 결과를 하나의 ``SchedulerResult``로 합친다.
 
@@ -85,6 +90,9 @@ def _from_candidate_result(
 
     ``published``는 close 배치에서 publish_attempt 호출이 성공했는지 여부다. 성공 시
     outcome_tracking stage가 DB 단에서 'success'로 기록되므로 SchedulerResult에도 반영한다.
+
+    ``bias_result``(옵션)가 주어지면 배치 성공과 무관하게 ``bias_status``/
+    ``bias_result_code``로만 노출하며, severity 합산에는 참여하지 않는다.
     """
     status = result.status
     tags_status: str | None = None
@@ -127,6 +135,8 @@ def _from_candidate_result(
         market_supply_result_code=market_supply_result_code,
         published=published,
         outcome_tracking_status="success" if published else None,
+        bias_status=bias_result.status if bias_result else None,
+        bias_result_code=bias_result.result_code if bias_result else None,
     )
 
 
@@ -155,6 +165,7 @@ def run_scheduled_batch(
     trigger: Trigger = Trigger.SCHEDULE,
     dispatch_request_id: str | None = None,
     strategy_client: TagsClient | None = None,
+    bias_repository: BiasRepositoryProtocol | None = None,
 ) -> SchedulerResult:
     """휴장이면 attempt를 시작한 뒤 즉시 skip 처리하고, 개장일이면 candidate stage로 위임한다.
 
@@ -334,7 +345,21 @@ def run_scheduled_batch(
                 outcome_tracking_status="failed",
             )
 
-    return _from_candidate_result(result, tags_result, supply_result, market_supply_result, published=published)
+    bias_result = None
+    if published and bias_repository is not None:
+        try:
+            bias_result = run_bias_stage(
+                gateway, bias_repository, ohlcv_provider, ohlcv_repository, ohlcv_loader,
+                result.run_id, result.fence_token, result.lease_token, key.trading_day,
+                result.selection.truncated_candidates if result.selection else (),
+                strategy_client=strategy_client,
+            )
+        except Exception as exc:  # noqa: BLE001 - 옵션 stage의 예기치 않은 경계 오류도 이미 발행된 배치 성공을 보존한다.
+            print(f"run_id={result.run_id} stage=bias bias_status=failed result_code=BIAS_FAILED "
+                  f"failure_recorded=False message={exc}")
+            bias_result = BiasStageResult("failed", "BIAS_FAILED", failure_recorded=False)
+    return _from_candidate_result(result, tags_result, supply_result, market_supply_result,
+                                  published=published, bias_result=bias_result)
 
 
 __all__ = ["SchedulerResult", "run_scheduled_batch"]

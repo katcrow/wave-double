@@ -33,3 +33,10 @@
 - `.env.local`에 미사용 `INTERNAL_CRON_SECRET`과 신규 `CRON_CALLBACK_SECRET`이 같은 용도로 이름만 다르게 공존한다 — 정리 전까지는 `CRON_CALLBACK_SECRET`이 실제 사용되는 이름이다.
 
 <!-- /bmad:context -->
+
+## Supabase 연결 정보 확인 정책
+
+- Supabase 프로젝트·URL·인증 키·접근 토큰 등 연결 정보가 필요하거나 불확실하면 **항상 먼저 `C:\dev\wave-double\.env.local`을 직접 확인한다.** gitignored 파일이므로 일반 저장소 검색 결과만으로 설정이 없다고 판단하거나 사용자에게 다시 요청하지 않는다.
+- 사용 대상은 **`knoucrow's Org`의 `wave-double` 프로젝트(`qqhjeumlecaudsiqhhdu`)**다. `.env.local`의 URL에서 프로젝트 참조를 확인하고, MCP 연결 대상도 같은 프로젝트인지 확인한다. 파일만으로 조직 소속이나 MCP 인증 완료를 확인했다고 간주하지 않는다.
+- 키·토큰·비밀번호 값은 응답, 로그, 문서, 커밋에 노출하지 않는다. 확인 결과에는 변수명, 설정 여부, 비밀이 아닌 프로젝트 참조만 기록한다. `.env.local`은 커밋하지 않는다.
+- `.env.local`의 애플리케이션 인증 정보와 Supabase MCP 연결 상태는 별도로 확인한다. Supabase 작업에는 위의 **Supabase MCP 사용 정책**을 계속 적용한다.
