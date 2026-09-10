@@ -91,7 +91,7 @@ development_status:
   epic-5: in-progress
   5-1-bias_events-append-only-스키마: done
   5-2-백테스트-유니버스-시그널-계산: done
-  5-3-편향-지표-계산-로직: backlog
+  5-3-편향-지표-계산-로직: done
   5-4-편향-계산-close-배치-연결-append: backlog
   5-5-승률-pf-핵심-산식-view-전체-기준: backlog
   5-6-전략별-원천별-분리-view: backlog
