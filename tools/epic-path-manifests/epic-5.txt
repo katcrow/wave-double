@@ -3,9 +3,17 @@
 # 사용법: python tools/check_epic_scope.py --epic 5 --range <base>..HEAD
 _bmad-output/implementation-artifacts/epic-5-context.md
 _bmad-output/implementation-artifacts/spec-5-1-bias_events-append-only-스키마.md
+_bmad-output/implementation-artifacts/spec-5-2-백테스트-유니버스-시그널-계산.md
 _bmad-output/implementation-artifacts/sprint-status.yaml
+apps/batch/backtest_universe.py
+apps/batch/universe_signal.py
 infra/supabase/migrations/202609091700_create_bias_events.sql
 packages/read-model/src/database.types.ts
+tests/batch/test_backtest_universe.py
+tests/batch/test_universe_signal.py
+tests/fixtures/BACKTEST_UNIVERSE.md
+tests/fixtures/backtest_universe.json
+tests/fixtures/generate_backtest_universe.py
 tests/sql/test_bias_events.sql
 tools/epic-path-manifests/epic-5.txt
 tools/production_parity_baseline.json
