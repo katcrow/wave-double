@@ -60,6 +60,7 @@
     "202609101600_create_outcome_win_rate_pf_threshold_gated",
     "202609101601_harden_outcome_win_rate_pf_threshold_gated",
     "202609101602_finalize_outcome_win_rate_pf_threshold_comment",
+    "202609101700_create_outcome_cutoff_bias_notice",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_outcome_win_rate_pf",

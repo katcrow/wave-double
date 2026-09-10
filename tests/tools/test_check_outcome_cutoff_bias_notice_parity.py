@@ -86,6 +86,15 @@ def test_notice_drift_is_reported(repo_fixture: dict) -> None:
     assert any("cutoff_bias_label" in error for error in errors)
 
 
+def test_notice_decimal_precision_drift_is_reported(repo_fixture: dict) -> None:
+    expected = copy.deepcopy(repo_fixture["expected_rows"])
+    expected[1]["cutoff_bias_timeout_rate"] = 0.00374
+    errors = parity.compare_result_rows(
+        parity.compute_reference_rows(repo_fixture["input_cases"]), expected, "Python", "JSON"
+    )
+    assert any("cutoff_bias_timeout_rate" in error for error in errors)
+
+
 def test_timeout_is_not_reclassified_or_removed_from_denominator() -> None:
     rows = [
         {"strategy": "A", "status": "TP", "return_pct": 2.0},
@@ -102,3 +111,54 @@ def test_timeout_is_not_reclassified_or_removed_from_denominator() -> None:
     assert result["wins"] == 2
     assert result["timeout_count"] == 1
     assert result["open_count"] == result["suspended_count"] == result["delisted_count"] == 1
+
+
+def test_all_loss_group_preserves_59_null_profit_factor() -> None:
+    rows = []
+    for index in range(30):
+        rows.append({
+            "ticker": f"LOSS{index:03d}",
+            "strategy": "A",
+            "entry_date": f"2099-04-{index + 1:02d}",
+            "status": "SL",
+            "return_pct": -1.0,
+        })
+    result = next(row for row in parity.compute_reference_rows(rows) if row["strategy"] == "A")
+    assert result["sample_gate_passed"] is True
+    assert result["wins"] == 0
+    assert result["losses"] == 30
+    assert result["profit_factor"] is None
+
+
+def test_zero_and_null_timeout_returns_remain_settled_and_counted() -> None:
+    rows = [
+        {
+            "ticker": "ZERO_TIMEOUT",
+            "strategy": "A",
+            "entry_date": "2099-05-01",
+            "status": "TIMEOUT",
+            "return_pct": 0.0,
+        },
+        {
+            "ticker": "NULL_TIMEOUT",
+            "strategy": "A",
+            "entry_date": "2099-05-02",
+            "status": "TIMEOUT",
+            "return_pct": None,
+        },
+    ]
+    rows.extend(
+        {
+            "ticker": f"LOSS_TIMEOUT_EDGE{index:02d}",
+            "strategy": "A",
+            "entry_date": f"2099-06-{index + 1:02d}",
+            "status": "SL",
+            "return_pct": -1.0,
+        }
+        for index in range(28)
+    )
+    result = next(row for row in parity.compute_reference_rows(rows) if row["strategy"] == "A")
+    assert result["total_settled"] == 30
+    assert result["timeout_count"] == 2
+    assert result["wins"] == 0
+    assert result["losses"] == 28

@@ -47,6 +47,10 @@ NOTICE_FIELDS = (
     "timeout_count", "cutoff_bias_sample_size", "cutoff_bias_timeout_rate",
     "cutoff_bias_profit_factor_delta", "cutoff_bias_label",
 )
+NOTICE_DECIMAL_FIELDS = {
+    "cutoff_bias_timeout_rate",
+    "cutoff_bias_profit_factor_delta",
+}
 ROW_FIELDS = CORE_FIELDS + NOTICE_FIELDS
 
 
@@ -260,6 +264,11 @@ def compare_result_rows(left: list[dict], right: list[dict], left_name: str, rig
             av, bv = left_by_strategy[strategy].get(field), right_by_strategy[strategy].get(field)
             if field in int_fields or field in bool_fields or field in text_fields:
                 same = av == bv
+            elif field in NOTICE_DECIMAL_FIELDS:
+                same = (
+                    av is None and bv is None
+                    or av is not None and bv is not None and Decimal(str(av)) == Decimal(str(bv))
+                )
             elif field in {"gross_win", "gross_loss"}:
                 same = (
                     av is None and bv is None
@@ -325,7 +334,13 @@ def compute_reference_rows(rows: list[dict]) -> list[dict]:
         ))
         passed = total >= SAMPLE_GATE_MIN_REQUIRED
         win_rate = round(wins / total, 4) if passed else None
-        profit_factor = round(gross_win / gross_loss, 4) if passed and gross_loss else None
+        # 5-9 SQL의 sum(return_pct) FILTER (return_pct > 0)은 전패 그룹에서
+        # NULL을 반환하므로, gross_loss가 있어도 wins=0이면 PF는 NULL이어야 한다.
+        profit_factor = (
+            round(gross_win / gross_loss, 4)
+            if passed and wins > 0 and losses > 0
+            else None
+        )
         ci_lower, ci_upper = _wilson_ci(win_rate, total) if passed and win_rate is not None else (None, None)
         expected_win_rate = (
             EXPECTED_WIN_RATE_BY_STRATEGY.get(strategy) if passed else None

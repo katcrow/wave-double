@@ -225,6 +225,7 @@ insert into cutoff_bias_expected values
 ('F', 30, 15, 15, 0, 0, 0, 30, 15, 0.5, 2, 30, TRUE, NULL, 0.3315, 0.6685, NULL, NULL, NULL, 0.1, 0.25, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL),
 (NULL, 179, 89, 90, 1, 1, 1, 174.9, 105, 0.4972, 1.6657, 30, TRUE, NULL, 0.4248, 0.5697, NULL, NULL, NULL, 0.1, 0.25, NULL, NULL, NULL, 2, NULL, NULL, NULL, NULL);
 
+-- ── sql-only assertions
 do $$
 declare diff_count integer;
 begin
@@ -300,7 +301,48 @@ begin
   ) then
     raise exception 'story 5-10: cutoff bias label column missing from catalog';
   end if;
+  if not has_table_privilege('service_role', 'public.candidate_outcome_cutoff_bias_notice', 'select') then
+    raise exception 'story 5-10: service_role read privilege is missing';
+  end if;
+  if (select count(*) from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'candidate_outcome_cutoff_bias_notice') <> 29 then
+    raise exception 'story 5-10: view column cardinality drift';
+  end if;
+  if (select array_agg(column_name order by ordinal_position)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'candidate_outcome_cutoff_bias_notice') <> array[
+        'strategy', 'total_settled', 'wins', 'losses', 'open_count',
+        'suspended_count', 'delisted_count', 'gross_win', 'gross_loss',
+        'win_rate', 'profit_factor', 'sample_gate_min_required',
+        'sample_gate_passed', 'sample_gate_label', 'ci_lower', 'ci_upper',
+        'expected_win_rate', 'expected_in_ci', 'expected_profit_factor',
+        'win_rate_threshold_pp', 'profit_factor_threshold_ratio',
+        'win_rate_threshold_breached', 'profit_factor_threshold_breached',
+        'threshold_warning', 'timeout_count', 'cutoff_bias_sample_size',
+        'cutoff_bias_timeout_rate', 'cutoff_bias_profit_factor_delta',
+        'cutoff_bias_label'
+      ]::text[] then
+    raise exception 'story 5-10: view column name/order drift';
+  end if;
 end $$;
+
+savepoint empty_candidate_outcome;
+delete from public.candidate_outcome;
+do $$
+declare empty_row record;
+begin
+  select * into empty_row
+  from public.candidate_outcome_cutoff_bias_notice
+  where strategy is null;
+  if not found or empty_row.timeout_count <> 0
+     or empty_row.cutoff_bias_sample_size is not null
+     or empty_row.cutoff_bias_label is not null then
+    raise exception 'story 5-10: empty candidate_outcome state mismatch';
+  end if;
+end $$;
+rollback to savepoint empty_candidate_outcome;
 
 rollback;
 
