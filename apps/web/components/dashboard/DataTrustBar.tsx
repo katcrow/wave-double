@@ -52,13 +52,13 @@ function deriveManualDispatchTarget(
 const POST_DISPATCH_POLL_INTERVAL_MS = 10_000;
 const POST_DISPATCH_POLL_MAX_TICKS = 12; // ~2분
 
-export default function DataTrustBar({ snapshot }: { snapshot: DashboardSnapshot }) {
+export default function DataTrustBar({ snapshot, focusStage }: { snapshot: DashboardSnapshot; focusStage?: string }) {
   const [dispatchState, setDispatchState] = useState<DispatchUiState>({ phase: "idle" });
   const idempotencyKeyRef = useRef<string | null>(null);
   const router = useRouter();
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { statusLine, candidateCount, triggerLabel } = deriveTrustBarState(snapshot, dispatchState);
+  const { statusLine, candidateCount, triggerLabel } = deriveTrustBarState(snapshot, dispatchState, focusStage);
 
   useEffect(() => {
     return () => {

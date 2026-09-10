@@ -104,6 +104,23 @@ test("부분성공: 미처리 건수 포함", () => {
   assert.equal(state.statusLine, "부분성공 · 미처리 7건");
 });
 
+test("tracking focus stage가 실패/부분성공이면 해당 계보 상태를 trust bar에 우선 표시한다", () => {
+  const failed = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt({ stage_status: { ...attempt().stage_status, outcome_tracking: "failed" } }) }),
+    undefined,
+    "outcome_tracking",
+  );
+  assert.match(failed.statusLine, /^성과 검증 단계 실패 ·/);
+  assert.equal(failed.notice, failed.statusLine);
+
+  const partial = deriveTrustBarState(
+    snapshot({ no_snapshot: false, result_code: "OK", complete_snapshot: complete(), latest_attempt: attempt({ unprocessed_count: 2, stage_status: { ...attempt().stage_status, outcome_tracking: "partial" } }) }),
+    undefined,
+    "outcome_tracking",
+  );
+  assert.equal(partial.statusLine, "성과 검증 단계 부분성공 · 미처리 2건");
+});
+
 // I/O 매트릭스 행 5: 휴장일 스킵
 test("휴장일 스킵: 실패로 표시하지 않는다", () => {
   const state = deriveTrustBarState(

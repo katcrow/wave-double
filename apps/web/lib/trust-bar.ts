@@ -37,7 +37,7 @@ export interface DispatchUiState {
  * latest_attempt.finished_at ?? started_at이며 60분 이상 경과 시 stale.
  * Story 1.10: `dispatch` 인자가 idle이 아니면 수동 실행 진행/거부 문구가 배치 상태 문구를 덮는다.
  */
-export function deriveTrustBarState(snapshot: DashboardSnapshot, dispatch?: DispatchUiState): TrustBarState {
+export function deriveTrustBarState(snapshot: DashboardSnapshot, dispatch?: DispatchUiState, focusStage?: string): TrustBarState {
   const { latest_attempt: latestAttempt, complete_snapshot: completeSnapshot } = snapshot;
 
   const referenceTimestamp =
@@ -69,12 +69,20 @@ export function deriveTrustBarState(snapshot: DashboardSnapshot, dispatch?: Disp
     statusLine += ` · 데이터가 60분 이상 오래됨 (${formatKstDateTime(referenceTimestamp)})`;
   }
 
+  const focusedStageStatus = focusStage ? latestAttempt?.stage_status?.[focusStage] : undefined;
+  if (focusedStageStatus === "failed") {
+    statusLine = `성과 검증 단계 실패 · ${completeSnapshot ? `마지막 성공 ${formatKstDateTime(completeSnapshot.published_at)}` : "이전 성공 없음"}`;
+  } else if (focusedStageStatus === "partial") {
+    statusLine = `성과 검증 단계 부분성공 · 미처리 ${latestAttempt?.unprocessed_count ?? 0}건`;
+  }
+
   let notice: string | null = null;
   if (latestAttempt?.status === "failed" || latestAttempt?.status === "partial") {
     notice = statusLine;
   } else if (stale) {
     notice = `데이터가 60분 이상 오래됨 (${referenceTimestamp ? formatKstDateTime(referenceTimestamp) : "-"})`;
   }
+  if (focusedStageStatus === "failed" || focusedStageStatus === "partial") notice = statusLine;
 
   // Story 1.10: 수동 실행 진행/거부/실패는 배치 상태 문구보다 우선해 사용자에게 즉시 보인다.
   if (dispatch?.phase === "pending") {

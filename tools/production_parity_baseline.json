@@ -61,6 +61,8 @@
     "202609101601_harden_outcome_win_rate_pf_threshold_gated",
     "202609101602_finalize_outcome_win_rate_pf_threshold_comment",
     "202609101700_create_outcome_cutoff_bias_notice",
+    "202609101800_create_get_outcome_tracking_rows",
+    "202609101801_harden_get_outcome_tracking_rows",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_outcome_win_rate_pf",
@@ -175,6 +177,15 @@
       "search_path": "pg_catalog, public",
       "grants": {
         "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_outcome_tracking_rows": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
         "authenticated": true,
         "service_role": true
       }

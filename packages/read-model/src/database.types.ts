@@ -1063,6 +1063,15 @@ export type Database = {
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
+      get_outcome_tracking_rows: {
+        Args: {
+          p_limit?: number
+          p_status?: string
+          p_strategy?: string
+          p_ticker?: string
+        }
+        Returns: Json
+      }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
       get_today_disappeared_candidates: {
         Args: { p_run_id: string }

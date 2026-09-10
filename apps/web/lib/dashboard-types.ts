@@ -12,6 +12,19 @@ export type BatchKind = "premarket" | "intraday" | "close";
 export type RunTrigger = "schedule" | "manual";
 export type Market = "KOSPI" | "KOSDAQ";
 export type SupplyHintStatus = "good" | "not_met" | "undetermined";
+export type OutcomeStatus = "TP" | "SL" | "TIMEOUT" | "OPEN" | "SUSPENDED" | "DELISTED";
+export type OutcomeStrategy = "A" | "B" | "C" | "D" | "E" | "F";
+
+/** Story 5.11 get_outcome_tracking_rows()가 브라우저에 반환하는 제한된 행. */
+export interface OutcomeTrackingRpcRow {
+  outcome_id: string;
+  ticker: string;
+  strategy: OutcomeStrategy;
+  entry_date: string;
+  status: OutcomeStatus;
+  exit_date: string | null;
+  return_pct: number | null;
+}
 
 export interface CandidatesSection {
   candidate_count: number;
@@ -57,6 +70,36 @@ export interface DashboardSnapshot {
   available_partial_sections: string[];
   missing_sections: string[];
   unprocessed_items: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** 외부 RPC JSON이 tracking route의 서버 컴포넌트 계약에 맞는지 최소 안전 검증한다. */
+export function isDashboardSnapshot(value: unknown): value is DashboardSnapshot {
+  if (!isRecord(value)) return false;
+  if (typeof value.no_snapshot !== "boolean" || (value.result_code !== "OK" && value.result_code !== "NO_SNAPSHOT")) return false;
+  if (value.no_snapshot !== (value.complete_snapshot === null)) return false;
+  if (!Array.isArray(value.available_partial_sections) || !value.available_partial_sections.every((item) => typeof item === "string")) return false;
+  if (!Array.isArray(value.missing_sections) || !value.missing_sections.every((item) => typeof item === "string")) return false;
+  if (typeof value.unprocessed_items !== "number" || !Number.isFinite(value.unprocessed_items)) return false;
+
+  if (value.complete_snapshot !== null) {
+    const snapshot = value.complete_snapshot;
+    if (!isRecord(snapshot) || typeof snapshot.run_id !== "string" || typeof snapshot.logical_run_key !== "string" ||
+      typeof snapshot.trading_day !== "string" || typeof snapshot.batch_kind !== "string" || typeof snapshot.published_at !== "string") return false;
+    if (!isRecord(snapshot.sections) || !isRecord(snapshot.sections.candidates) ||
+      typeof snapshot.sections.candidates.candidate_count !== "number") return false;
+  }
+
+  if (value.latest_attempt !== null) {
+    const attempt = value.latest_attempt;
+    if (!isRecord(attempt) || typeof attempt.run_id !== "string" || typeof attempt.logical_run_key !== "string" ||
+      typeof attempt.trading_day !== "string" || typeof attempt.batch_kind !== "string" || typeof attempt.status !== "string" ||
+      typeof attempt.trigger !== "string" || typeof attempt.started_at !== "string" || !isRecord(attempt.stage_status)) return false;
+  }
+  return true;
 }
 
 /** infra/supabase/migrations/202609081300_create_get_market_supply.sql 반환 행. */

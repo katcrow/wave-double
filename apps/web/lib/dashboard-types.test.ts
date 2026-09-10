@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isIntradaySnapshot } from "./dashboard-types.ts";
+import { isDashboardSnapshot, isIntradaySnapshot } from "./dashboard-types.ts";
 import type { CompleteSnapshot, DashboardSnapshot } from "./dashboard-types.ts";
 import { normalizeMarket } from "./market-supply.ts";
 
@@ -51,6 +51,18 @@ test("batch_kind='premarket': true", () => {
 test("complete_snapshot=null: false", () => {
   const result = isIntradaySnapshot(snapshot({ complete_snapshot: null }));
   assert.equal(result, false);
+});
+
+test("tracking에 전달하는 snapshot은 필수 외부 RPC shape를 검증한다", () => {
+  const valid = snapshot({
+    no_snapshot: false,
+    result_code: "OK",
+    complete_snapshot: complete(),
+  });
+  assert.equal(isDashboardSnapshot(valid), true);
+  assert.equal(isDashboardSnapshot({ ...valid, complete_snapshot: null }), false);
+  assert.equal(isDashboardSnapshot({ ...valid, complete_snapshot: { ...complete(), sections: null } }), false);
+  assert.equal(isDashboardSnapshot(null), false);
 });
 
 test("시장 탭 값은 KOSPI/KOSDAQ만 허용하고 나머지는 KOSPI로 정규화한다", () => {
