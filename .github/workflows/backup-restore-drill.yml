@@ -27,8 +27,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
+      # 운영 Supabase는 PostgreSQL 17.x다. pg_dump 17이 덤프 헤더에 찍는 `SET
+      # transaction_timeout = ...`은 17 전용 세션 파라미터라 16 서버에서는 즉시
+      # "unrecognized configuration parameter"로 복원이 죽는다(2026-09-14 조사). 이
+      # 드릴은 실제 재해복구를 시뮬레이션하는 게 목적이라 운영과 같은 major version을 쓴다.
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
         ports:
