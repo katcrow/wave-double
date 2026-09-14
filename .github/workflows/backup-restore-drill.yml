@@ -156,7 +156,7 @@ jobs:
           exceeded=$(awk "BEGIN { print ($rpo_hours > $RPO_LIMIT_HOURS) ? 1 : 0 }")
           echo "exceeded=$exceeded" >> "$GITHUB_OUTPUT"
 
-      - name: Strip pg_cron/pg_net objects unavailable in disposable Postgres
+      - name: Strip Supabase-platform-only objects unavailable in disposable Postgres
         env:
           DUMP_PATH: ${{ steps.restore-prep.outputs.dump_path }}
         run: |
@@ -165,10 +165,17 @@ jobs:
           # 생성 구문·관련 comment·cron.job 데이터(pg_cron이 pg_extension_config_dump로 표시한
           # 설정 테이블)가 그대로 포함된다. 이 migration 파일 자체는 별도 파일이라 다음 단계의
           # skip-list가 잡아내지만, "이미 dump 본문에 박혀 있는 구문"은 파일 단위 skip으로 잡을 수
-          # 없다. disposable postgres:16 컨테이너에는 두 extension이 설치되어 있지 않으므로
+          # 없다. disposable postgres 컨테이너에는 두 extension이 설치되어 있지 않으므로
           # (test.yml의 sql-outbox-tests job이 이 migration 파일을 건너뛰는 것과 동일한 이유) 그대로
           # psql -f 하면 CREATE EXTENSION에서 즉시 실패해 ON_ERROR_STOP=1로 전체 복원이 중단된다.
           # 복원 전에 관련 구문/데이터 블록을 제거한다.
+          #
+          # pg_cron/pg_net 외에도 모든 Supabase 프로젝트는 플랫폼이 기본으로 만드는
+          # supabase_vault/pgsodium/pgjwt/pg_graphql 등을 dump에 포함한다 -- 이 프로젝트
+          # migration은 그중 어느 것도 실제로 쓰지 않는다(pgcrypto만 명시적으로 요구,
+          # infra/supabase/migrations 전체 검색 기준). 이름을 하나씩 알아내며 반복 실패하는
+          # 대신, 이 프로젝트가 실제로 쓰는 pgcrypto만 허용하고 나머지 CREATE
+          # EXTENSION/COMMENT ON EXTENSION은 이름과 무관하게 전부 제거한다(2026-09-14 조사).
           python3 - "$DUMP_PATH" <<'PY'
           import re
           import sys
@@ -176,6 +183,15 @@ jobs:
           path = sys.argv[1]
           with open(path, encoding="utf-8") as f:
               lines = f.readlines()
+
+          ALLOWED_EXTENSIONS = {"pgcrypto"}
+
+          def extension_name(low: str) -> str | None:
+              m = re.match(
+                  r'^(?:create extension|comment on extension)\s+(?:if not exists\s+)?"?([a-z0-9_]+)"?',
+                  low,
+              )
+              return m.group(1) if m else None
 
           out = []
           skip_mode = None  # None | "copy" | "dollar" | "paren"
@@ -196,9 +212,8 @@ jobs:
                       skip_mode = None
                   continue
 
-              if low.startswith("create extension") and ("pg_cron" in low or "pg_net" in low):
-                  continue
-              if low.startswith("comment on extension") and ("pg_cron" in low or "pg_net" in low):
+              ext_name = extension_name(low)
+              if ext_name is not None and ext_name not in ALLOWED_EXTENSIONS:
                   continue
               if low.startswith("copy cron.") or low.startswith("copy net."):
                   skip_mode = "copy"
