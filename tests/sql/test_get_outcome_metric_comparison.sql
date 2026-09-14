@@ -10,6 +10,9 @@ insert into public.candidate_outcome(
   ticker, strategy, entry_date, entry_price, status, exit_date, exit_price, return_pct,
   cutoff_n, holding_days, tp_pct, sl_pct
 )
+-- tp_pct/sl_pct/cutoff_n는 outcome_strategy_rules 스냅샷과 정확히 일치해야 한다(그렇지
+-- 않으면 candidate_outcome insert 트리거가 OUTCOME_STRATEGY_SNAPSHOT_MISMATCH로 거부한다,
+-- 202609080900:336). D/E/F는 cutoff_n도 검사 대상이다(A/B/C는 제외).
 select
   'MCA' || strategy || lpad(gs::text, 3, '0'),
   strategy,
@@ -19,7 +22,10 @@ select
   date '2099-02-01' + gs,
   case when gs <= 15 then 1020 when gs = 30 then 1005 else 980 end,
   case when gs <= 15 then 2 when gs = 30 then 0.5 else -1 end,
-  30, 2, 3, 3
+  case strategy when 'D' then 20 when 'F' then 999999 else 30 end,
+  2,
+  case strategy when 'E' then 2 else 3 end,
+  case strategy when 'D' then 5 when 'E' then 5 when 'F' then 4 else 3 end
 from unnest(array['A', 'B', 'D', 'E', 'F']::text[]) as strategies(strategy)
 cross join generate_series(1, 30) as series(gs);
 
