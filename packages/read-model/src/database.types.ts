@@ -1063,12 +1063,16 @@ export type Database = {
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
+      get_outcome_metric_comparison: {
+        Args: { p_strategy?: string | null }
+        Returns: Json
+      }
       get_outcome_tracking_rows: {
         Args: {
-          p_limit?: number
-          p_status?: string
-          p_strategy?: string
-          p_ticker?: string
+          p_limit?: number | null
+          p_status?: string | null
+          p_strategy?: string | null
+          p_ticker?: string | null
         }
         Returns: Json
       }

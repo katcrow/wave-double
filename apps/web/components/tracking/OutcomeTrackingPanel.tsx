@@ -42,7 +42,7 @@ export default function OutcomeTrackingPanel({ rows, fetchFailed }: OutcomeTrack
   function handleFilterSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const nextParams = new URLSearchParams();
+    const nextParams = new URLSearchParams(searchParams.toString());
     for (const key of ["status", "strategy", "ticker"]) {
       const value = String(formData.get(key) ?? "").trim();
       if (value) nextParams.set(key, value);
@@ -97,7 +97,7 @@ export default function OutcomeTrackingPanel({ rows, fetchFailed }: OutcomeTrack
         </div>
         <div className="outcome-tracking__filter-actions">
           <button type="submit">필터 적용</button>
-          <a href={pathname}>초기화</a>
+          <a href={(() => { const params = new URLSearchParams(searchParams.toString()); ["status", "strategy", "ticker"].forEach((key) => params.delete(key)); const query = params.toString(); return query ? `${pathname}?${query}` : pathname; })()}>초기화</a>
         </div>
       </form>
 

@@ -71,6 +71,10 @@ const SCENARIOS = new Set([
   "tracking-empty",
   "tracking-error",
   "tracking-malformed",
+    "tracking-metric-below-gate",
+    "tracking-metric-all-win",
+    "tracking-metric-error",
+  "tracking-metric-malformed",
 ]);
 let activeScenario = "default";
 
@@ -191,7 +195,7 @@ function rpcPayload(name, body = {}) {
     if (activeScenario === "tracking-malformed") return { unexpected: true };
     if (activeScenario === "tracking-empty") return [];
 
-    const rows = [
+      const rows = [
       { outcome_id: "00000000-0000-4000-8000-000000000601", ticker: "005930", strategy: "A", entry_date: "2026-09-09", status: "TP", exit_date: "2026-09-12", return_pct: 2.9 },
       { outcome_id: "00000000-0000-4000-8000-000000000602", ticker: "000660", strategy: "B", entry_date: "2026-09-08", status: "SL", exit_date: "2026-09-10", return_pct: -3.1 },
       { outcome_id: "00000000-0000-4000-8000-000000000603", ticker: "035420", strategy: "C", entry_date: "2026-09-07", status: "TIMEOUT", exit_date: "2026-09-30", return_pct: 0.4 },
@@ -206,6 +210,64 @@ function rpcPayload(name, body = {}) {
     return rows
       .filter((row) => (!status || row.status === status) && (!strategy || row.strategy === strategy) && (!ticker || row.ticker.includes(ticker)))
       .slice(0, limit);
+  }
+  if (name === "get_outcome_metric_comparison") {
+    if (activeScenario === "tracking-metric-error") return null;
+    if (activeScenario === "tracking-metric-malformed") return { unexpected: true };
+
+    const base = {
+      total_settled: 40,
+      wins: 28,
+      losses: 12,
+      open_count: 2,
+      suspended_count: 0,
+      delisted_count: 0,
+      gross_win: 56,
+      gross_loss: 12,
+      win_rate: 0.7,
+      profit_factor: 4.6667,
+      sample_gate_min_required: 30,
+      sample_gate_passed: true,
+      sample_gate_label: null,
+      ci_lower: 0.54,
+      ci_upper: 0.82,
+      expected_win_rate: null,
+      expected_in_ci: null,
+      expected_profit_factor: null,
+      win_rate_threshold_pp: null,
+      profit_factor_threshold_ratio: null,
+      win_rate_threshold_breached: null,
+      profit_factor_threshold_breached: null,
+      threshold_warning: null,
+      timeout_count: 0,
+      cutoff_bias_sample_size: null,
+      cutoff_bias_timeout_rate: null,
+      cutoff_bias_profit_factor_delta: null,
+      cutoff_bias_label: null,
+    };
+    const rows = [
+      { ...base, strategy: null, total_settled: 179, wins: 89, losses: 90, open_count: 1, suspended_count: 1, delisted_count: 1, gross_win: 174.9, gross_loss: 105, win_rate: 0.4972, profit_factor: 1.6657, ci_lower: 0.4248, ci_upper: 0.5697, timeout_count: 2 },
+      { ...base, strategy: "A", expected_win_rate: 0.6871, expected_in_ci: true, expected_profit_factor: 2.054, win_rate_threshold_breached: false, profit_factor_threshold_breached: false, threshold_warning: false, timeout_count: 1, cutoff_bias_sample_size: 30, cutoff_bias_timeout_rate: 0, cutoff_bias_profit_factor_delta: 0, cutoff_bias_label: "TIMEOUT 0% / PF차 ±0" },
+      { ...base, strategy: "B", expected_win_rate: 0.6895, expected_in_ci: false, expected_profit_factor: 2.077, win_rate_threshold_breached: true, profit_factor_threshold_breached: true, threshold_warning: true, timeout_count: 1, cutoff_bias_sample_size: 30, cutoff_bias_timeout_rate: 0.0037, cutoff_bias_profit_factor_delta: 0.0125, cutoff_bias_label: "TIMEOUT 0.37% / PF차 +0.0125" },
+      { ...base, strategy: "C", total_settled: 29, wins: 14, losses: 15, win_rate: null, profit_factor: null, sample_gate_passed: false, sample_gate_label: "표본 부족 (29/30)", ci_lower: null, ci_upper: null, expected_win_rate: null, expected_in_ci: null, expected_profit_factor: null, win_rate_threshold_pp: null, profit_factor_threshold_ratio: null, win_rate_threshold_breached: null, profit_factor_threshold_breached: null },
+      { ...base, strategy: "D" },
+      { ...base, strategy: "E" },
+        { ...base, strategy: "F" },
+      ];
+      const strategy = ["A", "B", "C", "D", "E", "F"].includes(body?.p_strategy) ? body.p_strategy : null;
+      if (activeScenario === "tracking-metric-all-win") {
+        const allWinRows = rows.map((row) => row.strategy === "F" ? {
+          ...row,
+          wins: 40,
+          losses: 0,
+          gross_win: 80,
+          gross_loss: null,
+          win_rate: 1,
+          profit_factor: null,
+        } : row);
+        return strategy ? allWinRows.filter((row) => row.strategy === strategy) : allWinRows;
+      }
+      return strategy ? rows.filter((row) => row.strategy === strategy) : rows;
   }
   return null;
 }

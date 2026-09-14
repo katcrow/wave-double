@@ -34,7 +34,7 @@ export default async function HomePage() {
     );
   }
 
-  const snapshot = data as DashboardSnapshot;
+  const snapshot = data as unknown as DashboardSnapshot;
   const candidateCount = snapshot.complete_snapshot?.sections.candidates.candidate_count;
   const { notice } = deriveTrustBarState(snapshot);
 
@@ -58,7 +58,7 @@ export default async function HomePage() {
       candidateCardsFetchFailed = true;
       console.error("get_today_candidate_cards failed", cardError);
     } else if (Array.isArray(cardRows) && cardRows.every(isTodayCandidateCardRow)) {
-      candidateCards = buildCandidateCardViewModels(cardRows as TodayCandidateCardRow[]);
+      candidateCards = buildCandidateCardViewModels(cardRows as unknown as TodayCandidateCardRow[]);
     } else {
       candidateCardsFetchFailed = true;
       console.error("unexpected get_today_candidate_cards shape", cardRows);
@@ -72,7 +72,7 @@ export default async function HomePage() {
       console.error("get_candidate_evidence failed", evidenceError);
     } else if (Array.isArray(evidenceRows) && evidenceRows.every(isCandidateEvidenceRpcRow)) {
       candidateEvidenceById = new Map(
-        (evidenceRows as CandidateEvidenceRpcRow[]).map((row) => [row.candidate_id, row])
+        (evidenceRows as unknown as CandidateEvidenceRpcRow[]).map((row) => [row.candidate_id, row])
       );
     } else {
       candidateEvidenceFetchFailed = true;
@@ -87,7 +87,7 @@ export default async function HomePage() {
       candidateSupplyHintsFetchFailed = true;
       console.error("get_candidate_supply_hints failed", supplyHintError);
     } else if (Array.isArray(supplyHintData) && supplyHintData.every(isCandidateSupplyHintRpcRow)) {
-      const typedHintRows = supplyHintData as CandidateSupplyHintRpcRow[];
+      const typedHintRows = supplyHintData as unknown as CandidateSupplyHintRpcRow[];
       if (typedHintRows.every(
         (row) => row.attempt_run_id === snapshot.complete_snapshot?.run_id &&
           row.trading_day === snapshot.complete_snapshot?.trading_day,
@@ -109,7 +109,7 @@ export default async function HomePage() {
       marketSupplyFetchFailed = true;
       console.error("get_market_supply failed", marketSupplyError);
     } else if (Array.isArray(marketSupplyData) && marketSupplyData.every(isMarketSupplyRpcRow)) {
-      marketSupplyRows = marketSupplyData;
+      marketSupplyRows = marketSupplyData as unknown as MarketSupplyRpcRow[];
     } else {
       marketSupplyFetchFailed = true;
       console.error("unexpected get_market_supply shape", marketSupplyData);
@@ -129,7 +129,7 @@ export default async function HomePage() {
       console.error("get_today_disappeared_candidates failed", disappearedError);
     } else if (Array.isArray(disappearedRows)) {
       disappearedCandidates = buildDisappearedCandidateViewModels(
-        disappearedRows as DisappearedCandidateRow[]
+        disappearedRows as unknown as DisappearedCandidateRow[]
       );
     } else {
       console.error("unexpected get_today_disappeared_candidates shape", disappearedRows);

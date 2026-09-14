@@ -26,6 +26,39 @@ export interface OutcomeTrackingRpcRow {
   return_pct: number | null;
 }
 
+/** Story 5.12 get_outcome_metric_comparison()가 반환하는 5.10 canonical metric row. */
+export interface OutcomeMetricComparisonRpcRow {
+  strategy: OutcomeStrategy | null;
+  total_settled: number;
+  wins: number;
+  losses: number;
+  open_count: number;
+  suspended_count: number;
+  delisted_count: number;
+  gross_win: number | null;
+  gross_loss: number | null;
+  win_rate: number | null;
+  profit_factor: number | null;
+  sample_gate_min_required: number | null;
+  sample_gate_passed: boolean;
+  sample_gate_label: string | null;
+  ci_lower: number | null;
+  ci_upper: number | null;
+  expected_win_rate: number | null;
+  expected_in_ci: boolean | null;
+  expected_profit_factor: number | null;
+  win_rate_threshold_pp: number | null;
+  profit_factor_threshold_ratio: number | null;
+  win_rate_threshold_breached: boolean | null;
+  profit_factor_threshold_breached: boolean | null;
+  threshold_warning: boolean | null;
+  timeout_count: number;
+  cutoff_bias_sample_size: number | null;
+  cutoff_bias_timeout_rate: number | null;
+  cutoff_bias_profit_factor_delta: number | null;
+  cutoff_bias_label: string | null;
+}
+
 export interface CandidatesSection {
   candidate_count: number;
   truncated_count: number;

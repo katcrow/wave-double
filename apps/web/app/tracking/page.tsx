@@ -1,6 +1,12 @@
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
+import MetricComparisonPanel from "@/components/tracking/MetricComparisonPanel";
 import OutcomeTrackingPanel from "@/components/tracking/OutcomeTrackingPanel";
 import { isDashboardSnapshot, type DashboardSnapshot } from "@/lib/dashboard-types";
+import {
+  isOutcomeMetricComparisonRpcResponse,
+  normalizeMetricStrategy,
+  toMetricComparisonRpcParams,
+} from "@/lib/metric-comparison";
 import {
   isOutcomeTrackingRpcResponse,
   normalizeOutcomeFilters,
@@ -40,6 +46,7 @@ export default async function TrackingPage({
 
   const snapshot: DashboardSnapshot = snapshotData;
   const filters = normalizeOutcomeFilters(await searchParams);
+  const metricStrategy = normalizeMetricStrategy(await searchParams);
   const { data: outcomeData, error: outcomeError } = await supabase.rpc(
     "get_outcome_tracking_rows",
     toOutcomeTrackingRpcParams(filters),
@@ -51,10 +58,26 @@ export default async function TrackingPage({
     console.error("unexpected get_outcome_tracking_rows shape", outcomeData);
   }
 
+  const { data: metricData, error: metricError } = await supabase.rpc(
+    "get_outcome_metric_comparison",
+    toMetricComparisonRpcParams(metricStrategy),
+  );
+  const metricFetchFailed = Boolean(metricError) || !isOutcomeMetricComparisonRpcResponse(metricData, metricStrategy);
+  if (metricError) {
+    console.error("get_outcome_metric_comparison failed", metricError);
+  } else if (!isOutcomeMetricComparisonRpcResponse(metricData, metricStrategy)) {
+    console.error("unexpected get_outcome_metric_comparison shape", metricData);
+  }
+
   return (
     <section aria-labelledby="tracking-heading">
       <h1 id="tracking-heading">성과 검증</h1>
       <DataTrustBar snapshot={snapshot} focusStage="outcome_tracking" />
+      <MetricComparisonPanel
+        rows={metricFetchFailed ? [] : metricData}
+        fetchFailed={metricFetchFailed}
+        selectedStrategy={metricStrategy}
+      />
       <OutcomeTrackingPanel
         rows={fetchFailed ? [] : outcomeData}
         fetchFailed={fetchFailed}

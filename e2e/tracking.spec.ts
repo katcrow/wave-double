@@ -52,7 +52,7 @@ test("tracking 필터는 query string과 결과를 보존한다", async ({ page 
   await page.goto("/tracking");
 
   await page.getByLabel("상태").selectOption("OPEN");
-  await page.getByLabel("전략").selectOption("D");
+  await page.getByLabel("전략", { exact: true }).selectOption("D");
   await page.getByLabel("Ticker").fill("051910");
   await page.getByRole("button", { name: "필터 적용" }).click();
 
@@ -61,13 +61,13 @@ test("tracking 필터는 query string과 결과를 보존한다", async ({ page 
   await expect(page.locator(".outcome-tracking__table tbody")).toContainText("051910");
   await expect(page.locator(".outcome-tracking__table tbody")).toContainText("전략 D");
   await expect(page.getByLabel("상태")).toHaveValue("OPEN");
-  await expect(page.getByLabel("전략")).toHaveValue("D");
+  await expect(page.getByLabel("전략", { exact: true })).toHaveValue("D");
   await page.reload();
-  await expect(page.getByLabel("전략")).toHaveValue("D");
+  await expect(page.getByLabel("전략", { exact: true })).toHaveValue("D");
   await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(1);
   await page.goBack();
   await expect(page).toHaveURL(/\/tracking$/);
-  await page.getByRole("link", { name: "초기화" }).click();
+  await page.getByRole("link", { name: "초기화", exact: true }).click();
   await expect(page).toHaveURL(/\/tracking$/);
 });
 
@@ -75,7 +75,7 @@ test("tracking은 잘못된 query 필터를 전체 조회로 정규화한다", a
   await signIn(page);
   await page.goto("/tracking?status=UNKNOWN&strategy=G&ticker=%3Cscript%3E");
   await expect(page.getByLabel("상태")).toHaveValue("");
-  await expect(page.getByLabel("전략")).toHaveValue("");
+  await expect(page.getByLabel("전략", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Ticker")).toHaveValue("");
   await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
 });
@@ -104,4 +104,98 @@ test("tracking은 좁은 화면에서 table을 읽기 가능한 카드로 전환
   await expect(page.locator(".outcome-tracking__table")).toBeHidden();
   await expect(page.locator(".outcome-tracking__cards")).toBeVisible();
   await expect(page.locator(".outcome-tracking__card")).toHaveCount(6);
+});
+
+test("tracking metric은 전체 범위에서 실전/기대치, count, CI를 함께 표시한다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking");
+
+  await expect(page.getByRole("heading", { name: "Metric comparison" })).toBeVisible();
+  await expect(page.getByLabel("성과 기준 전략")).toHaveValue("");
+  await expect(page.getByText("비교 범위: 전체 전략")).toBeVisible();
+  await expect(page.locator(".metric-comparison__counts")).toContainText("종결 179건");
+  await expect(page.locator(".metric-comparison__counts")).toContainText("진행 중 1건");
+  await expect(page.locator(".metric-comparison__metric-value").first()).toContainText("49.72%");
+  await expect(page.getByText("기대치 없음 — 이 비교 범위에는 정의된 백테스트 기대치가 없습니다.")).toBeVisible();
+  await expect(page.getByText("95% CI", { exact: true })).toBeVisible();
+  await expect(page.getByText(/TIMEOUT 2건 · N=30 기준/)).toBeVisible();
+});
+
+test("tracking metric 전략 선택은 outcome 필터와 함께 URL에 보존되고 게이트/경고를 표시한다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking?status=OPEN&strategy=D&ticker=051910");
+  await expect(page.locator(".metric-comparison__filters input[type='hidden'][name='status']")).toHaveValue("OPEN");
+  await expect(page.locator(".metric-comparison__filters input[type='hidden'][name='strategy']")).toHaveValue("D");
+  await expect(page.locator(".metric-comparison__filters input[type='hidden'][name='ticker']")).toHaveValue("051910");
+  await page.getByLabel("성과 기준 전략").selectOption("B");
+  await page.getByRole("button", { name: "비교 범위 적용" }).click();
+
+  await expect(page).toHaveURL(/\/tracking\?status=OPEN&strategy=D&ticker=051910&metric_strategy=B/);
+  await expect(page.getByText("비교 범위: 전략 B")).toBeVisible();
+  await expect(page.getByText("백테스트 기대 승률이 95% CI 밖에 있습니다.")).toBeVisible();
+  await expect(page.getByText("승률 기대치 대비 ±10%p 초과")).toBeVisible();
+  await expect(page.getByText("PF 기대치 대비 ±25% 초과")).toBeVisible();
+  await expect(page.getByText(/TIMEOUT 1건 · N=30 예상 왜곡: TIMEOUT 0\.37%/)).toBeVisible();
+  await expect(page.locator(".metric-comparison__bar-group[role='img']")).toHaveCount(2);
+  await expect(page.locator(".metric-comparison__bar-group[role='img']").nth(1)).toHaveAttribute("aria-label", /PF 비교 그래픽/);
+  await page.reload();
+  await expect(page.getByLabel("성과 기준 전략")).toHaveValue("B");
+});
+
+test("metric은 기대치가 없는 전략을 명시하고 키보드로 범위를 바꿀 수 있다", async ({ page }) => {
+  await signIn(page);
+  for (const strategy of ["D", "F"]) {
+    await page.goto(`/tracking?metric_strategy=${strategy}`);
+    await expect(page.getByText("기대치 없음 — 이 비교 범위에는 정의된 백테스트 기대치가 없습니다.")).toBeVisible();
+    await expect(page.getByText("95% CI 판정", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("95% CI", { exact: true })).toBeVisible();
+  }
+  await page.goto("/tracking");
+  const selector = page.getByRole("combobox", { name: "성과 기준 전략" });
+  await expect(selector).toHaveRole("combobox");
+  await selector.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(selector).toHaveValue("A");
+});
+
+test("all-win PF NULL은 산출 불가 의미를 표시한다", async ({ page, request }) => {
+  await signIn(page);
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-metric-all-win" } });
+  await page.goto("/tracking?metric_strategy=F");
+  await expect(page.getByText("산출 불가(음의 손익 없음)")).toBeVisible();
+});
+
+test("tracking metric 표본 부족은 성과/CI/threshold를 숨긴다", async ({ page, request }) => {
+  await signIn(page);
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-metric-below-gate" } });
+  await page.goto("/tracking?metric_strategy=C");
+
+  await expect(page.getByText("표본 부족 (29/30)")).toBeVisible();
+  await expect(page.locator(".metric-comparison__gate")).toBeVisible();
+  await expect(page.locator(".metric-comparison__metric-value")).toHaveCount(0);
+  await expect(page.getByText("95% CI 판정")).toHaveCount(0);
+});
+
+test("tracking metric RPC 실패와 shape 오류는 outcome tracking을 유지한다", async ({ page, request }) => {
+  await signIn(page);
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-metric-error" } });
+  await page.goto("/tracking");
+  await expect(page.locator(".metric-comparison__state[role='alert']")).toContainText("성과 비교 데이터를 불러오지 못했습니다");
+  await expect(page.getByRole("heading", { name: "Outcome tracking" })).toBeVisible();
+  await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
+
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-metric-malformed" } });
+  await page.reload();
+  await expect(page.locator(".metric-comparison__state[role='alert']")).toContainText("성과 비교 데이터를 불러오지 못했습니다");
+  await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
+});
+
+test("tracking metric은 375px 폭에서도 전략 선택과 metric 결과를 읽을 수 있다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking?metric_strategy=A");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(page.getByLabel("성과 기준 전략")).toBeVisible();
+  await expect(page.locator(".metric-comparison__metric")).toHaveCount(2);
+  await expect(page.locator(".metric-comparison__metric-value").first()).toBeVisible();
+  await expect(page.getByText("백테스트 기대 승률이 95% CI 안에 있습니다.")).toBeVisible();
 });
