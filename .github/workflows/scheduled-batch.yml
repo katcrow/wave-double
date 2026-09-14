@@ -52,7 +52,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          uv-version: "0.11.28"
+          version: "0.11.28"
           python-version: "3.12.14"
 
       - name: Determine batch kind

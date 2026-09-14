@@ -25,7 +25,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          uv-version: "0.11.28"
+          version: "0.11.28"
           python-version: "3.12.14"
 
       - name: Backtest tests (Python)
@@ -114,6 +114,30 @@ jobs:
 
       - name: Validate migration order contract
         run: python tools/check_migration_order.py
+
+      # migration들이 grant/revoke 대상으로 참조하는 Supabase 플랫폼 기본 롤은
+      # 순정 postgres:16 이미지에 존재하지 않는다. 이 롤들이 없으면 첫 grant/revoke에서
+      # "role does not exist"로 즉시 죽는다(sql-schema-tests가 그동안 항상 실패해온 원인).
+      # CREATE ROLE은 클러스터 단위라 이후 N/N-1 스텝의 nm1/full_apply DB에도 그대로 적용된다.
+      - name: Bootstrap Supabase platform roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin noinherit;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin noinherit;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin noinherit bypassrls;
+            end if;
+          end
+          $$;
+          SQL
 
       - name: Apply migrations
         env:
