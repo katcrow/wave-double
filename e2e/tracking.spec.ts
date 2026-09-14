@@ -199,3 +199,54 @@ test("tracking metric은 375px 폭에서도 전략 선택과 metric 결과를 �
   await expect(page.locator(".metric-comparison__metric-value").first()).toBeVisible();
   await expect(page.getByText("백테스트 기대 승률이 95% CI 안에 있습니다.")).toBeVisible();
 });
+
+test("tracking bias는 선택 날짜의 네 수치와 설명을 표시하고 query를 보존한다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking?bias_date=2026-09-08");
+
+  await expect(page.getByRole("heading", { name: "Bias diagnostic" })).toBeVisible();
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-08");
+  await expect(page.getByText("기준일: 2026-09-08")).toBeVisible();
+  await expect(page.locator(".bias-diagnostic__metric")).toHaveCount(4);
+  await expect(page.locator(".bias-diagnostic__value").nth(0)).toHaveText("12");
+  await expect(page.locator(".bias-diagnostic__value").nth(1)).toHaveText("18");
+  await expect(page.locator(".bias-diagnostic__value").nth(2)).toHaveText("7");
+  await expect(page.locator(".bias-diagnostic__value").nth(3)).toHaveText("14");
+  await expect(page.getByText("성과 실패 원인을 뜻하지는 않습니다.")).toBeVisible();
+
+  await page.getByLabel("편향 진단 날짜").fill("2026-09-10");
+  await page.getByRole("button", { name: "날짜 적용" }).click();
+  await expect(page).toHaveURL(/\/tracking\?bias_date=2026-09-10/);
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-10");
+  await page.reload();
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-10");
+});
+
+test("tracking bias는 미수집·RPC 오류·shape 오류를 분리하고 기존 결과를 유지한다", async ({ page, request }) => {
+  await signIn(page);
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-bias-empty" } });
+  await page.goto("/tracking?bias_date=2026-09-11");
+  await expect(page.locator(".bias-diagnostic__state")).toContainText("이 날짜의 편향 데이터가 없습니다");
+  await expect(page.locator(".bias-diagnostic__value")).toHaveCount(0);
+  await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
+
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-bias-error" } });
+  await page.reload();
+  await expect(page.locator(".bias-diagnostic__state[role='alert']")).toContainText("편향 진단 데이터를 불러오지 못했습니다");
+  await expect(page.locator(".metric-comparison__metric-value").first()).toBeVisible();
+  await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
+
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-bias-malformed" } });
+  await page.reload();
+  await expect(page.locator(".bias-diagnostic__state[role='alert']")).toContainText("편향 진단 데이터를 불러오지 못했습니다");
+  await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
+});
+
+test("tracking bias 네 수치는 좁은 화면에서도 읽을 수 있다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(page.getByLabel("편향 진단 날짜")).toBeVisible();
+  await expect(page.locator(".bias-diagnostic__metric")).toHaveCount(4);
+  await expect(page.locator(".bias-diagnostic__grid")).toBeVisible();
+});

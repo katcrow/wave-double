@@ -1059,6 +1059,7 @@ export type Database = {
         Args: { p_fence_token: number; p_lease_token: string; p_run_id: string }
         Returns: Json
       }
+      get_bias_diagnostic: { Args: { p_trading_day: string }; Returns: Json }
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }

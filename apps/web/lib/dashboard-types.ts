@@ -59,6 +59,16 @@ export interface OutcomeMetricComparisonRpcRow {
   cutoff_bias_label: string | null;
 }
 
+/** Story 5.13 get_bias_diagnostic()가 브라우저에 반환하는 고정 row 계약. */
+export interface BiasDiagnosticRpcRow {
+  trading_day: string;
+  has_data: boolean;
+  candidate_population_signal_count: number | null;
+  backtest_universe_signal_count: number | null;
+  intersection_count: number | null;
+  missed_opportunity_count: number | null;
+}
+
 export interface CandidatesSection {
   candidate_count: number;
   truncated_count: number;

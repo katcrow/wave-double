@@ -868,6 +868,188 @@ a {
   }
 }
 
+/* Story 5.13: canonical bias diagnostic */
+
+.bias-diagnostic {
+  margin-top: var(--space-6);
+  padding: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.bias-diagnostic__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.bias-diagnostic__eyebrow,
+.bias-diagnostic__description,
+.bias-diagnostic__scope,
+.bias-diagnostic__metric-description {
+  margin: 0;
+}
+
+.bias-diagnostic__eyebrow {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.bias-diagnostic__header h2 {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink-primary);
+}
+
+.bias-diagnostic__description,
+.bias-diagnostic__scope {
+  margin-top: var(--space-2);
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+}
+
+.bias-diagnostic__scope {
+  flex: 0 0 auto;
+  color: var(--color-ink-primary);
+  font-weight: var(--font-weight-label);
+}
+
+.bias-diagnostic__filters {
+  display: flex;
+  align-items: end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-6) 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.bias-diagnostic__filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 14rem;
+}
+
+.bias-diagnostic__filter-field label {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.bias-diagnostic__filter-field input {
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-ink-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.bias-diagnostic__filter-actions {
+  display: flex;
+  align-items: center;
+  min-height: 2.5rem;
+}
+
+.bias-diagnostic__filter-actions button {
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-surface);
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.bias-diagnostic__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.bias-diagnostic__metric {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.bias-diagnostic__metric h3 {
+  min-height: 2.8em;
+  margin: 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+.bias-diagnostic__value {
+  margin: var(--space-2) 0 0;
+  color: var(--color-ink-primary);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-data);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-data);
+}
+
+.bias-diagnostic__metric-description {
+  margin-top: var(--space-3);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.5;
+}
+
+.bias-diagnostic__state {
+  margin: var(--space-6) 0 0;
+  padding: var(--space-5);
+  color: var(--color-ink-secondary);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.bias-diagnostic__state[role="alert"] {
+  color: var(--color-negative);
+  border-style: solid;
+}
+
+@media (max-width: 767px) {
+  .bias-diagnostic {
+    padding: var(--space-4);
+  }
+
+  .bias-diagnostic__header {
+    flex-direction: column;
+  }
+
+  .bias-diagnostic__filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bias-diagnostic__filter-field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .bias-diagnostic__filter-actions button {
+    width: 100%;
+  }
+
+  .bias-diagnostic__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .bias-diagnostic__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Notice banner (비차단 Toast/notice) */
 
 .notice-banner {

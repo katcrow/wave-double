@@ -73,8 +73,11 @@ const SCENARIOS = new Set([
   "tracking-malformed",
     "tracking-metric-below-gate",
     "tracking-metric-all-win",
-    "tracking-metric-error",
+  "tracking-metric-error",
   "tracking-metric-malformed",
+  "tracking-bias-empty",
+  "tracking-bias-error",
+  "tracking-bias-malformed",
 ]);
 let activeScenario = "default";
 
@@ -268,6 +271,29 @@ function rpcPayload(name, body = {}) {
         return strategy ? allWinRows.filter((row) => row.strategy === strategy) : allWinRows;
       }
       return strategy ? rows.filter((row) => row.strategy === strategy) : rows;
+  }
+  if (name === "get_bias_diagnostic") {
+    if (activeScenario === "tracking-bias-error") return null;
+    if (activeScenario === "tracking-bias-malformed") return { trading_day: body?.p_trading_day, has_data: true };
+    const tradingDay = typeof body?.p_trading_day === "string" ? body.p_trading_day : TRADING_DAY;
+    if (activeScenario === "tracking-bias-empty") {
+      return {
+        trading_day: tradingDay,
+        has_data: false,
+        candidate_population_signal_count: null,
+        backtest_universe_signal_count: null,
+        intersection_count: null,
+        missed_opportunity_count: null,
+      };
+    }
+    return {
+      trading_day: tradingDay,
+      has_data: true,
+      candidate_population_signal_count: 12,
+      backtest_universe_signal_count: 18,
+      intersection_count: 7,
+      missed_opportunity_count: 14,
+    };
   }
   return null;
 }

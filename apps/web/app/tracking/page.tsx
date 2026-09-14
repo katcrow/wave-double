@@ -1,7 +1,13 @@
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
+import BiasDiagnosticPanel from "@/components/tracking/BiasDiagnosticPanel";
 import MetricComparisonPanel from "@/components/tracking/MetricComparisonPanel";
 import OutcomeTrackingPanel from "@/components/tracking/OutcomeTrackingPanel";
 import { isDashboardSnapshot, type DashboardSnapshot } from "@/lib/dashboard-types";
+import {
+  isBiasDiagnosticRpcResponse,
+  normalizeBiasDate,
+  toBiasDiagnosticRpcParams,
+} from "@/lib/bias-diagnostic";
 import {
   isOutcomeMetricComparisonRpcResponse,
   normalizeMetricStrategy,
@@ -45,8 +51,10 @@ export default async function TrackingPage({
   }
 
   const snapshot: DashboardSnapshot = snapshotData;
-  const filters = normalizeOutcomeFilters(await searchParams);
-  const metricStrategy = normalizeMetricStrategy(await searchParams);
+  const params = await searchParams;
+  const filters = normalizeOutcomeFilters(params);
+  const metricStrategy = normalizeMetricStrategy(params);
+  const biasDate = normalizeBiasDate(params);
   const { data: outcomeData, error: outcomeError } = await supabase.rpc(
     "get_outcome_tracking_rows",
     toOutcomeTrackingRpcParams(filters),
@@ -69,6 +77,17 @@ export default async function TrackingPage({
     console.error("unexpected get_outcome_metric_comparison shape", metricData);
   }
 
+  const { data: biasData, error: biasError } = await supabase.rpc(
+    "get_bias_diagnostic",
+    toBiasDiagnosticRpcParams(biasDate),
+  );
+  const biasFetchFailed = Boolean(biasError) || !isBiasDiagnosticRpcResponse(biasData, biasDate);
+  if (biasError) {
+    console.error("get_bias_diagnostic failed", biasError);
+  } else if (!isBiasDiagnosticRpcResponse(biasData, biasDate)) {
+    console.error("unexpected get_bias_diagnostic shape", biasData);
+  }
+
   return (
     <section aria-labelledby="tracking-heading">
       <h1 id="tracking-heading">성과 검증</h1>
@@ -77,6 +96,11 @@ export default async function TrackingPage({
         rows={metricFetchFailed ? [] : metricData}
         fetchFailed={metricFetchFailed}
         selectedStrategy={metricStrategy}
+      />
+      <BiasDiagnosticPanel
+        row={biasFetchFailed ? null : biasData}
+        fetchFailed={biasFetchFailed}
+        selectedDate={biasDate}
       />
       <OutcomeTrackingPanel
         rows={fetchFailed ? [] : outcomeData}
