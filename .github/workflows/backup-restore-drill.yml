@@ -185,6 +185,12 @@ jobs:
               lines = f.readlines()
 
           ALLOWED_EXTENSIONS = {"pgcrypto"}
+          # cron/net은 데이터·함수 호출까지 있는 확장(아래 사용처 참고)이라 스키마 단위로도
+          # 계속 막는다. vault/pgsodium 등 나머지 platform-only 확장은 CREATE EXTENSION만
+          # 제거해도 대체로 충분하지만, vault.secrets처럼 그 확장이 만든 테이블에 대한 COPY
+          # 데이터 블록은 남아있어 스키마 자체가 없으므로 막아야 한다(2026-09-14 조사). 새
+          # platform-only 확장이 dump에 데이터를 남기면 이 집합에 추가한다.
+          PLATFORM_ONLY_DATA_SCHEMAS = ("cron", "net", "vault", "pgsodium")
 
           def extension_name(low: str) -> str | None:
               m = re.match(
@@ -215,10 +221,10 @@ jobs:
               ext_name = extension_name(low)
               if ext_name is not None and ext_name not in ALLOWED_EXTENSIONS:
                   continue
-              if low.startswith("copy cron.") or low.startswith("copy net."):
+              if any(low.startswith(f"copy {schema}.") for schema in PLATFORM_ONLY_DATA_SCHEMAS):
                   skip_mode = "copy"
                   continue
-              if "setval" in low and ("'cron." in low or "'net." in low):
+              if "setval" in low and any(f"'{schema}." in low for schema in PLATFORM_ONLY_DATA_SCHEMAS):
                   continue
               if low.startswith("do $$"):
                   skip_mode = "dollar"
@@ -227,7 +233,7 @@ jobs:
                   if not stripped.endswith(";"):
                       skip_mode = "paren"
                   continue
-              if re.match(r"^(alter|grant|revoke)\b.*\b(cron|net)\.", low):
+              if re.match(r"^(alter|grant|revoke)\b.*\b(" + "|".join(PLATFORM_ONLY_DATA_SCHEMAS) + r")\.", low):
                   continue
 
               out.append(line)
