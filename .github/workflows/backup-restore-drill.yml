@@ -217,6 +217,32 @@ jobs:
               f.writelines(out)
           PY
 
+      # backup.yml의 pg_dump --no-privileges가 GRANT/REVOKE는 걸러내지만, RLS
+      # policy(create policy ... to anon, authenticated)는 별개 스키마 객체라 그대로
+      # 덤프에 남는다. 순정 postgres:16에는 이 Supabase 플랫폼 롤이 없어 복원과 이후
+      # migration 적용(둘 다 anon/authenticated/service_role을 참조) 모두 즉시
+      # "role does not exist"로 죽는다(test.yml의 sql-schema-tests와 동일 원인,
+      # 2026-09-14 조사).
+      - name: Bootstrap Supabase platform roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin noinherit;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin noinherit;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin noinherit bypassrls;
+            end if;
+          end
+          $$;
+          SQL
+
       - name: Restore dump into disposable Postgres
         env:
           PGPASSWORD: postgres
