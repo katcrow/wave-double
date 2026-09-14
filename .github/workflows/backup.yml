@@ -68,7 +68,9 @@ jobs:
           # Supabase 전용 role(anon/authenticated/service_role 등)이 없으므로, 이 role을 참조하는
           # OWNER TO / GRANT 구문이 덤프에 섞이면 plain psql -f 복원이 깨진다. 데이터·스키마 자체의
           # transaction-consistency와는 무관한 순수 이식성 옵션이다.
-          pg_dump --format=plain --no-owner --no-privileges \
+          # 러너에 이미 깔려 있던 postgresql-client(16)이 PATH의 plain `pg_dump`를 여전히
+          # 차지하고 있어서, 버전 지정 바이너리를 직접 호출한다.
+          /usr/lib/postgresql/17/bin/pg_dump --format=plain --no-owner --no-privileges \
             "$SUPABASE_DB_URL" > "$plain"
 
           age -r "$BACKUP_AGE_PUBLIC_KEY" -o "$encrypted" "$plain"
