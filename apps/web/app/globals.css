@@ -575,6 +575,7 @@ a {
 .metric-comparison__eyebrow,
 .metric-comparison__description,
 .metric-comparison__scope,
+.metric-comparison__source-note,
 .metric-comparison__metric-heading h3,
 .metric-comparison__metric-heading span,
 .metric-comparison__bar-legend,
@@ -597,7 +598,8 @@ a {
 }
 
 .metric-comparison__description,
-.metric-comparison__scope {
+.metric-comparison__scope,
+.metric-comparison__source-note {
   margin-top: var(--space-2);
   color: var(--color-ink-secondary);
   font-size: var(--font-size-label);
@@ -669,6 +671,13 @@ a {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
+}
+
+.metric-comparison__source-note,
+.bias-diagnostic__source-note {
+  margin: 0 0 var(--space-4);
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
 }
 
 .metric-comparison__counts {
@@ -888,7 +897,8 @@ a {
 .bias-diagnostic__eyebrow,
 .bias-diagnostic__description,
 .bias-diagnostic__scope,
-.bias-diagnostic__metric-description {
+.bias-diagnostic__metric-description,
+.bias-diagnostic__source-note {
   margin: 0;
 }
 

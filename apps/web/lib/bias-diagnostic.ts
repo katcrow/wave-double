@@ -1,4 +1,5 @@
 import type { BiasDiagnosticRpcRow } from "./dashboard-types";
+import type { SourceFilter } from "./source-filter";
 
 export type { BiasDiagnosticRpcRow } from "./dashboard-types";
 
@@ -52,8 +53,10 @@ export function normalizeBiasDate(input: QueryInput, now = new Date()): string {
   return isIsoDate(value) ? value : getKstToday(now);
 }
 
-export function toBiasDiagnosticRpcParams(tradingDay: string) {
-  return { p_trading_day: tradingDay };
+export function toBiasDiagnosticRpcParams(tradingDay: string, source: SourceFilter = "") {
+  return source
+    ? { p_trading_day: tradingDay, p_source: source }
+    : { p_trading_day: tradingDay };
 }
 
 function isNonNegativeInteger(value: unknown): value is number {

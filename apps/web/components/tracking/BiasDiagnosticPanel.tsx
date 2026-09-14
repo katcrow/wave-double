@@ -6,11 +6,18 @@ import {
   formatBiasCount,
   type BiasDiagnosticRpcRow,
 } from "@/lib/bias-diagnostic";
+import {
+  getSourceLabel,
+  getSourceScopeDescription,
+  SOURCE_QUERY_KEY,
+  type SourceFilter,
+} from "@/lib/source-filter";
 
 interface BiasDiagnosticPanelProps {
   row: BiasDiagnosticRpcRow | null;
   fetchFailed: boolean;
   selectedDate: string;
+  selectedSource: SourceFilter;
 }
 
 const METRICS = [
@@ -40,7 +47,7 @@ const METRICS = [
   description: string;
 }>;
 
-export default function BiasDiagnosticPanel({ row, fetchFailed, selectedDate }: BiasDiagnosticPanelProps) {
+export default function BiasDiagnosticPanel({ row, fetchFailed, selectedDate, selectedSource }: BiasDiagnosticPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,7 +73,7 @@ export default function BiasDiagnosticPanel({ row, fetchFailed, selectedDate }: 
             종가 배치가 저장한 A~F 전략 시그널 합집합을 기준으로 두 모집단의 기회 차이를 확인합니다. 성과 실패 원인으로 단정하지 않습니다.
           </p>
         </div>
-        <p className="bias-diagnostic__scope" role="status">기준일: {selectedDate}</p>
+        <p className="bias-diagnostic__scope" role="status">기준일: {selectedDate} · {getSourceLabel(selectedSource)}</p>
       </header>
 
       <form key={selectedDate} className="bias-diagnostic__filters" method="get" action={pathname} onSubmit={handleDateSubmit}>
@@ -74,9 +81,10 @@ export default function BiasDiagnosticPanel({ row, fetchFailed, selectedDate }: 
           <label htmlFor="bias-date-filter">편향 진단 날짜</label>
           <input id="bias-date-filter" name={BIAS_DATE_QUERY_KEY} type="date" defaultValue={selectedDate} required />
         </div>
-        {Array.from(searchParams.entries()).filter(([key]) => key !== BIAS_DATE_QUERY_KEY).map(([key, value], index) => (
+        {Array.from(searchParams.entries()).filter(([key]) => key !== BIAS_DATE_QUERY_KEY && key !== SOURCE_QUERY_KEY).map(([key, value], index) => (
           <input key={`${key}-${index}`} type="hidden" name={key} value={value} />
         ))}
+        {selectedSource && <input type="hidden" name={SOURCE_QUERY_KEY} value={selectedSource} />}
         <div className="bias-diagnostic__filter-actions">
           <button type="submit">날짜 적용</button>
         </div>
@@ -87,15 +95,18 @@ export default function BiasDiagnosticPanel({ row, fetchFailed, selectedDate }: 
       ) : !row || !row.has_data ? (
         <p className="bias-diagnostic__state" role="status">이 날짜의 편향 데이터가 없습니다</p>
       ) : (
-        <div className="bias-diagnostic__grid" role="list" aria-label={`${selectedDate} Bias diagnostic 수치`}>
-          {METRICS.map((metric) => (
-            <article className="bias-diagnostic__metric" role="listitem" key={metric.key}>
-              <h3>{metric.label}</h3>
-              <p className="bias-diagnostic__value">{formatBiasCount(row[metric.key])}</p>
-              <p className="bias-diagnostic__metric-description">{metric.description}</p>
-            </article>
-          ))}
-        </div>
+        <>
+          <p className="bias-diagnostic__source-note">{getSourceScopeDescription(selectedSource)}</p>
+          <div className="bias-diagnostic__grid" role="list" aria-label={`${selectedDate} ${getSourceLabel(selectedSource)} Bias diagnostic 수치`}>
+            {METRICS.map((metric) => (
+              <article className="bias-diagnostic__metric" role="listitem" key={metric.key}>
+                <h3>{metric.label}</h3>
+                <p className="bias-diagnostic__value">{formatBiasCount(row[metric.key])}</p>
+                <p className="bias-diagnostic__metric-description">{metric.description}</p>
+              </article>
+            ))}
+          </div>
+        </>
       )}
     </section>
   );

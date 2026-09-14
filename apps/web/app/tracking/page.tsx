@@ -13,6 +13,7 @@ import {
   normalizeMetricStrategy,
   toMetricComparisonRpcParams,
 } from "@/lib/metric-comparison";
+import { normalizeSource } from "@/lib/source-filter";
 import {
   isOutcomeTrackingRpcResponse,
   normalizeOutcomeFilters,
@@ -55,6 +56,7 @@ export default async function TrackingPage({
   const filters = normalizeOutcomeFilters(params);
   const metricStrategy = normalizeMetricStrategy(params);
   const biasDate = normalizeBiasDate(params);
+  const source = normalizeSource(params);
   const { data: outcomeData, error: outcomeError } = await supabase.rpc(
     "get_outcome_tracking_rows",
     toOutcomeTrackingRpcParams(filters),
@@ -68,7 +70,7 @@ export default async function TrackingPage({
 
   const { data: metricData, error: metricError } = await supabase.rpc(
     "get_outcome_metric_comparison",
-    toMetricComparisonRpcParams(metricStrategy),
+    toMetricComparisonRpcParams(metricStrategy, source),
   );
   const metricFetchFailed = Boolean(metricError) || !isOutcomeMetricComparisonRpcResponse(metricData, metricStrategy);
   if (metricError) {
@@ -79,7 +81,7 @@ export default async function TrackingPage({
 
   const { data: biasData, error: biasError } = await supabase.rpc(
     "get_bias_diagnostic",
-    toBiasDiagnosticRpcParams(biasDate),
+    toBiasDiagnosticRpcParams(biasDate, source),
   );
   const biasFetchFailed = Boolean(biasError) || !isBiasDiagnosticRpcResponse(biasData, biasDate);
   if (biasError) {
@@ -96,11 +98,13 @@ export default async function TrackingPage({
         rows={metricFetchFailed ? [] : metricData}
         fetchFailed={metricFetchFailed}
         selectedStrategy={metricStrategy}
+        selectedSource={source}
       />
       <BiasDiagnosticPanel
         row={biasFetchFailed ? null : biasData}
         fetchFailed={biasFetchFailed}
         selectedDate={biasDate}
+        selectedSource={source}
       />
       <OutcomeTrackingPanel
         rows={fetchFailed ? [] : outcomeData}

@@ -254,12 +254,39 @@ function rpcPayload(name, body = {}) {
       { ...base, strategy: "B", expected_win_rate: 0.6895, expected_in_ci: false, expected_profit_factor: 2.077, win_rate_threshold_breached: true, profit_factor_threshold_breached: true, threshold_warning: true, timeout_count: 1, cutoff_bias_sample_size: 30, cutoff_bias_timeout_rate: 0.0037, cutoff_bias_profit_factor_delta: 0.0125, cutoff_bias_label: "TIMEOUT 0.37% / PF차 +0.0125" },
       { ...base, strategy: "C", total_settled: 29, wins: 14, losses: 15, win_rate: null, profit_factor: null, sample_gate_passed: false, sample_gate_label: "표본 부족 (29/30)", ci_lower: null, ci_upper: null, expected_win_rate: null, expected_in_ci: null, expected_profit_factor: null, win_rate_threshold_pp: null, profit_factor_threshold_ratio: null, win_rate_threshold_breached: null, profit_factor_threshold_breached: null },
       { ...base, strategy: "D" },
-      { ...base, strategy: "E" },
-        { ...base, strategy: "F" },
+        { ...base, strategy: "E" },
+      { ...base, strategy: "F" },
       ];
       const strategy = ["A", "B", "C", "D", "E", "F"].includes(body?.p_strategy) ? body.p_strategy : null;
+      const source = ["t1859", "t1852", "t1856"].includes(body?.p_source) ? body.p_source : null;
+      const sourceRows = source === "t1852" ? rows.map((row) => row.strategy === null ? {
+        ...row,
+        total_settled: 32,
+        wins: 20,
+        losses: 12,
+        open_count: 1,
+        gross_win: 40,
+        gross_loss: 12,
+        win_rate: 0.625,
+        profit_factor: 3.3333,
+        ci_lower: 0.46,
+        ci_upper: 0.77,
+        timeout_count: 1,
+      } : row.strategy === "B" ? {
+        ...row,
+        total_settled: 32,
+        wins: 20,
+        losses: 12,
+        gross_win: 40,
+        gross_loss: 12,
+        win_rate: 0.625,
+        profit_factor: 3.3333,
+        ci_lower: 0.46,
+        ci_upper: 0.77,
+        timeout_count: 1,
+      } : row) : rows;
       if (activeScenario === "tracking-metric-all-win") {
-        const allWinRows = rows.map((row) => row.strategy === "F" ? {
+        const allWinRows = sourceRows.map((row) => row.strategy === "F" ? {
           ...row,
           wins: 40,
           losses: 0,
@@ -270,12 +297,13 @@ function rpcPayload(name, body = {}) {
         } : row);
         return strategy ? allWinRows.filter((row) => row.strategy === strategy) : allWinRows;
       }
-      return strategy ? rows.filter((row) => row.strategy === strategy) : rows;
+      return strategy ? sourceRows.filter((row) => row.strategy === strategy) : sourceRows;
   }
   if (name === "get_bias_diagnostic") {
     if (activeScenario === "tracking-bias-error") return null;
     if (activeScenario === "tracking-bias-malformed") return { trading_day: body?.p_trading_day, has_data: true };
     const tradingDay = typeof body?.p_trading_day === "string" ? body.p_trading_day : TRADING_DAY;
+    const source = ["t1859", "t1852", "t1856"].includes(body?.p_source) ? body.p_source : null;
     if (activeScenario === "tracking-bias-empty") {
       return {
         trading_day: tradingDay,
@@ -284,6 +312,26 @@ function rpcPayload(name, body = {}) {
         backtest_universe_signal_count: null,
         intersection_count: null,
         missed_opportunity_count: null,
+      };
+    }
+    if (source === "t1852") {
+      return {
+        trading_day: tradingDay,
+        has_data: true,
+        candidate_population_signal_count: 4,
+        backtest_universe_signal_count: 18,
+        intersection_count: 3,
+        missed_opportunity_count: 6,
+      };
+    }
+    if (source === "t1856") {
+      return {
+        trading_day: tradingDay,
+        has_data: true,
+        candidate_population_signal_count: 0,
+        backtest_universe_signal_count: 0,
+        intersection_count: 0,
+        missed_opportunity_count: 0,
       };
     }
     return {

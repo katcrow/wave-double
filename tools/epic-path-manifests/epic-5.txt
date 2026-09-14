@@ -115,3 +115,8 @@ e2e/mock-supabase-server.mjs
 e2e/tracking.spec.ts
 tests/sql/test_get_bias_diagnostic.sql
 tools/epic-path-manifests/epic-5.txt
+_bmad-output/implementation-artifacts/spec-5-14-원천별-분리-조회-필터-ui.md
+apps/web/lib/source-filter.ts
+apps/web/lib/source-filter.test.ts
+infra/supabase/migrations/202609141200_create_source_filtered_tracking_read_models.sql
+tests/sql/test_get_source_filtered_tracking.sql

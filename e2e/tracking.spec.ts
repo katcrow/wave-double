@@ -281,3 +281,50 @@ test("tracking bias 네 수치는 좁은 화면에서도 읽을 수 있다", asy
   await expect(page.locator(".bias-diagnostic__metric").first()).toHaveRole("listitem");
   await expect(page.locator(".bias-diagnostic__grid")).toBeVisible();
 });
+
+test("tracking 원천 필터는 metric과 bias에 같은 source 범위를 적용하고 query를 보존한다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08");
+
+  const source = page.getByRole("combobox", { name: "조회 원천" });
+  await expect(source).toHaveValue("");
+  await source.selectOption("t1852");
+  await page.getByRole("button", { name: "비교 범위 적용" }).click();
+
+  await expect(page).toHaveURL(/\/tracking\?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08&source=t1852/);
+  await expect(page.getByText("비교 범위: 전략 B · t1852 폴백 원천")).toBeVisible();
+  await expect(page.locator(".metric-comparison__source-note")).toHaveText("t1852 폴백 원천 기준의 canonical primary source 결과입니다.");
+  await expect(page.locator(".bias-diagnostic__source-note")).toHaveText("t1852 폴백 원천 기준의 canonical primary source 결과입니다.");
+  await expect(page.locator(".metric-comparison__counts")).toContainText("종결 32건");
+  await expect(page.locator(".bias-diagnostic__scope")).toContainText("t1852 폴백 원천");
+  await expect(page.locator(".bias-diagnostic__value").nth(0)).toHaveText("4");
+  await expect(page.locator(".bias-diagnostic__value").nth(3)).toHaveText("6");
+
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("t1852");
+  await expect(page.locator(".bias-diagnostic__value").nth(1)).toHaveText("18");
+});
+
+test("tracking 원천 필터 초기화는 전체 통합과 혼합 지표 문구로 돌아간다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking?metric_strategy=B&source=t1852");
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("t1852");
+
+  await page.getByRole("link", { name: "전체로 초기화" }).click();
+  await expect(page).toHaveURL(/\/tracking$/);
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("");
+  await expect(page.getByText("비교 범위: 전체 전략 · 전체 원천 통합")).toBeVisible();
+  await expect(page.getByText("세 원천을 합친 전체 통합 결과이며, 여러 원천이 혼합된 지표입니다.")).toHaveCount(2);
+});
+
+test("tracking은 빈 source를 0으로 표시하고 잘못된 source를 전체로 정규화한다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking?source=t1856");
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("t1856");
+  await expect(page.locator(".bias-diagnostic__value").allTextContents()).resolves.toEqual(["0", "0", "0", "0"]);
+  await expect(page.locator(".bias-diagnostic__state")).toHaveCount(0);
+
+  await page.goto("/tracking?source=not-a-source");
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("");
+  await expect(page.getByText("전체 원천 통합").first()).toBeVisible();
+});

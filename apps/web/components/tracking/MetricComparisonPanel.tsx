@@ -15,12 +15,20 @@ import {
   type MetricStrategy,
   type OutcomeMetricComparisonRpcRow,
 } from "@/lib/metric-comparison";
+import {
+  getSourceLabel,
+  getSourceScopeDescription,
+  SOURCE_OPTIONS,
+  SOURCE_QUERY_KEY,
+  type SourceFilter,
+} from "@/lib/source-filter";
 import { getStrategyLabel } from "@/lib/strategy-labels";
 
 interface MetricComparisonPanelProps {
   rows: OutcomeMetricComparisonRpcRow[];
   fetchFailed: boolean;
   selectedStrategy: MetricStrategy;
+  selectedSource: SourceFilter;
 }
 
 function MetricBar({ observed, expected, maxValue, label, formatValue }: { observed: number | null; expected: number | null; maxValue: number; label: string; formatValue: (value: number | null) => string }) {
@@ -70,7 +78,7 @@ function MetricValue({ row }: { row: OutcomeMetricComparisonRpcRow }) {
   );
 }
 
-export default function MetricComparisonPanel({ rows, fetchFailed, selectedStrategy }: MetricComparisonPanelProps) {
+export default function MetricComparisonPanel({ rows, fetchFailed, selectedStrategy, selectedSource }: MetricComparisonPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -81,8 +89,11 @@ export default function MetricComparisonPanel({ rows, fetchFailed, selectedStrat
     const formData = new FormData(event.currentTarget);
     const nextParams = new URLSearchParams(searchParams.toString());
     const value = String(formData.get("metric_strategy") ?? "");
+    const source = String(formData.get(SOURCE_QUERY_KEY) ?? "");
     if (value) nextParams.set("metric_strategy", value);
     else nextParams.delete("metric_strategy");
+    if (source) nextParams.set(SOURCE_QUERY_KEY, source);
+    else nextParams.delete(SOURCE_QUERY_KEY);
     const query = nextParams.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
@@ -101,10 +112,14 @@ export default function MetricComparisonPanel({ rows, fetchFailed, selectedStrat
             5.10 canonical metric의 실전 성과와 백테스트 기대치를 같은 기준으로 비교합니다. 화면에서는 성과를 재계산하지 않습니다.
           </p>
         </div>
-        {row && <p className="metric-comparison__scope" role="status">비교 범위: {getMetricStrategyLabel(selectedStrategy)}</p>}
+        {row && (
+          <p className="metric-comparison__scope" role="status">
+            비교 범위: {getMetricStrategyLabel(selectedStrategy)} · {getSourceLabel(selectedSource)}
+          </p>
+        )}
       </header>
 
-      <form key={selectedStrategy} className="metric-comparison__filters" method="get" action={pathname} onSubmit={handleSelectionSubmit}>
+      <form key={`${selectedStrategy}-${selectedSource}`} className="metric-comparison__filters" method="get" action={pathname} onSubmit={handleSelectionSubmit}>
         <div className="metric-comparison__filter-field">
           <label htmlFor="metric-strategy-filter">성과 기준 전략</label>
           <select id="metric-strategy-filter" name="metric_strategy" defaultValue={selectedStrategy}>
@@ -114,12 +129,21 @@ export default function MetricComparisonPanel({ rows, fetchFailed, selectedStrat
             ))}
           </select>
         </div>
-        {Array.from(searchParams.entries()).filter(([key]) => key !== "metric_strategy").map(([key, value], index) => (
+        <div className="metric-comparison__filter-field">
+          <label htmlFor="tracking-source-filter">조회 원천</label>
+          <select id="tracking-source-filter" name={SOURCE_QUERY_KEY} defaultValue={selectedSource}>
+            <option value="">{getSourceLabel("")}</option>
+            {SOURCE_OPTIONS.map((source) => (
+              <option key={source} value={source}>{getSourceLabel(source)}</option>
+            ))}
+          </select>
+        </div>
+        {Array.from(searchParams.entries()).filter(([key]) => key !== "metric_strategy" && key !== SOURCE_QUERY_KEY).map(([key, value], index) => (
           <input key={`${key}-${index}`} type="hidden" name={key} value={value} />
         ))}
         <div className="metric-comparison__filter-actions">
           <button type="submit">비교 범위 적용</button>
-          <a href={(() => { const params = new URLSearchParams(searchParams.toString()); params.delete("metric_strategy"); const query = params.toString(); return query ? `${pathname}?${query}` : pathname; })()}>전체로 초기화</a>
+          <a href={(() => { const params = new URLSearchParams(searchParams.toString()); params.delete("metric_strategy"); params.delete(SOURCE_QUERY_KEY); const query = params.toString(); return query ? `${pathname}?${query}` : pathname; })()}>전체로 초기화</a>
         </div>
       </form>
 
@@ -128,7 +152,8 @@ export default function MetricComparisonPanel({ rows, fetchFailed, selectedStrat
       ) : !row ? (
         <p className="metric-comparison__state" role="status">선택한 범위의 metric 데이터가 없습니다.</p>
       ) : (
-        <article className="metric-comparison__result" aria-label={`${getMetricStrategyLabel(selectedStrategy)} metric 비교 결과`}>
+        <article className="metric-comparison__result" aria-label={`${getMetricStrategyLabel(selectedStrategy)} ${getSourceLabel(selectedSource)} metric 비교 결과`}>
+          <p className="metric-comparison__source-note">{getSourceScopeDescription(selectedSource)}</p>
           <div className="metric-comparison__counts" role="status">
             <span>종결 <strong>{formatMetricCount(row.total_settled)}</strong></span>
             <span>진행 중 <strong>{formatMetricCount(row.open_count)}</strong></span>

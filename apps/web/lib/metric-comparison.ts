@@ -1,4 +1,5 @@
 import type { OutcomeMetricComparisonRpcRow, OutcomeStrategy } from "./dashboard-types";
+import type { SourceFilter } from "./source-filter";
 import { getStrategyLabel } from "./strategy-labels.ts";
 export type { OutcomeMetricComparisonRpcRow } from "./dashboard-types";
 
@@ -94,8 +95,10 @@ export function normalizeMetricStrategy(input: QueryInput): MetricStrategy {
   return isOneOf(strategy, METRIC_STRATEGY_OPTIONS) ? strategy : "";
 }
 
-export function toMetricComparisonRpcParams(strategy: MetricStrategy) {
-  return { p_strategy: strategy || null };
+export function toMetricComparisonRpcParams(strategy: MetricStrategy, source: SourceFilter = "") {
+  return source
+    ? { p_strategy: strategy || null, p_source: source }
+    : { p_strategy: strategy || null };
 }
 
 export function isOutcomeMetricComparisonRpcRow(value: unknown): value is OutcomeMetricComparisonRpcRow {
