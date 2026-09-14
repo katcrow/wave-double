@@ -241,6 +241,16 @@ jobs:
             end if;
           end
           $$;
+
+          -- 실제 Supabase는 anon/authenticated에 public 스키마 기본 권한을 광범위하게 주고
+          -- RLS만으로 행을 막는다(test.yml의 sql-schema-tests 부트스트랩과 동일 이유).
+          grant usage on schema public to anon, authenticated, service_role;
+          alter default privileges in schema public
+            grant all on tables to anon, authenticated, service_role;
+          alter default privileges in schema public
+            grant all on sequences to anon, authenticated, service_role;
+          alter default privileges in schema public
+            grant all on functions to anon, authenticated, service_role;
           SQL
 
       - name: Restore dump into disposable Postgres
