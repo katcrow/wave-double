@@ -128,7 +128,7 @@ end $$;
 do $$
  declare key text := 'close:2099-01-06'; started jsonb; attempt_id uuid; fence bigint; lease uuid; extended timestamptz;
 begin
-  started := public.start_attempt(key, date '2099-01-05', 'close', 'manual', 300);
+  started := public.start_attempt(key, date '2099-01-06', 'close', 'manual', 300);
    attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
    perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
    perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
