@@ -155,4 +155,18 @@ end $$;
 select jsonb_build_object('status', 'PASS', 'fixture', 'test_candidate_tags_upgrade', 'legacy_rows_preserved', 5,
   'new_strategies_accepted', jsonb_build_array('D', 'E', 'F')) as verification;
 
+-- 위 78행의 `begin;`이 F-migration 재적용 가드(108-129행)의 abort로 이미 top-level(트랜잭션 없음)
+-- 상태로 되돌아갔으므로(115-126행 설명), 아래 정리도 커밋된다. 7-43행의 초기 legacy 행 커밋은
+-- 다른 fixture 규약(파일 전체가 begin/rollback으로 감싸여 상태를 남기지 않음)과 달리 의도적으로
+-- 커밋되므로, 여기서 직접 지우지 않으면 이후 알파벳 순으로 실행되는 test_dashboard_snapshot.sql의
+-- "빈 DB" 전제를 깨뜨린다(2026-09-14 CI에서 최초로 이 스텝이 실행되며 발견).
+delete from public.candidate_tags where attempt_run_id in (
+  select run_id from public.runs where logical_run_key = 'close:2099-08-01');
+delete from public.candidate_source_contrib where attempt_run_id in (
+  select run_id from public.runs where logical_run_key = 'close:2099-08-01');
+delete from public.candidates where attempt_run_id in (
+  select run_id from public.runs where logical_run_key = 'close:2099-08-01');
+delete from public.runs where logical_run_key = 'close:2099-08-01';
+delete from public.logical_runs where logical_run_key = 'close:2099-08-01';
+
 rollback;
