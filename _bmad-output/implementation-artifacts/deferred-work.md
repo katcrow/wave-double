@@ -43,3 +43,21 @@
   evidence: `git log -p -L492,494:tools/check_production_parity.py`로 확인한 결과 이 하드코딩 리터럴은 2026-09-09에 도구가 최초 작성된 커밋(`89c2b19`)부터 그대로였다 — 이 스토리의 diff는 `tools/check_production_parity.py`를 전혀 수정하지 않았다(`git diff` 결과 없음). `captured_at`은 `tools/check_production_parity.py`의 어떤 패리티 비교 로직에도 쓰이지 않는 순수 정보성 필드임을 코드로 확인해, 검증(patiry gate) 자체의 신뢰성에는 영향이 없다. blind-hunter/edge-case-hunter/verification-gap 3개 레이어가 모두 독립적으로 이 날짜 역행을 지적했다.
   severity: low
   **해결됨(2026-09-14).** `tools/check_production_parity.py:492`의 하드코딩 리터럴을 `date.today().isoformat()`로 교체.
+
+## Deferred from: code review of spec-후보-모집단-전체-조건-실행 (2026-09-14)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-후보-모집단-전체-조건-실행.md`
+  summary: t1866 조건 목록 조회가 단일 페이지(`cont`/`cont_key` 빈 값)만 요청한다 — 조건 수가 한 페이지(통상 50건)를 넘어가면 이후 조건은 후보 모집단에서 조용히 누락된다.
+  evidence: `_run_condition_bundle`의 t1866 요청(`candidate_stage.py:228`)이 `cont:""`/`cont_key:""`를 고정 전송하고 루프로 페이징하지 않는다. 실증된 조건은 8건으로 현재 한도 내라 즉시 발현하지 않으며, 실측으로 페이지 크기와 연속 키 동작을 확인한 뒤 별도 작업으로 페이징을 추가해야 한다. blind-hunter/edge-case-hunter 2개 레이어가 독립적으로 지적.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-후보-모집단-전체-조건-실행.md`
+  summary: 배치 워크플로가 새 필수 env `LS_CONDITION_SEARCH_USER_ID`를 GitHub Secrets에서 참조하므로, 저장소 secret로 등록하지 않으면 모든 예약 배치가 env 로드 시점에 실패한다.
+  evidence: `.github/workflows/scheduled-batch.yml:95`가 `secrets.LS_CONDITION_SEARCH_USER_ID`를 참조하고 `__main__.py:61`이 `_require_env`로 필수화한다. `.env.local`엔 `katcrow`가 이미 있지만 GitHub Secrets 저장소는 별개이며, 등록 없이는 cron이 매회 명시적 실패(SystemExit)로 터진다 — 실패는 조용하지 않지만(빈 query_index로 후보 0건보다는 나음) 배포 전 등록이 필수다. verification-gap이 지적, 배포 단계 작업으로 보류.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-후보-모집단-전체-조건-실행.md`
+  summary: `spec-1-7-스케줄-자동-배치-실행.md:61,100`이 여전히 `LS_QUERY_INDEX`를 배치 env 계약으로 문서화하고 빈 문자열 진행을 지지한다 — 이번 변경으로 계약이 사라졌으므로 문서가 낡았다.
+  evidence: `LS_QUERY_INDEX`는 `__main__.py:61`에서 `LS_CONDITION_SEARCH_USER_ID`로 교체되어 더 이상 배치가 읽지 않는다. 이 문서는 이번 스토리의 OUTPUT이 아니며, 원천 스펙 갱신은 별도 문서 작업으로 처리한다. blind-hunter 지적.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-후보-모집단-전체-조건-실행.md`
+  summary: `LsResponse.ok`가 body의 `rsp_cd`를 검사하지 않아(business error `rsp_cd != "00000"`도 HTTP 200+JSON이면 OK로 간주), `failed_conditions` 분기가 실운영에서 이벤트 오류를 포착하지 못할 수 있다.
+  evidence: `ls_client.py:213`이 HTTP 200 성공 JSON을 `result_code="OK"`로 반환하고 body의 `rsp_cd`를 보지 않는다 — 이 스토리가 만든 게 아니라 공통 클라이언트의 기존 동작이며, 단일 경로(Story 1.5/1.6)에서도 동일하다. 실측 응답의 `rsp_cd` 값과 실제 실패 표식이 body에서 어떤 형태인지 확인한 뒤 별도로 다룬다. blind-hunter 지적.

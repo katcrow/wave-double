@@ -26,6 +26,16 @@ def test_run_raises_system_exit_when_required_env_missing(monkeypatch):
         batch_main.run(_args())
 
 
+def test_run_raises_system_exit_when_condition_search_user_id_missing(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("LS_APP_KEY", "app-key")
+    monkeypatch.setenv("LS_APP_SECRET", "app-secret")
+    monkeypatch.delenv("LS_CONDITION_SEARCH_USER_ID", raising=False)
+    with pytest.raises(SystemExit):
+        batch_main.run(_args())
+
+
 @pytest.mark.parametrize("status", ["success", "skipped", "partial"])
 def test_main_exit_code_zero_for_non_failed_status(monkeypatch, status):
     monkeypatch.setattr(
@@ -112,6 +122,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
     monkeypatch.setenv("LS_APP_KEY", "app-key")
     monkeypatch.setenv("LS_APP_SECRET", "app-secret")
+    monkeypatch.setenv("LS_CONDITION_SEARCH_USER_ID", "katcrow")
 
     monkeypatch.setattr(batch_main, "SupabaseRpcClient", _FakeCloseable)
     monkeypatch.setattr(batch_main, "SupabaseCalendarRepository", _FakeCloseable)
@@ -120,7 +131,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None, bias_repository=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None):
         captured["bias_repository"] = bias_repository
         captured["batch_kind"] = batch_kind
         captured["ls_client"] = ls_client
@@ -129,6 +140,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
         captured["market_supply_provider"] = market_supply_provider
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
+        captured["condition_search_user_id"] = condition_search_user_id
         return SchedulerResult("success", "OK")
 
     monkeypatch.setattr(batch_main, "run_scheduled_batch", _fake_run_scheduled_batch)
@@ -145,6 +157,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
     assert captured["program_supply_provider"]._client is captured["ls_client"]
     assert captured["trigger"] == Trigger.MANUAL
     assert captured["dispatch_request_id"] == "req-1"
+    assert captured["condition_search_user_id"] == "katcrow"
 
 
 def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatch):
@@ -152,6 +165,7 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
     monkeypatch.setenv("LS_APP_KEY", "app-key")
     monkeypatch.setenv("LS_APP_SECRET", "app-secret")
+    monkeypatch.setenv("LS_CONDITION_SEARCH_USER_ID", "katcrow")
 
     monkeypatch.setattr(batch_main, "SupabaseRpcClient", _FakeCloseable)
     monkeypatch.setattr(batch_main, "SupabaseCalendarRepository", _FakeCloseable)
@@ -160,9 +174,10 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, query_index=None, trigger=None, dispatch_request_id=None, bias_repository=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None):
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
+        captured["condition_search_user_id"] = condition_search_user_id
         return SchedulerResult("success", "OK")
 
     monkeypatch.setattr(batch_main, "run_scheduled_batch", _fake_run_scheduled_batch)
@@ -172,3 +187,4 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
 
     assert captured["trigger"] == Trigger.SCHEDULE
     assert captured["dispatch_request_id"] is None
+    assert captured["condition_search_user_id"] == "katcrow"

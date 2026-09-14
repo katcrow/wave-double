@@ -67,12 +67,15 @@ class FakeRpc:
 
 
 class FakeCandidateClient:
-    def __init__(self, response=None):
+    def __init__(self, response=None, *, list_response=None):
         self.response = response if response is not None else LsResponse(data=[])
+        self.list_response = list_response if list_response is not None else self.response
         self.calls = []
 
     def request(self, tr_code, params):
         self.calls.append((tr_code, params))
+        if tr_code == "t1866":
+            return self.list_response
         return self.response
 
 
@@ -327,6 +330,45 @@ def test_open_day_delegates_to_candidate_stage_with_schedule_trigger():
     start_params = rpc.calls[0][1]
     assert start_params["p_trigger"] == "schedule"
     assert start_params["p_batch_kind"] == "close"
+
+
+def test_condition_search_user_id_is_forwarded_to_candidate_stage():
+    """scheduler가 넘긴 condition_search_user_id가 candidates stage에서 t1866/t1859로 이어지는지 검증한다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload())
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(
+        LsResponse(data=[{"ticker": "005930", "trading_value": 1}]),
+        list_response=LsResponse(data={"t1866OutBlock1": [{"query_index": "katcrow 0000"}]}),
+    )
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+        condition_search_user_id="katcrow",
+    )
+
+    assert result.status == "success"
+    assert result.candidate_count == 1
+    assert candidate_client.calls[0] == (
+        "t1866",
+        {"t1866InBlock": {"user_id": "katcrow", "gb": "0", "group_name": "", "cont": "", "cont_key": ""}},
+    )
+    # t1859가 조건 목록에서 받은 실제 query_index를 담아 호출된다.
+    assert candidate_client.calls[1] == ("t1859", {"t1859InBlock": {"query_index": "katcrow 0000"}})
 
 
 def test_success_candidates_stage_wires_ohlcv_and_tags_pipeline():

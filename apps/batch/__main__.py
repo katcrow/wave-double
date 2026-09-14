@@ -58,7 +58,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
     service_role_key = _require_env("SUPABASE_SERVICE_ROLE_KEY")
     ls_app_key = _require_env("LS_APP_KEY")
     ls_app_secret = _require_env("LS_APP_SECRET")
-    query_index = os.environ.get("LS_QUERY_INDEX")
+    condition_search_user_id = _require_env("LS_CONDITION_SEARCH_USER_ID")
     mac_address = os.environ.get("LS_MAC_ADDRESS")
 
     with contextlib.ExitStack() as stack:
@@ -122,7 +122,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             market_supply_provider,
             market_program_supply_provider,
             market_supply_repository,
-            query_index=query_index,
+            condition_search_user_id=condition_search_user_id,
             bias_repository=bias_repository,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,

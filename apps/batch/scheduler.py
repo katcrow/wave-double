@@ -160,7 +160,7 @@ def run_scheduled_batch(
     market_program_supply_provider: MarketProgramSupplyProviderProtocol | None = None,
     market_supply_repository: MarketSupplyRepositoryProtocol | None = None,
     *,
-    query_index: str | None = None,
+    condition_search_user_id: str | None = None,
     lease_seconds: int = 300,
     trigger: Trigger = Trigger.SCHEDULE,
     dispatch_request_id: str | None = None,
@@ -215,7 +215,7 @@ def run_scheduled_batch(
         candidate_client,
         key,
         trigger,
-        query_index=query_index,
+        condition_search_user_id=condition_search_user_id,
         lease_seconds=lease_seconds,
         dispatch_request_id=dispatch_request_id,
     )
