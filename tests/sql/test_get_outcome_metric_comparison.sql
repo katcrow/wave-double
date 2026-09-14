@@ -53,7 +53,6 @@ declare
   metric_row jsonb;
   expected_win_rate_text text;
   expected_profit_factor_text text;
-  row jsonb;
 begin
   if pg_get_function_result('public.get_outcome_metric_comparison(text)'::regprocedure) <> 'jsonb' then
     raise exception 'metric comparison RPC must return jsonb';
@@ -74,8 +73,8 @@ begin
   end if;
   if exists (
     select 1
-    from jsonb_array_elements(all_rows) row
-    where (select array_agg(key order by key) from jsonb_object_keys(row) key) <> array[
+    from jsonb_array_elements(all_rows) elem
+    where (select array_agg(key order by key) from jsonb_object_keys(elem) key) <> array[
       'ci_lower','ci_upper','cutoff_bias_label','cutoff_bias_profit_factor_delta',
       'cutoff_bias_sample_size','cutoff_bias_timeout_rate','delisted_count','expected_in_ci',
       'expected_profit_factor','expected_win_rate','gross_loss','gross_win','losses','open_count',
@@ -84,9 +83,9 @@ begin
       'suspended_count','threshold_warning','timeout_count','total_settled','win_rate',
       'win_rate_threshold_breached','win_rate_threshold_pp','wins'
     ]::text[]
-    or jsonb_typeof(row->'strategy') not in ('string', 'null')
-    or jsonb_typeof(row->'total_settled') <> 'number'
-    or jsonb_typeof(row->'sample_gate_passed') <> 'boolean'
+    or jsonb_typeof(elem->'strategy') not in ('string', 'null')
+    or jsonb_typeof(elem->'total_settled') <> 'number'
+    or jsonb_typeof(elem->'sample_gate_passed') <> 'boolean'
   ) then
     raise exception 'metric row shape/type mismatch: %', all_rows;
   end if;
