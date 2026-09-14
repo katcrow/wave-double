@@ -1,0 +1,88 @@
+name: nightly-cleanup
+
+# Supabase 무료 플랜(500MB) 용량 관리(2026-09-14). 20분 간격 intraday 전환으로 하루 배치
+# 실행 횟수가 늘면서 attempt-scoped 테이블(candidates 계열)이 빠르게 쌓인다.
+# purge_old_attempt_data(retention_days=7) RPC로 오래되고 더 이상 참조되지 않는 attempt
+# 데이터만 지운다 -- outcome_events 등 감사/통계용 테이블은 이 RPC가 절대 건드리지 않는다
+# (infra/supabase/migrations/202609141800_add_purge_old_attempt_data.sql 참고).
+on:
+  schedule:
+    # 매일 KST 21:00 = UTC 12:00.
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "보존 기간(일). 비우면 RPC 기본값(7일) 사용"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: wave-double-nightly-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Call purge_old_attempt_data
+        id: purge
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: ${{ inputs.retention_days }}
+        run: |
+          set -euo pipefail
+          if [ -n "$RETENTION_DAYS" ]; then
+            body="{\"p_retention_days\": $RETENTION_DAYS}"
+          else
+            body="{}"
+          fi
+
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            "$SUPABASE_URL/rest/v1/rpc/purge_old_attempt_data" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body")
+          http_code=$(echo "$response" | tail -n1)
+          payload=$(echo "$response" | sed '$d')
+
+          echo "$payload"
+          if [ "$http_code" -ge 300 ]; then
+            echo "::error::purge_old_attempt_data failed (HTTP $http_code): $payload"
+            exit 1
+          fi
+
+      - name: Create failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create nightly-cleanup-failed --color d73a4a --description "nightly-cleanup.yml 실패" --force
+
+          existing_open=$(gh issue list --label nightly-cleanup-failed --state open --json number --jq 'length')
+          if [ "$existing_open" -gt 0 ]; then
+            echo "nightly-cleanup-failed 라벨의 열린 Issue가 이미 있어 새로 만들지 않습니다."
+            exit 0
+          fi
+
+          gh issue create \
+            --title "[nightly-cleanup] 실패 ($(date -u +%Y-%m-%dT%H:%M:%SZ))" \
+            --label nightly-cleanup-failed \
+            --body "$(cat <<'EOF'
+          nightly-cleanup.yml 워크플로가 실패했습니다. DB 용량 관리가 하루 밀린 상태입니다.
+
+          run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          필요 조치: 위 run 로그를 확인하고 원인을 해결한 뒤 workflow_dispatch로 재실행하세요.
+          EOF
+          )"

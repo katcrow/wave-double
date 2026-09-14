@@ -71,6 +71,7 @@
     "202609141500_fix_threshold_gated_strategy_scope",
     "202609141600_harden_outcome_conflict_guard_entry_date",
     "202609141700_switch_intraday_slots_to_20_minutes",
+    "202609141800_add_purge_old_attempt_data",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_outcome_win_rate_pf",
@@ -273,6 +274,15 @@
     "publish_attempt": {
       "security_definer": true,
       "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "purge_old_attempt_data": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
       "grants": {
         "anon": false,
         "authenticated": false,
