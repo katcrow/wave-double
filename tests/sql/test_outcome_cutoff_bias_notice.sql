@@ -309,7 +309,7 @@ begin
         and table_name = 'candidate_outcome_cutoff_bias_notice') <> 29 then
     raise exception 'story 5-10: view column cardinality drift';
   end if;
-  if (select array_agg(column_name order by ordinal_position)
+  if (select array_agg(column_name::text order by ordinal_position)
       from information_schema.columns
       where table_schema = 'public'
         and table_name = 'candidate_outcome_cutoff_bias_notice') <> array[
