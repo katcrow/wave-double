@@ -134,8 +134,8 @@ insert into threshold_expected values
 ('A', 30, 10, 20, 0, 0, 0, 20, 20, 0.3333, 1, 30, true, null, 0.1923, 0.5122, 0.6871, false, 2.054, 0.1, 0.25, true, true, true),
 ('B', 30, 15, 15, 0, 0, 0, 30, 30, 0.5, 1, 30, true, null, 0.3315, 0.6685, 0.6895, false, 2.077, 0.1, 0.25, true, true, true),
 ('C', 29, 20, 9, 0, 0, 0, 40, 9, null, null, 30, false, '표본 부족 (29/30)', null, null, null, null, null, null, null, null, null, null),
-('D', 30, 18, 12, 0, 0, 0, 36, 12, 0.6, 3, 30, true, null, 0.4232, 0.7541, null, null, null, 0.1, 0.25, null, null, null),
-(null, 119, 63, 56, 0, 0, 0, 126, 71, 0.5294, 1.7746, 30, true, null, 0.4402, 0.6168, null, null, null, 0.1, 0.25, null, null, null);
+('D', 30, 18, 12, 0, 0, 0, 36, 12, 0.6, 3, 30, true, null, 0.4232, 0.7541, null, null, null, null, null, null, null, null),
+(null, 119, 63, 56, 0, 0, 0, 126, 71, 0.5294, 1.7746, 30, true, null, 0.4402, 0.6168, null, null, null, null, null, null, null, null);
 
 do $$
 declare diff_count integer;

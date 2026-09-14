@@ -288,8 +288,8 @@ def compute_reference_rows(rows: list[dict]) -> list[dict]:
             "sample_gate_label": None if passed else f"표본 부족 ({total}/30)",
             "ci_lower": lower, "ci_upper": upper, "expected_win_rate": expected_win,
             "expected_in_ci": expected_in_ci, "expected_profit_factor": expected_pf,
-            "win_rate_threshold_pp": WIN_RATE_THRESHOLD_PP if passed else None,
-            "profit_factor_threshold_ratio": PROFIT_FACTOR_THRESHOLD_RATIO if passed else None,
+            "win_rate_threshold_pp": WIN_RATE_THRESHOLD_PP if expected_pf is not None else None,
+            "profit_factor_threshold_ratio": PROFIT_FACTOR_THRESHOLD_RATIO if expected_pf is not None else None,
             "win_rate_threshold_breached": win_breached, "profit_factor_threshold_breached": pf_breached,
             "threshold_warning": warning,
         })
