@@ -15,6 +15,7 @@ declare
   v_event_id uuid;
   v_event_trading_day date;
   v_calculation_meta jsonb;
+  v_by_source jsonb;
   v_expected_sources text[] := array['t1859', 't1852', 't1856'];
   v_source_count bigint;
   v_distinct_source_count bigint;
@@ -43,6 +44,8 @@ begin
     );
   end if;
 
+  v_by_source := v_calculation_meta -> 'by_source';
+
   select count(*), count(distinct s.source),
       sum(s.candidate_pop_signal_count),
       max(s.backtest_universe_signal_count),
@@ -69,19 +72,22 @@ begin
     raise exception using errcode = 'P0001', message = 'BIAS_EVENT_INTEGRITY_ERROR';
   end if;
 
-  if jsonb_typeof(v_calculation_meta -> 'by_source') is distinct from 'object'
-    or (select count(*) from jsonb_object_keys(v_calculation_meta -> 'by_source')) <> 3
+  if jsonb_typeof(v_by_source) is distinct from 'object' then
+    raise exception using errcode = 'P0001', message = 'BIAS_EVENT_INTEGRITY_ERROR';
+  end if;
+
+  if (select count(*) from jsonb_object_keys(v_by_source)) <> 3
     or exists (
-      select 1 from jsonb_object_keys(v_calculation_meta -> 'by_source') key
+      select 1 from jsonb_object_keys(v_by_source) key
       where key <> all (v_expected_sources)
     )
     or exists (
       select 1 from unnest(v_expected_sources) expected(source)
-      where not (v_calculation_meta -> 'by_source' ? expected.source)
+      where not (v_by_source ? expected.source)
     )
     or exists (
       select 1
-      from jsonb_each(v_calculation_meta -> 'by_source') item
+      from jsonb_each(v_by_source) item
       where jsonb_typeof(item.value) is distinct from 'object'
         or case
           when jsonb_typeof(item.value -> 'truncated_only_missed_count') = 'number'
@@ -95,7 +101,7 @@ begin
 
   select sum((item.value ->> 'truncated_only_missed_count')::bigint)
     into v_truncated_only_missed_count
-  from jsonb_each(v_calculation_meta -> 'by_source') item;
+  from jsonb_each(v_by_source) item;
 
   if v_backtest_universe_signal_count - v_intersection_count + v_truncated_only_missed_count < 0 then
     raise exception using errcode = 'P0001', message = 'BIAS_EVENT_INTEGRITY_ERROR';
