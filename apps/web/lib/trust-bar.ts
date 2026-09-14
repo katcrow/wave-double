@@ -32,16 +32,47 @@ export interface DispatchUiState {
 }
 
 /**
+ * close 배치만 publish_attempt를 호출해 complete_snapshot을 갱신한다(scheduler.py, Story 3.5) --
+ * intraday/premarket은 태그·outcome tracking만 갱신하고 스냅샷을 다시 발행하지 않는다. 그 결과
+ * "마지막 배치"를 complete_snapshot.published_at만으로 판단하면, close보다 최근에 끝난
+ * intraday 성공을 무시하고 하루 종일 그날 아침 close 시각만 보여주게 된다(2026-09-14, 20분
+ * 간격 intraday 전환 후 발견). latest_attempt가 종결(published/ready_to_publish)됐고
+ * complete_snapshot보다 최근이면 그쪽을 "마지막 배치"로 우선한다.
+ */
+function mostRecentSuccessfulBatch(
+  snapshot: DashboardSnapshot
+): { timestamp: string; batchKind: string } | null {
+  const { latest_attempt: latestAttempt, complete_snapshot: completeSnapshot } = snapshot;
+  const attemptTimestamp =
+    latestAttempt &&
+    (latestAttempt.status === "published" || latestAttempt.status === "ready_to_publish") &&
+    latestAttempt.finished_at
+      ? latestAttempt.finished_at
+      : null;
+  const snapshotTimestamp = completeSnapshot?.published_at ?? null;
+
+  if (attemptTimestamp && (!snapshotTimestamp || new Date(attemptTimestamp) > new Date(snapshotTimestamp))) {
+    return { timestamp: attemptTimestamp, batchKind: latestAttempt!.batch_kind };
+  }
+  if (snapshotTimestamp) {
+    return { timestamp: snapshotTimestamp, batchKind: completeSnapshot!.batch_kind };
+  }
+  return null;
+}
+
+/**
  * Story 1.9 I/O 매트릭스 6개 상태(스냅샷 없음/정상 발행/실패/부분성공/휴장일 스킵/stale)를 판정한다.
- * Design Notes: freshness 기준 시각은 complete_snapshot.published_at, 없으면
- * latest_attempt.finished_at ?? started_at이며 60분 이상 경과 시 stale.
+ * Design Notes: freshness 기준 시각은 마지막 성공 배치(close 발행 또는 intraday/premarket 종결
+ * 중 더 최근인 쪽, mostRecentSuccessfulBatch), 없으면 latest_attempt.finished_at ?? started_at이며
+ * 60분 이상 경과 시 stale.
  * Story 1.10: `dispatch` 인자가 idle이 아니면 수동 실행 진행/거부 문구가 배치 상태 문구를 덮는다.
  */
 export function deriveTrustBarState(snapshot: DashboardSnapshot, dispatch?: DispatchUiState, focusStage?: string): TrustBarState {
   const { latest_attempt: latestAttempt, complete_snapshot: completeSnapshot } = snapshot;
+  const recentSuccess = mostRecentSuccessfulBatch(snapshot);
 
   const referenceTimestamp =
-    completeSnapshot?.published_at ??
+    recentSuccess?.timestamp ??
     latestAttempt?.finished_at ??
     latestAttempt?.started_at ??
     null;
@@ -58,9 +89,9 @@ export function deriveTrustBarState(snapshot: DashboardSnapshot, dispatch?: Disp
     statusLine = "휴장일 · 배치 스킵";
   } else if (latestAttempt?.status === "partial") {
     statusLine = `부분성공 · 미처리 ${latestAttempt.unprocessed_count}건`;
-  } else if (completeSnapshot) {
-    const label = BATCH_KIND_LABEL[completeSnapshot.batch_kind] ?? "배치 확정";
-    statusLine = `${label} · ${formatKstTime(completeSnapshot.published_at)} KST`;
+  } else if (recentSuccess) {
+    const label = BATCH_KIND_LABEL[recentSuccess.batchKind] ?? "배치 확정";
+    statusLine = `${label} · ${formatKstTime(recentSuccess.timestamp)} KST`;
   } else {
     statusLine = "상태 없음";
   }

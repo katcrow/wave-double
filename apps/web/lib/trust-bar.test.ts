@@ -134,6 +134,46 @@ test("휴장일 스킵: 실패로 표시하지 않는다", () => {
   assert.equal(state.statusLine, "휴장일 · 배치 스킵");
 });
 
+// 2026-09-14 발견: intraday가 close보다 최근에 성공적으로 끝났으면 intraday 시각을 보여준다
+// (전에는 close의 published_at만 봐서, close 이후 여러 intraday가 더 돌았어도 화면엔 아침
+// close 시각만 남아 있었다).
+test("정상 발행: close보다 최근에 끝난 intraday 성공이 있으면 intraday 시각을 우선한다", () => {
+  const closeIso = new Date(NOW - 5 * 60 * 60 * 1000).toISOString(); // 5시간 전 close
+  const intradayIso = RECENT_ISO; // 10분 전 intraday
+  const state = deriveTrustBarState(
+    snapshot({
+      no_snapshot: false,
+      result_code: "OK",
+      complete_snapshot: complete({ published_at: closeIso, batch_kind: "close" }),
+      latest_attempt: attempt({
+        batch_kind: "intraday",
+        status: "ready_to_publish",
+        finished_at: intradayIso,
+      }),
+    })
+  );
+  assert.match(state.statusLine, /^장중 참고 · 최종 추천 미확정 · \d{2}:\d{2} KST$/);
+  assert.equal(state.stale, false);
+  // 참고 후보 건수는 여전히 마지막 "발행된"(close) 스냅샷 기준이다 -- intraday는 재발행하지 않는다.
+  assert.equal(state.candidateCount, 12);
+});
+
+test("정상 발행: intraday가 close보다 오래됐으면 여전히 close 시각을 보여준다", () => {
+  const state = deriveTrustBarState(
+    snapshot({
+      no_snapshot: false,
+      result_code: "OK",
+      complete_snapshot: complete({ published_at: RECENT_ISO, batch_kind: "close" }),
+      latest_attempt: attempt({
+        batch_kind: "intraday",
+        status: "ready_to_publish",
+        finished_at: STALE_ISO,
+      }),
+    })
+  );
+  assert.match(state.statusLine, /^종가 확정 · \d{2}:\d{2} KST$/);
+});
+
 // I/O 매트릭스 행 6: stale (60분 이상 경과)
 test("stale: 60분 이상 경과 시 오래됨 문구 병기", () => {
   const state = deriveTrustBarState(
