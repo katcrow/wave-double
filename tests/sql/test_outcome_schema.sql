@@ -72,6 +72,10 @@ begin
   ) then raise exception 'outcome_strategy_rules values mismatch'; end if;
 
   -- sl_pct의 rule 범위는 candidate_outcome.exit_price가 양수가 되는 범위와 일치해야 한다.
+  -- 202609091600 이후 outcome_strategy_rules DML은 reason/changed_by 세션 설정이 먼저
+  -- 필요하다(없으면 CHECK violation보다 먼저 STRATEGY_RULE_REASON_REQUIRED로 막힌다).
+  perform set_config('wave_double.strategy_rule_reason', 'test_outcome_schema.sql: sl_pct CHECK boundary probe', true);
+  perform set_config('wave_double.strategy_rule_changed_by', 'test_outcome_schema.sql', true);
   v_caught := false;
   begin
     update public.outcome_strategy_rules set sl_pct = 100 where strategy = 'D';

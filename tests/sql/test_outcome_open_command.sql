@@ -117,6 +117,13 @@ begin
       and payload @> '{"tp_pct":3.0,"sl_pct":4.0,"cutoff_n":999999}'::jsonb
   ) then raise exception 'F OPEN payload parameters were not snapshotted'; end if;
 
+  -- 202609091600(epic-6-retro-item-25) 이후 outcome_strategy_rules의 모든 DML은
+  -- wave_double.strategy_rule_reason/changed_by가 설정된 세션에서만 성립한다. 이 fixture는
+  -- 그 이전부터 있었고 raw DML을 그대로 쓰므로(set_outcome_strategy_rule RPC를 거치지 않음),
+  -- 아래 임시 delete/insert 블록 전체에 한 번만 설정해 둔다(트랜잭션 로컬, rollback으로 정리).
+  perform set_config('wave_double.strategy_rule_reason', 'test_outcome_open_command.sql: temporary rule removal to test snapshot replay', true);
+  perform set_config('wave_double.strategy_rule_changed_by', 'test_outcome_open_command.sql', true);
+
   -- Story 7.4: F도 동일-key replay 시 rule 행이 일시적으로 없어도 저장된 snapshot을 그대로 반환한다.
   delete from public.outcome_strategy_rules where strategy = 'F';
   v_result10 := public.emit_open_command('close:2099-07-01', 'ZZTEST9', 'F');
