@@ -1103,6 +1103,10 @@ export type Database = {
             }
             Returns: Json
           }
+      purge_old_attempt_data: {
+        Args: { p_retention_days?: number }
+        Returns: Json
+      }
       reap_expired_attempts: { Args: { p_now?: string }; Returns: number }
       rebuild_outcome_projection: { Args: never; Returns: Json }
       reconcile_dispatch_outbox: { Args: never; Returns: Json }
