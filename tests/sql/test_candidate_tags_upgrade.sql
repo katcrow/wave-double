@@ -166,9 +166,14 @@ delete from public.candidate_source_contrib where attempt_run_id in (
   select run_id from public.runs where logical_run_key = 'close:2099-08-01');
 delete from public.candidates where attempt_run_id in (
   select run_id from public.runs where logical_run_key = 'close:2099-08-01');
--- logical_runs.active_attempt_run_id(등)이 runs를 참조하므로, runs를 지우기 전에
--- 그 참조를 먼저 없앤다(logical_runs 행 자체를 지우면 함께 사라진다).
-delete from public.logical_runs where logical_run_key = 'close:2099-08-01';
+-- logical_runs <-> runs는 순환 FK다(logical_runs.active_attempt_run_id 등이 runs.run_id를,
+-- runs.logical_run_key가 logical_runs.logical_run_key를 참조). 어느 쪽을 먼저 지워도 다른 쪽이
+-- 막으므로, logical_runs의 run_id 참조 4개를 먼저 null로 비운 뒤 순서대로 지운다.
+update public.logical_runs
+  set active_attempt_run_id = null, canonical_success_run_id = null,
+      current_complete_run_id = null, latest_partial_run_id = null
+  where logical_run_key = 'close:2099-08-01';
 delete from public.runs where logical_run_key = 'close:2099-08-01';
+delete from public.logical_runs where logical_run_key = 'close:2099-08-01';
 
 rollback;
