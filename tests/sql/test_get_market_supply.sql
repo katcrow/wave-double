@@ -127,7 +127,7 @@ begin
     raise exception 'previous published attempt was not isolated from current complete attempt';
   end if;
 
-  started := public.start_attempt('intraday:2099-07-08:10:30', date '2099-07-08', 'intraday', 'manual', 300);
+  started := public.start_attempt('intraday:2099-07-08:10:20', date '2099-07-08', 'intraday', 'manual', 300);
   unpublished_run := (started->>'run_id')::uuid;
   insert into public.market_supply(
     attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net

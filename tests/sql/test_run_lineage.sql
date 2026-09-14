@@ -54,7 +54,7 @@ begin
 end $$;
 
 do $$
- declare key text := 'intraday:2099-01-02:14:30'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
+ declare key text := 'intraday:2099-01-02:14:20'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
 begin
   started := public.start_attempt(key, date '2099-01-02', 'intraday', 'schedule', 300);
    attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;

@@ -70,6 +70,7 @@
     "202609141400_broaden_heartbeat_attempt_status",
     "202609141500_fix_threshold_gated_strategy_scope",
     "202609141600_harden_outcome_conflict_guard_entry_date",
+    "202609141700_switch_intraday_slots_to_20_minutes",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_outcome_win_rate_pf",

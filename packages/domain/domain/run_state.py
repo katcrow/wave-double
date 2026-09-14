@@ -57,7 +57,7 @@ REQUIRED_STAGES: tuple[Stage, ...] = (
     Stage.SUPPLY_3DAY,
     Stage.MARKET_SUPPLY,
 )
-_SLOT_RE = re.compile(r"^(?:[01]\d|2[0-3]):(?:00|30)$")
+_SLOT_RE = re.compile(r"^(?:[01]\d|2[0-3]):(?:00|20|40)$")
 
 
 @dataclass(frozen=True)
@@ -73,8 +73,8 @@ class LogicalRunKey:
             raise ValueError("intraday logical keys require a KST slot")
         if self.batch_kind is not BatchKind.INTRADAY and self.slot is not None:
             raise ValueError("only intraday logical keys may have a slot")
-        if self.slot and (self.slot.second or self.slot.microsecond or self.slot.minute % 30):
-            raise ValueError("intraday slot must be a KST 30-minute boundary")
+        if self.slot and (self.slot.second or self.slot.microsecond or self.slot.minute % 20):
+            raise ValueError("intraday slot must be a KST 20-minute boundary")
 
     @property
     def value(self) -> str:

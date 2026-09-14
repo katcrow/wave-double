@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from domain.calendar import CalendarStatus, floor_to_half_hour
+from domain.calendar import CalendarStatus, floor_to_intraday_slot
 from domain.run_state import BatchKind, LogicalRunKey, Stage, StageStatus, Trigger
 
 from .calendar import CalendarRepository, DailyBarProvider, resolve_for_schedule
@@ -67,7 +67,7 @@ class SchedulerResult:
 def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalRunKey:
     trading_day = now_kst.date()
     if batch_kind is BatchKind.INTRADAY:
-        slot = floor_to_half_hour(now_kst).time()
+        slot = floor_to_intraday_slot(now_kst).time()
         return LogicalRunKey(trading_day, batch_kind, slot)
     return LogicalRunKey(trading_day, batch_kind)
 

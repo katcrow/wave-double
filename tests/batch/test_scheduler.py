@@ -590,7 +590,7 @@ def test_intraday_scheduler_keeps_all_zero_d0_pending_and_retries_semantically()
         cached={d0: cached_open},
         recent_open_days=[d0, d1, d2],
     )
-    attempt = attempt_payload("intraday:2026-09-01:09:30")
+    attempt = attempt_payload("intraday:2026-09-01:09:20")
     rpc = FakeRpc(attempt=attempt)
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
@@ -1051,7 +1051,7 @@ def test_replayed_success_attempt_does_not_run_ohlcv_or_tags_pipeline():
     assert deps["ohlcv_repository"].existing_tickers_calls == []
 
 
-def test_intraday_slot_uses_floor_to_half_hour():
+def test_intraday_slot_uses_floor_to_intraday_slot():
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
     rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:09:00"))

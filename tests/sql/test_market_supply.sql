@@ -86,7 +86,7 @@ begin
   if first_value <> 999 or (select count(*) from public.market_supply where attempt_run_id = attempt_id) <> 1 then
     raise exception 'same attempt market/day was not idempotently upserted';
   end if;
-  started := public.start_attempt('intraday:2099-07-01:10:30', date '2099-07-01', 'intraday', 'manual', 300);
+  started := public.start_attempt('intraday:2099-07-01:10:20', date '2099-07-01', 'intraday', 'manual', 300);
   attempt_two := (started->>'run_id')::uuid;
   insert into public.market_supply(attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net)
   values (attempt_two, 'KOSPI', date '2099-07-01', 1, 2, 3, 4);

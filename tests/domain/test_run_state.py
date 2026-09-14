@@ -12,9 +12,9 @@ from domain.run_state import (
 )
 
 
-def test_logical_key_uses_final_for_close_and_half_hour_slot_for_intraday():
+def test_logical_key_uses_final_for_close_and_20_minute_slot_for_intraday():
     assert LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE).value == "close:2026-09-01"
-    assert LogicalRunKey(date(2026, 9, 1), BatchKind.INTRADAY, time(14, 30)).value == "intraday:2026-09-01:14:30"
+    assert LogicalRunKey(date(2026, 9, 1), BatchKind.INTRADAY, time(14, 20)).value == "intraday:2026-09-01:14:20"
     assert LogicalRunKey.parse("premarket:2026-09-01").batch_kind is BatchKind.PREMARKET
 
 

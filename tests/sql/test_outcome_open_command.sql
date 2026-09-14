@@ -22,7 +22,7 @@ begin
   values
     ('close:2099-07-01', date '2099-07-01', 'close'),
     ('close:2099-07-02', date '2099-07-02', 'close'),
-    ('intraday:2099-07-01:09:30', date '2099-07-01', 'intraday')
+    ('intraday:2099-07-01:09:20', date '2099-07-01', 'intraday')
   on conflict (logical_run_key) do nothing;
 
   -- ZZTEST1/A has a close-day OHLCV row; ZZTEST2/B (missing daily_ohlcv scenario) does not.
@@ -190,7 +190,7 @@ begin
   -- Scenario: 장중 배치 오호출.
   v_caught := false;
   begin
-    perform public.emit_open_command('intraday:2099-07-01:09:30', 'ZZTEST1', 'A');
+    perform public.emit_open_command('intraday:2099-07-01:09:20', 'ZZTEST1', 'A');
   exception when others then
     if sqlerrm = 'OPEN_COMMAND_REQUIRES_CLOSE_BATCH' then v_caught := true; else raise; end if;
   end;

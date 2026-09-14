@@ -40,9 +40,11 @@ test("isValidLogicalRunKey: close/premarket은 YYYY-MM-DD 날짜만 허용한다
   assert.equal(isValidLogicalRunKey("close", "close:2026-09-02:09:00"), false);
 });
 
-test("isValidLogicalRunKey: intraday는 30분 슬롯(HH:MM)만 허용한다", () => {
+test("isValidLogicalRunKey: intraday는 20분 슬롯(HH:MM)만 허용한다", () => {
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:09:00"), true);
-  assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:30"), true);
+  assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:20"), true);
+  assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:40"), true);
+  assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:30"), false);
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:09:15"), false);
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:24:00"), false);
   assert.equal(isValidLogicalRunKey("intraday", "close:2026-09-02"), false);

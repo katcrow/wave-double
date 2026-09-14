@@ -5,7 +5,7 @@ begin;
 
 do $$
 declare
-  key text := 'intraday:2099-05-01:09:30'; started jsonb; run_id uuid; fence bigint; lease uuid;
+  key text := 'intraday:2099-05-01:09:20'; started jsonb; run_id uuid; fence bigint; lease uuid;
   v_candidate_id uuid := gen_random_uuid();
   other_run_id uuid;
   second_run_id uuid; second_fence bigint; second_lease uuid; second_candidate_id uuid := gen_random_uuid();
@@ -367,7 +367,7 @@ begin
     1100, 2100, -3100, 550, 'confirmed', timestamptz '2099-05-01 10:00:00+09'
   );
 
-  started := public.start_attempt('intraday:2099-05-01:10:30', date '2099-05-01', 'intraday', 'manual', 300);
+  started := public.start_attempt('intraday:2099-05-01:10:20', date '2099-05-01', 'intraday', 'manual', 300);
   third_run_id := (started->>'run_id')::uuid; third_fence := (started->>'fence_token')::bigint; third_lease := (started->>'lease_token')::uuid;
   perform public.write_stage(third_run_id, 'candidates', third_fence, third_lease, 'pending', 'running');
   perform public.write_candidates(third_run_id, third_fence, third_lease,

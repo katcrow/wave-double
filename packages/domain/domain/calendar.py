@@ -33,7 +33,7 @@ def decide_from_daily_bar(trading_day: date, has_daily_bar: bool) -> CalendarDec
     if has_daily_bar:
         return CalendarDecision(
             CalendarStatus.OPEN,
-            TradingCalendarEntry(trading_day, True, time(9), time(15, 30)),
+            TradingCalendarEntry(trading_day, True, time(8), time(20)),
         )
     return CalendarDecision(
         CalendarStatus.CLOSED,
@@ -45,17 +45,19 @@ def unavailable_decision() -> CalendarDecision:
     return CalendarDecision(CalendarStatus.UNAVAILABLE)
 
 
-def floor_to_half_hour(moment: datetime) -> datetime:
-    """초/마이크로초를 버리고 분을 00 또는 30으로 내림한 시각을 반환한다.
+def floor_to_intraday_slot(moment: datetime, interval_minutes: int = 20) -> datetime:
+    """초/마이크로초를 버리고 분을 ``interval_minutes`` 단위로 내림한 시각을 반환한다.
 
     스케줄러가 "지금이 몇 시 슬롯인가"를 판정하는 데만 쓰며, 세션 범위 나열은
     ``intraday_slots``의 몫으로 남긴다.
     """
-    floored_minute = 30 if moment.minute >= 30 else 0
+    if interval_minutes <= 0:
+        raise ValueError("interval_minutes must be positive")
+    floored_minute = (moment.minute // interval_minutes) * interval_minutes
     return moment.replace(minute=floored_minute, second=0, microsecond=0)
 
 
-def intraday_slots(entry: TradingCalendarEntry, interval_minutes: int = 30) -> tuple[datetime, ...]:
+def intraday_slots(entry: TradingCalendarEntry, interval_minutes: int = 20) -> tuple[datetime, ...]:
     """세션 시작부터 종료 전까지의 KST 장중 슬롯을 반환한다."""
     if interval_minutes <= 0:
         raise ValueError("interval_minutes must be positive")
