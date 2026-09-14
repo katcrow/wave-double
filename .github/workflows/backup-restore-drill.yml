@@ -2,8 +2,9 @@ name: backup-restore-drill
 
 # spec-1-12 (AD-17): backup.yml이 만든 최신 암호화 백업이 실제로 복원 가능한지, 분기 1회
 # 자동으로(그리고 언제든 workflow_dispatch로 수동) 검증한다. disposable Postgres에 복원한 뒤
-# 신규 migration을 적용하고 기존 SQL fixture(test_dashboard_snapshot.sql, test_run_lineage.sql)로
-# read-model 계약과 canonical pointer 정합을 확인하며, RPO/RTO 실측치를 로그에 남긴다.
+# 신규 migration을 적용하고 restore_drill_smoke.sql로 핵심 테이블/RPC/RLS가 존재하고 정상
+# 응답하는지 확인하며(실제 운영 데이터가 있는 DB라 tests/sql/test_*.sql처럼 빈 DB를 전제한
+# 값 단언은 쓸 수 없다, 2026-09-14 조사), RPO/RTO 실측치를 로그에 남긴다.
 on:
   schedule:
     # 1/4/7/10월 1일 UTC 00:00, 분기 1회.
@@ -303,12 +304,11 @@ jobs:
             fi
           done
 
-      - name: Run smoke fixtures (read-model contract + canonical pointer lineage)
+      - name: Run smoke fixtures (core tables, RLS, read-model RPC)
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/sql/test_dashboard_snapshot.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/sql/test_run_lineage.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/sql/restore_drill_smoke.sql
 
       - name: Measure RTO and enforce RPO gate
         run: |
