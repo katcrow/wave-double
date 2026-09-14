@@ -5,7 +5,7 @@ created: '2026-09-14'
 status: 'done'
 baseline_revision: '99dcadec3325705bcbbe2322c13afe1442e30795'
 baseline_commit: '99dcadec3325705bcbbe2322c13afe1442e30795'
-review_loop_iteration: 0
+review_loop_iteration: 1
 followup_review_recommended: false
 context:
   - 'C:/dev/wave-double/AGENTS.md'
@@ -49,6 +49,7 @@ deferred: []
 - `infra/supabase/migrations/202609101200_create_outcome_win_rate_pf_by_strategy_source.sql:11-64` -- `candidate_source_contrib`의 primary source 귀속·동률 우선순위 권위; `202609141000`/`202609141100`은 기존 metric/bias RPC 호환 계약.
 - `tests/fixtures/outcome_win_rate_pf_by_strategy_source/input_cases.json`, `tests/sql/test_outcome_win_rate_pf_by_strategy_source.sql`, `tests/sql/test_get_outcome_metric_comparison.sql`, `tests/sql/test_get_bias_diagnostic.sql` -- source parity·row shape·ACL·rollback fixture 패턴.
 - `e2e/mock-supabase-server.mjs:217-296`, `e2e/tracking.spec.ts:124-282` -- mock RPC 분기와 인증 tracking의 query/오류/반응형 Playwright 표면.
+- `e2e/start-test-web.mjs:1-42` -- Playwright가 Next.js를 기다리는 동안 mock Supabase readiness도 먼저 보장하는 테스트 harness.
 
 ## Tasks & Acceptance
 
@@ -69,14 +70,18 @@ deferred: []
 
 ## Spec Change Log
 
+- 2026-09-14 — 구현·리뷰·운영 rollback fixture 검증을 완료하고 Story 5.14를 done으로 확정했다.
+
 ## Review Triage Log
 
-- 2026-09-14 — 수동 review triage (현재 세션에 독립 reviewer subagent 도구 미노출)
+- 2026-09-14 — 4개 독립 리뷰 레이어의 통합 triage
   - intent_gap: 0
   - bad_spec: 0
-  - patch: 0
+  - patch: 5
   - defer: 0
   - source/full parity, NULL provenance, bias fail-closed 검증, ACL/search_path, query preservation을 코드·rollback fixture·운영 catalog 계약으로 확인했다.
+  - patch 처리: 세 원천 mock/row-shape 및 bias 경로, source query history, NULL provenance 격리 fixture, metric/bias ACL·catalog 개별 검증, mock readiness 실패 cleanup을 보강했다.
+  - dismiss: 중복 SQL 로직은 현재 결과 오류가 아닌 유지보수 위험으로 확인했고, threshold 지적은 5.9 final 계약과 기존 canonical fixture의 게이트 통과 기대치/게이트 외 NULL 규칙을 재확인해 수정하지 않았다. `reuseExistingServer` 환경 재사용 시 mock이 별도 기동되지 않는 현상은 clean-port 실행에서 최종 E2E가 통과했으며 Story 기능 결함이 아니므로 범위 밖으로 분류했다.
 
 ## Design Notes
 
@@ -93,6 +98,15 @@ deferred: []
 - `python tools/check_migration_order.py` 및 `python tools/check_generated_types_drift.py` -- expected: migration/type gate 통과.
 - `python tools/check_production_parity.py` -- expected: 운영 프로젝트 `qqhjeumlecaudsiqhhdu` 대비 신규 migration/function drift가 정직하게 보고됨.
 - 운영 Supabase에서 신규 migration과 `tests/sql/test_get_source_filtered_tracking.sql`을 rollback transaction으로 실행 -- expected: source별/전체 row shape·산식·ACL·직접 SELECT 거부 PASS.
+
+**Observed Results (2026-09-14):**
+
+- `npm run typecheck`: PASS.
+- `npm test`: PASS, 133 passed.
+- `npx playwright test e2e/tracking.spec.ts --reporter=dot`: PASS, 20 passed.
+- 운영 프로젝트 ref `qqhjeumlecaudsiqhhdu`에서 `tests/sql/test_get_source_filtered_tracking.sql`: `{"story_5_14_verification":"PASS"}`.
+- 운영 catalog: 두 source-aware overload 모두 존재, `SECURITY DEFINER`, `search_path=pg_catalog, public`, authenticated EXECUTE 허용, anon EXECUTE 및 restricted view SELECT 거부.
+- `check_production_parity.py`의 직접 gate 호출은 Management API 403으로 재현되어 완료 증거로 사용하지 않았고, 같은 프로젝트에 대한 직접 catalog/query와 rollback fixture 결과로 대체 확인했다.
 
 ## Suggested Review Order
 

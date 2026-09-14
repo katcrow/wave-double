@@ -113,6 +113,7 @@ infra/supabase/migrations/202609141100_create_get_bias_diagnostic.sql
 packages/read-model/src/database.types.ts
 e2e/mock-supabase-server.mjs
 e2e/tracking.spec.ts
+e2e/start-test-web.mjs
 tests/sql/test_get_bias_diagnostic.sql
 tools/epic-path-manifests/epic-5.txt
 _bmad-output/implementation-artifacts/spec-5-14-원천별-분리-조회-필터-ui.md

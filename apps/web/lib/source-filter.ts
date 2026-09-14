@@ -30,6 +30,6 @@ export function getSourceLabel(source: SourceFilter): string {
 
 export function getSourceScopeDescription(source: SourceFilter): string {
   return source
-    ? `${getSourceLabel(source)} 기준의 canonical primary source 결과입니다.`
+    ? `${getSourceLabel(source)} 기준의 원천별 결과입니다.`
     : "세 원천을 합친 전체 통합 결과이며, 여러 원천이 혼합된 지표입니다.";
 }

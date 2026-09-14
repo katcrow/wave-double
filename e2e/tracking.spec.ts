@@ -8,6 +8,21 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/$/);
 }
 
+const SOURCES = ["t1859", "t1852", "t1856"] as const;
+const METRIC_ROW_KEYS = [
+  "ci_lower", "ci_upper", "cutoff_bias_label", "cutoff_bias_profit_factor_delta",
+  "cutoff_bias_sample_size", "cutoff_bias_timeout_rate", "delisted_count", "expected_in_ci",
+  "expected_profit_factor", "expected_win_rate", "gross_loss", "gross_win", "losses", "open_count",
+  "profit_factor", "profit_factor_threshold_breached", "profit_factor_threshold_ratio",
+  "sample_gate_label", "sample_gate_min_required", "sample_gate_passed", "strategy",
+  "suspended_count", "threshold_warning", "timeout_count", "total_settled", "win_rate",
+  "win_rate_threshold_breached", "win_rate_threshold_pp", "wins",
+].sort();
+const BIAS_ROW_KEYS = [
+  "backtest_universe_signal_count", "candidate_population_signal_count", "has_data",
+  "intersection_count", "missed_opportunity_count", "trading_day",
+].sort();
+
 test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "default" } });
 });
@@ -179,7 +194,7 @@ test("tracking metric 표본 부족은 성과/CI/threshold를 숨긴다", async 
 test("tracking metric RPC 실패와 shape 오류는 outcome tracking을 유지한다", async ({ page, request }) => {
   await signIn(page);
   await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-metric-error" } });
-  await page.goto("/tracking");
+  await page.goto("/tracking?source=t1852");
   await expect(page.locator(".metric-comparison__state[role='alert']")).toContainText("성과 비교 데이터를 불러오지 못했습니다");
   await expect(page.getByRole("heading", { name: "Outcome tracking" })).toBeVisible();
   await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
@@ -254,7 +269,7 @@ test("tracking bias는 무쿼리일 때 KST 오늘을 기본값으로 쓰고 뒤
 test("tracking bias는 미수집·RPC 오류·shape 오류를 분리하고 기존 결과를 유지한다", async ({ page, request }) => {
   await signIn(page);
   await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "tracking-bias-empty" } });
-  await page.goto("/tracking?bias_date=2026-09-11");
+  await page.goto("/tracking?bias_date=2026-09-11&source=t1852");
   await expect(page.locator(".bias-diagnostic__state")).toContainText("이 날짜의 편향 데이터가 없습니다");
   await expect(page.locator(".bias-diagnostic__value")).toHaveCount(0);
   await expect(page.locator(".outcome-tracking__table tbody tr")).toHaveCount(6);
@@ -282,7 +297,7 @@ test("tracking bias 네 수치는 좁은 화면에서도 읽을 수 있다", asy
   await expect(page.locator(".bias-diagnostic__grid")).toBeVisible();
 });
 
-test("tracking 원천 필터는 metric과 bias에 같은 source 범위를 적용하고 query를 보존한다", async ({ page }) => {
+test("tracking 원천 필터는 metric과 bias에 같은 source 범위를 적용하고 query를 보존한다", async ({ page, request }) => {
   await signIn(page);
   await page.goto("/tracking?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08");
 
@@ -293,8 +308,8 @@ test("tracking 원천 필터는 metric과 bias에 같은 source 범위를 적용
 
   await expect(page).toHaveURL(/\/tracking\?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08&source=t1852/);
   await expect(page.getByText("비교 범위: 전략 B · t1852 폴백 원천")).toBeVisible();
-  await expect(page.locator(".metric-comparison__source-note")).toHaveText("t1852 폴백 원천 기준의 canonical primary source 결과입니다.");
-  await expect(page.locator(".bias-diagnostic__source-note")).toHaveText("t1852 폴백 원천 기준의 canonical primary source 결과입니다.");
+  await expect(page.locator(".metric-comparison__source-note")).toHaveText("t1852 폴백 원천 기준의 원천별 결과입니다.");
+  await expect(page.locator(".bias-diagnostic__source-note")).toHaveText("t1852 폴백 원천 기준의 원천별 결과입니다.");
   await expect(page.locator(".metric-comparison__counts")).toContainText("종결 32건");
   await expect(page.locator(".bias-diagnostic__scope")).toContainText("t1852 폴백 원천");
   await expect(page.locator(".bias-diagnostic__value").nth(0)).toHaveText("4");
@@ -303,6 +318,40 @@ test("tracking 원천 필터는 metric과 bias에 같은 source 범위를 적용
   await page.reload();
   await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("t1852");
   await expect(page.locator(".bias-diagnostic__value").nth(1)).toHaveText("18");
+  await page.getByLabel("편향 진단 날짜").fill("2026-09-10");
+  await page.getByRole("button", { name: "날짜 적용" }).click();
+  await expect(page).toHaveURL(/bias_date=2026-09-10&source=t1852/);
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("t1852");
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-10");
+  await page.goBack();
+  await expect(page).toHaveURL(/metric_strategy=B&bias_date=2026-09-08&source=t1852/);
+  await expect(page.getByRole("combobox", { name: "조회 원천" })).toHaveValue("t1852");
+
+  await page.goto("/tracking?metric_strategy=B&bias_date=2026-09-08&source=t1859");
+  await expect(page.locator(".metric-comparison__counts")).toContainText("종결 40건");
+  await expect(page.locator(".bias-diagnostic__source-note")).toHaveText("t1859 본원천 기준의 원천별 결과입니다.");
+  await expect(page.locator(".bias-diagnostic__value").nth(0)).toHaveText("12");
+
+  await page.goto("/tracking?metric_strategy=B&source=t1856");
+  await expect(page.getByText("표본 부족 (29/30)")).toBeVisible();
+  await expect(page.locator(".bias-diagnostic__value").allTextContents()).resolves.toEqual(["0", "0", "0", "0"]);
+
+  for (const source of SOURCES) {
+    const metricResponse = await request.post("http://127.0.0.1:54321/rest/v1/rpc/get_outcome_metric_comparison", {
+      data: { p_strategy: null, p_source: source },
+    });
+    await expect(metricResponse).toBeOK();
+    const metricRows = await metricResponse.json();
+    expect(metricRows).toHaveLength(7);
+    for (const metricRow of metricRows) expect(Object.keys(metricRow).sort()).toEqual(METRIC_ROW_KEYS);
+
+    const biasResponse = await request.post("http://127.0.0.1:54321/rest/v1/rpc/get_bias_diagnostic", {
+      data: { p_trading_day: "2026-09-08", p_source: source },
+    });
+    await expect(biasResponse).toBeOK();
+    const biasRow = await biasResponse.json();
+    expect(Object.keys(biasRow).sort()).toEqual(BIAS_ROW_KEYS);
+  }
 });
 
 test("tracking 원천 필터 초기화는 전체 통합과 혼합 지표 문구로 돌아간다", async ({ page }) => {

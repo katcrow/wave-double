@@ -259,7 +259,7 @@ function rpcPayload(name, body = {}) {
       ];
       const strategy = ["A", "B", "C", "D", "E", "F"].includes(body?.p_strategy) ? body.p_strategy : null;
       const source = ["t1859", "t1852", "t1856"].includes(body?.p_source) ? body.p_source : null;
-      const sourceRows = source === "t1852" ? rows.map((row) => row.strategy === null ? {
+      const sourceRows = source === "t1852" ? rows.map((row) => row.strategy === null || row.strategy === "B" ? {
         ...row,
         total_settled: 32,
         wins: 20,
@@ -272,18 +272,40 @@ function rpcPayload(name, body = {}) {
         ci_lower: 0.46,
         ci_upper: 0.77,
         timeout_count: 1,
-      } : row.strategy === "B" ? {
+      } : row) : source === "t1859" ? rows.map((row) => row.strategy === null || row.strategy === "B" ? {
         ...row,
-        total_settled: 32,
-        wins: 20,
+        total_settled: 40,
+        wins: 28,
         losses: 12,
-        gross_win: 40,
+        open_count: 2,
+        gross_win: 56,
         gross_loss: 12,
-        win_rate: 0.625,
-        profit_factor: 3.3333,
-        ci_lower: 0.46,
-        ci_upper: 0.77,
-        timeout_count: 1,
+        win_rate: 0.7,
+        profit_factor: 4.6667,
+        ci_lower: 0.54,
+        ci_upper: 0.82,
+      } : row) : source === "t1856" ? rows.map((row) => row.strategy === null || row.strategy === "B" ? {
+        ...row,
+        total_settled: 29,
+        wins: 15,
+        losses: 14,
+        open_count: 0,
+        gross_win: 30,
+        gross_loss: 14,
+        win_rate: null,
+        profit_factor: null,
+        sample_gate_passed: false,
+        sample_gate_label: "표본 부족 (29/30)",
+        ci_lower: null,
+        ci_upper: null,
+        expected_win_rate: null,
+        expected_in_ci: null,
+        expected_profit_factor: null,
+        win_rate_threshold_pp: null,
+        profit_factor_threshold_ratio: null,
+        win_rate_threshold_breached: null,
+        profit_factor_threshold_breached: null,
+        threshold_warning: null,
       } : row) : rows;
       if (activeScenario === "tracking-metric-all-win") {
         const allWinRows = sourceRows.map((row) => row.strategy === "F" ? {

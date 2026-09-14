@@ -25,7 +25,8 @@ test("source label과 read model RPC 인자는 전체/선택 범위를 구분한
   assert.equal(getSourceLabel(""), "전체 원천 통합");
   assert.equal(getSourceLabel("t1852"), "t1852 폴백 원천");
   assert.match(getSourceScopeDescription(""), /혼합된 지표/);
-  assert.match(getSourceScopeDescription("t1859"), /canonical primary source/);
+  assert.match(getSourceScopeDescription("t1859"), /원천별 결과/);
+  assert.doesNotMatch(getSourceScopeDescription("t1859"), /primary source/);
   assert.deepEqual(toMetricComparisonRpcParams("B", "t1852"), { p_strategy: "B", p_source: "t1852" });
   assert.deepEqual(toBiasDiagnosticRpcParams("2026-09-14", "t1856"), { p_trading_day: "2026-09-14", p_source: "t1856" });
   assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: null });

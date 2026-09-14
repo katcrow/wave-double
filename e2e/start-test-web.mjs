@@ -6,7 +6,45 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const node = process.execPath;
 const mock = spawn(node, [path.join(root, "e2e", "mock-supabase-server.mjs")], { cwd: root, stdio: "inherit" });
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const next = spawn(npm, ["run", "dev", "-w", "apps/web", "--", "--port", "3000"], {
+let next;
+let stopped = false;
+
+function terminate(child) {
+  if (!child || child.exitCode !== null || child.killed) return;
+  if (process.platform === "win32" && child.pid) {
+    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+    return;
+  }
+  child.kill("SIGTERM");
+}
+
+function stop() {
+  if (stopped) return;
+  stopped = true;
+  terminate(next);
+  terminate(mock);
+}
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
+process.on("exit", stop);
+
+async function waitForMock() {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      const response = await fetch("http://127.0.0.1:54321/__e2e/scenario");
+      if (response.ok) return;
+    } catch {
+      // The mock binds asynchronously; keep polling within the startup budget.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  stop();
+  throw new Error("mock Supabase did not become ready on port 54321");
+}
+
+await waitForMock();
+
+next = spawn(npm, ["run", "dev", "-w", "apps/web", "--", "--port", "3000"], {
   cwd: root,
   stdio: "inherit",
   shell: process.platform === "win32",
@@ -24,11 +62,4 @@ const next = spawn(npm, ["run", "dev", "-w", "apps/web", "--", "--port", "3000"]
   },
 });
 
-function stop() {
-  next.kill();
-  mock.kill();
-}
-process.on("SIGINT", stop);
-process.on("SIGTERM", stop);
-process.on("exit", stop);
 next.on("exit", (code) => process.exit(code ?? 1));
