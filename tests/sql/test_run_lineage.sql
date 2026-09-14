@@ -126,7 +126,7 @@ end $$;
 -- heartbeat가 유효한 lease를 계속 연장할 수 있어야 한다. 이전 정의는 status = 'running'만
 -- 허용해 이 구간에서 매번 STALE_FENCE_OR_LEASE로 거부됐다.
 do $$
- declare key text := 'close:2099-01-05b'; started jsonb; attempt_id uuid; fence bigint; lease uuid; extended timestamptz;
+ declare key text := 'close:2099-01-06'; started jsonb; attempt_id uuid; fence bigint; lease uuid; extended timestamptz;
 begin
   started := public.start_attempt(key, date '2099-01-05', 'close', 'manual', 300);
    attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
