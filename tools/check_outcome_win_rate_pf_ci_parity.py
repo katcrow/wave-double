@@ -80,21 +80,36 @@ def _setup_region(sql: str) -> str:
 
 
 def _extract_value_tuples(values_block: str) -> list[str]:
-    """INSERT VALUES 블록에서 개별 튜플 문자열 ``(…)`` 를 추출한다."""
+    """INSERT VALUES 블록에서 개별 튜플 문자열 ``(…)`` 를 추출한다.
+
+    따옴표로 감싼 문자열 안의 괄호나 이스케이프된 따옴표(``''``)는 튜플
+    경계로 오인하지 않는다.
+    """
     tuples: list[str] = []
     depth = 0
     start: int | None = None
-    for i, ch in enumerate(values_block):
-        if ch == "(" and depth == 0:
-            start = i
-            depth = 1
-        elif ch == "(" and depth > 0:
-            depth += 1
-        elif ch == ")" and depth > 0:
-            depth -= 1
-            if depth == 0 and start is not None:
-                tuples.append(values_block[start + 1 : i])
-                start = None
+    in_quote = False
+    i = 0
+    n = len(values_block)
+    while i < n:
+        ch = values_block[i]
+        if ch == "'":
+            if in_quote and i + 1 < n and values_block[i + 1] == "'":
+                i += 2
+                continue
+            in_quote = not in_quote
+        elif not in_quote:
+            if ch == "(" and depth == 0:
+                start = i
+                depth = 1
+            elif ch == "(" and depth > 0:
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    tuples.append(values_block[start + 1 : i])
+                    start = None
+        i += 1
     return tuples
 
 
@@ -106,7 +121,7 @@ def _raw_to_python(raw: str):
     if raw.upper() in ("TRUE", "FALSE"):
         return raw.upper() == "TRUE"
     if raw.startswith("'") and raw.endswith("'"):
-        return raw[1:-1]
+        return raw[1:-1].replace("''", "'")
     if raw.endswith("::jsonb"):
         return json.loads(raw[: -len("::jsonb")].strip())
     try:
@@ -119,12 +134,22 @@ def _raw_to_python(raw: str):
 
 
 def _split_preserving_quotes(s: str) -> list[str]:
-    """SQL 리터럴 따옴표 안의 쉼표를 보존하며 분리한다."""
+    """SQL 리터럴 따옴표 안의 쉼표를 보존하며 분리한다.
+
+    이스케이프된 따옴표(``''``)는 문자열을 닫는 것으로 오인하지 않는다.
+    """
     parts: list[str] = []
     current: list[str] = []
     in_quote = False
-    for ch in s:
+    i = 0
+    n = len(s)
+    while i < n:
+        ch = s[i]
         if ch == "'":
+            if in_quote and i + 1 < n and s[i + 1] == "'":
+                current.append("''")
+                i += 2
+                continue
             in_quote = not in_quote
             current.append(ch)
         elif ch == "," and not in_quote:
@@ -132,6 +157,7 @@ def _split_preserving_quotes(s: str) -> list[str]:
             current = []
         else:
             current.append(ch)
+        i += 1
     if current:
         parts.append("".join(current))
     return parts

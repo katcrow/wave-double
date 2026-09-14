@@ -40,6 +40,7 @@ import json
 import os
 import re
 import urllib.request
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -489,7 +490,7 @@ def main() -> int:
             out_path = Path(args.write_baseline)
             payload = {
                 "project_ref": PROJECT_REF,
-                "captured_at": "2026-09-09",
+                "captured_at": date.today().isoformat(),
                 "migrations": live["migrations"],
                 "functions": live["functions"],
             }
