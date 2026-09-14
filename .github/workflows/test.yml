@@ -183,10 +183,17 @@ jobs:
             psql -h localhost -U postgres -d full_apply -v ON_ERROR_STOP=1 -f "$f"
           done
 
-          pg_dump -h localhost -U postgres -d nm1 --schema-only --no-owner --no-comments > /tmp/nm1_before.sql
+          # pg_dump 16.10+는 \restrict/\unrestrict에 매 실행마다 무작위 토큰을 찍는다(보안 기능,
+          # 스키마 내용과 무관). 그대로 두면 스키마가 완전히 같아도 diff가 항상 실패한다.
+          dump_schema_only() {
+            pg_dump -h localhost -U postgres -d "$1" --schema-only --no-owner --no-comments \
+              | grep -v '^\\restrict \|^\\unrestrict '
+          }
+
+          dump_schema_only nm1 > /tmp/nm1_before.sql
           psql -h localhost -U postgres -d nm1 -v ON_ERROR_STOP=1 -f "$last"
-          pg_dump -h localhost -U postgres -d nm1 --schema-only --no-owner --no-comments > /tmp/nm1_after.sql
-          pg_dump -h localhost -U postgres -d full_apply --schema-only --no-owner --no-comments > /tmp/full_apply.sql
+          dump_schema_only nm1 > /tmp/nm1_after.sql
+          dump_schema_only full_apply > /tmp/full_apply.sql
 
           if ! diff -u /tmp/nm1_after.sql /tmp/full_apply.sql; then
             echo "::error::N-1 + '$lastname' upgrade schema != clean full-apply schema"

@@ -53,13 +53,15 @@ jobs:
           plain="$workdir/dump.sql"
           encrypted="$workdir/backup.sql.age"
 
-          # --single-transaction: 하나의 REPEATABLE READ 스냅샷으로 전체 덤프를 읽어
-          # transaction-consistent를 보장한다(Design Notes 참고).
+          # transaction-consistent 스냅샷은 pg_dump가 기본으로 보장한다(내부적으로 REPEATABLE READ
+          # 트랜잭션 하나로 전체 덤프를 읽는다) -- 별도 플래그가 필요 없다. `--single-transaction`은
+          # psql(복원 시 전체를 한 트랜잭션으로 묶는 옵션)에만 존재하고 pg_dump에는 없는 옵션이라,
+          # 지금까지 이 스텝은 매번 "unrecognized option"으로 즉시 죽고 있었다(2026-09-14 조사).
           # --no-owner --no-privileges: 복원 대상(disposable Postgres, backup-restore-drill.yml)에는
           # Supabase 전용 role(anon/authenticated/service_role 등)이 없으므로, 이 role을 참조하는
           # OWNER TO / GRANT 구문이 덤프에 섞이면 plain psql -f 복원이 깨진다. 데이터·스키마 자체의
           # transaction-consistency와는 무관한 순수 이식성 옵션이다.
-          pg_dump --format=plain --single-transaction --no-owner --no-privileges \
+          pg_dump --format=plain --no-owner --no-privileges \
             "$SUPABASE_DB_URL" > "$plain"
 
           age -r "$BACKUP_AGE_PUBLIC_KEY" -o "$encrypted" "$plain"
