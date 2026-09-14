@@ -72,9 +72,9 @@ export function normalizeOutcomeFilters(input: QueryInput): OutcomeTrackingFilte
 
 export function toOutcomeTrackingRpcParams(filters: OutcomeTrackingFilters) {
   return {
-    p_status: filters.status || null,
-    p_strategy: filters.strategy || null,
-    p_ticker: filters.ticker || null,
+    p_status: filters.status || undefined,
+    p_strategy: filters.strategy || undefined,
+    p_ticker: filters.ticker || undefined,
     p_limit: 500,
   };
 }

@@ -109,7 +109,7 @@ test("metric 범위 query와 RPC 인자는 허용 전략만 유지한다", () =>
   assert.equal(normalizeMetricStrategy({ metric_strategy: " D " }), "D");
   assert.equal(normalizeMetricStrategy({ metric_strategy: "G" }), "");
   assert.equal(normalizeMetricStrategy(new URLSearchParams("metric_strategy=C")), "C");
-  assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: null });
+  assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: undefined });
   assert.deepEqual(toMetricComparisonRpcParams("F"), { p_strategy: "F" });
   assert.deepEqual(toMetricComparisonRpcParams("B", "t1852"), { p_strategy: "B", p_source: "t1852" });
   assert.equal(getMetricComparisonRow([row({ strategy: null }), row({ strategy: "D" })], "" )?.strategy, null);

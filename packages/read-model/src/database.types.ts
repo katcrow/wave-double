@@ -840,6 +840,40 @@ export type Database = {
           },
         ]
       }
+      candidate_outcome_cutoff_bias_notice: {
+        Row: {
+          ci_lower: number | null
+          ci_upper: number | null
+          cutoff_bias_label: string | null
+          cutoff_bias_profit_factor_delta: number | null
+          cutoff_bias_sample_size: number | null
+          cutoff_bias_timeout_rate: number | null
+          delisted_count: number | null
+          expected_in_ci: boolean | null
+          expected_profit_factor: number | null
+          expected_win_rate: number | null
+          gross_loss: number | null
+          gross_win: number | null
+          losses: number | null
+          open_count: number | null
+          profit_factor: number | null
+          profit_factor_threshold_breached: boolean | null
+          profit_factor_threshold_ratio: number | null
+          sample_gate_label: string | null
+          sample_gate_min_required: number | null
+          sample_gate_passed: boolean | null
+          strategy: string | null
+          suspended_count: number | null
+          threshold_warning: boolean | null
+          timeout_count: number | null
+          total_settled: number | null
+          win_rate: number | null
+          win_rate_threshold_breached: boolean | null
+          win_rate_threshold_pp: number | null
+          wins: number | null
+        }
+        Relationships: []
+      }
       candidate_outcome_win_rate_pf: {
         Row: {
           delisted_count: number | null
@@ -943,40 +977,6 @@ export type Database = {
         }
         Relationships: []
       }
-      candidate_outcome_cutoff_bias_notice: {
-        Row: {
-          ci_lower: number | null
-          ci_upper: number | null
-          cutoff_bias_label: string | null
-          cutoff_bias_profit_factor_delta: number | null
-          cutoff_bias_sample_size: number | null
-          cutoff_bias_timeout_rate: number | null
-          delisted_count: number | null
-          expected_in_ci: boolean | null
-          expected_profit_factor: number | null
-          expected_win_rate: number | null
-          gross_loss: number | null
-          gross_win: number | null
-          losses: number | null
-          open_count: number | null
-          profit_factor: number | null
-          profit_factor_threshold_breached: boolean | null
-          profit_factor_threshold_ratio: number | null
-          sample_gate_label: string | null
-          sample_gate_min_required: number | null
-          sample_gate_passed: boolean | null
-          strategy: string | null
-          suspended_count: number | null
-          threshold_warning: boolean | null
-          timeout_count: number | null
-          total_settled: number | null
-          win_rate: number | null
-          win_rate_threshold_breached: boolean | null
-          win_rate_threshold_pp: number | null
-          wins: number | null
-        }
-        Relationships: []
-      }
       candidate_supply_hints: {
         Row: {
           attempt_run_id: string | null
@@ -1055,28 +1055,26 @@ export type Database = {
         }
         Returns: Json
       }
+      get_bias_diagnostic:
+        | { Args: { p_trading_day: string }; Returns: Json }
+        | { Args: { p_source: string; p_trading_day: string }; Returns: Json }
       get_bias_population: {
         Args: { p_fence_token: number; p_lease_token: string; p_run_id: string }
-        Returns: Json
-      }
-      get_bias_diagnostic: {
-        Args: { p_source?: string | null; p_trading_day: string }
         Returns: Json
       }
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
-      get_outcome_metric_comparison: {
-        Args: { p_source?: string | null; p_strategy?: string | null }
-        Returns: Json
-      }
+      get_outcome_metric_comparison:
+        | { Args: { p_strategy?: string }; Returns: Json }
+        | { Args: { p_source: string; p_strategy: string }; Returns: Json }
       get_outcome_tracking_rows: {
         Args: {
-          p_limit?: number | null
-          p_status?: string | null
-          p_strategy?: string | null
-          p_ticker?: string | null
+          p_limit?: number
+          p_status?: string
+          p_strategy?: string
+          p_ticker?: string
         }
         Returns: Json
       }

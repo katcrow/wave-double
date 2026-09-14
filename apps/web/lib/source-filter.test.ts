@@ -29,6 +29,6 @@ test("source label과 read model RPC 인자는 전체/선택 범위를 구분한
   assert.doesNotMatch(getSourceScopeDescription("t1859"), /primary source/);
   assert.deepEqual(toMetricComparisonRpcParams("B", "t1852"), { p_strategy: "B", p_source: "t1852" });
   assert.deepEqual(toBiasDiagnosticRpcParams("2026-09-14", "t1856"), { p_trading_day: "2026-09-14", p_source: "t1856" });
-  assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: null });
+  assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: undefined });
   assert.deepEqual(toBiasDiagnosticRpcParams("2026-09-14"), { p_trading_day: "2026-09-14" });
 });

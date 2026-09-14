@@ -1,6 +1,6 @@
 {
   "project_ref": "qqhjeumlecaudsiqhhdu",
-  "captured_at": "2026-09-10",
+  "captured_at": "2026-09-14",
   "migrations": [
     "202609021500_create_daily_ohlcv",
     "202609021600_create_candidate_tags",
@@ -63,6 +63,13 @@
     "202609101700_create_outcome_cutoff_bias_notice",
     "202609101800_create_get_outcome_tracking_rows",
     "202609101801_harden_get_outcome_tracking_rows",
+    "202609141000_create_get_outcome_metric_comparison",
+    "202609141100_create_get_bias_diagnostic",
+    "202609141200_create_source_filtered_tracking_read_models",
+    "202609141300_add_daily_ohlcv_close_positive_check",
+    "202609141400_broaden_heartbeat_attempt_status",
+    "202609141500_fix_threshold_gated_strategy_scope",
+    "202609141600_harden_outcome_conflict_guard_entry_date",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
     "create_outcome_win_rate_pf",
@@ -136,6 +143,15 @@
         "service_role": true
       }
     },
+    "get_bias_diagnostic": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
     "get_bias_population": {
       "security_definer": true,
       "search_path": "pg_catalog",
@@ -177,6 +193,15 @@
       "search_path": "pg_catalog, public",
       "grants": {
         "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_outcome_metric_comparison": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
         "authenticated": true,
         "service_role": true
       }

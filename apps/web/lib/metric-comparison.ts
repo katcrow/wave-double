@@ -97,8 +97,8 @@ export function normalizeMetricStrategy(input: QueryInput): MetricStrategy {
 
 export function toMetricComparisonRpcParams(strategy: MetricStrategy, source: SourceFilter = "") {
   return source
-    ? { p_strategy: strategy || null, p_source: source }
-    : { p_strategy: strategy || null };
+    ? { p_strategy: strategy, p_source: source }
+    : { p_strategy: strategy || undefined };
 }
 
 export function isOutcomeMetricComparisonRpcRow(value: unknown): value is OutcomeMetricComparisonRpcRow {

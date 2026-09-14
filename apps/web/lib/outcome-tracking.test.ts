@@ -46,7 +46,7 @@ test("허용되지 않은 query 필터는 전체 조회로 안전하게 정규�
   );
   assert.deepEqual(
     toOutcomeTrackingRpcParams({ status: "", strategy: "", ticker: "" }),
-    { p_status: null, p_strategy: null, p_ticker: null, p_limit: 500 },
+    { p_status: undefined, p_strategy: undefined, p_ticker: undefined, p_limit: 500 },
   );
 });
 
