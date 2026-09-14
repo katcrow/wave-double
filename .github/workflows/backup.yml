@@ -28,8 +28,15 @@ jobs:
 
       - name: Install pg_dump and age
         run: |
+          # 운영 Supabase는 PostgreSQL 17.x를 쓰는데, Ubuntu 24.04 기본 apt 저장소의
+          # postgresql-client는 16.x라 pg_dump가 "server version mismatch"로 즉시
+          # 거부한다(2026-09-14 조사). PGDG 공식 저장소를 추가해 17을 설치한다.
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client age
+          sudo apt-get install -y --no-install-recommends postgresql-client-17 age
 
       - name: Determine schema migration version and cutoff
         id: meta
