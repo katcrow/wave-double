@@ -240,6 +240,7 @@ def run_scheduled_batch(
                 result.fence_token,
                 result.lease_token,
                 lease_seconds=lease_seconds,
+                logger=print,
             )
         tickers = [candidate.ticker for candidate in result.selection.candidates] if result.selection else []
         initialize_new_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day, heartbeat=heartbeat)

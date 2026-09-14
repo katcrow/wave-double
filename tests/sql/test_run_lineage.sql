@@ -121,6 +121,27 @@ begin
   if not caught then raise exception 'expired lease was accepted'; end if;
 end $$;
 
+-- 실전 장애 회귀(2026-09-14, 202609141400): candidates 단계 성공으로 status가
+-- 'ready_to_publish'로 전이된 뒤에도(tags stage가 아직 진행 중인 정상 구간)
+-- heartbeat가 유효한 lease를 계속 연장할 수 있어야 한다. 이전 정의는 status = 'running'만
+-- 허용해 이 구간에서 매번 STALE_FENCE_OR_LEASE로 거부됐다.
+do $$
+ declare key text := 'close:2099-01-05b'; started jsonb; attempt_id uuid; fence bigint; lease uuid; extended timestamptz;
+begin
+  started := public.start_attempt(key, date '2099-01-05', 'close', 'manual', 300);
+   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
+   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
+   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'success');
+   if (select status from public.runs where public.runs.run_id = attempt_id) <> 'ready_to_publish' then
+    raise exception 'fixture precondition failed: expected ready_to_publish after candidates success';
+  end if;
+   perform public.heartbeat_attempt(attempt_id, fence, lease, 300);
+   select lease_expires_at into extended from public.runs where public.runs.run_id = attempt_id;
+   if extended <= now() + interval '299 seconds' then
+    raise exception 'heartbeat during ready_to_publish did not extend the lease';
+  end if;
+end $$;
+
 do $$
 declare caught boolean := false;
 begin
