@@ -2,15 +2,22 @@
 title: 'Story 5.13: Bias diagnostic UI'
 type: 'feature'
 created: '2026-09-14'
-status: 'in-review'
+status: 'done'
 baseline_revision: '147024f928b4eac5421d749c4fc3c1bafc1460b3'
 baseline_commit: '147024f928b4eac5421d749c4fc3c1bafc1460b3'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - C:/dev/wave-double/_bmad-output/implementation-artifacts/epic-5-context.md
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      운영 migration history 등록과 production authenticated browser E2E는 별도 운영 확인이 필요하다.
+    evidence: |-
+      Management API catalog와 rollback SQL fixture는 PASS였지만 check_production_parity.py가 신규 migration/function 미등록 WARN 4건을 반환했고, 세션에 Supabase MCP와 production authenticated browser 세션이 노출되지 않았다.
+    location: >-
+      tools/check_production_parity.py; infra/supabase/migrations/202609141100_create_get_bias_diagnostic.sql
+    severity: medium
 ---
 
 <intent-contract>
@@ -73,11 +80,26 @@ deferred: []
 
 ## Review Triage Log
 
-- patch: source별 universe-only 누락을 합산하면 중복 universe가 과대계상되므로 전역 max에서 교집합 합을 빼도록 수정했다. SQL fixture 기대값을 8로 고정했다.
-- patch: source 행이 정확히 3개가 아니거나 truncated metadata가 malformed이면 `BIAS_EVENT_INTEGRITY_ERROR`로 fail closed하고, null `p_trading_day`는 `BIAS_TRADING_DAY_REQUIRED`로 거부하도록 수정했다.
-- patch: 연도 0001-0099의 JavaScript `Date.UTC` 보정 문제를 `setUTCFullYear`로 수정하고 populated row의 nullable count를 거부하는 테스트를 추가했다.
-- patch: bias 날짜 변경 시 기존 status/strategy/ticker/metric_strategy query와 실제 URL history 복원을 E2E로 검증하고, 무쿼리 KST 기본 날짜를 고정했다.
-- patch: bias metric grid에 `list`/`listitem` semantics를 추가하고 Playwright 접근성 검증을 유지했다.
+- 2026-09-14 — Review pass
+  - intent_gap: 0
+  - bad_spec: 0
+  - patch: 6: (high 1, medium 1, low 4)
+  - defer: 1: (medium 1)
+  - dismissed:
+    - canonical RPC 선택이 비결정적이라는 finding — `bias_events_canonical`이 거래일별 `distinct on`과 `created_at desc, bias_event_id desc`로 이미 1행을 결정하므로 RPC의 `limit 1`은 그 단일 행에만 적용된다.
+    - source별 backtest 수를 max로 집계하면 undercount한다는 finding — Story 5.3 계약상 유니버스 수는 세 source 행에 반복되는 전역 값이므로 max가 전체 수이며 source별 합산이 아니다.
+    - 정수 overflow finding — 배치 도메인의 후보 상한 150과 백테스트 유니버스 104 범위에서는 integer overflow 경로가 성립하지 않는다.
+    - E2E 다음 테스트에 malformed scenario가 누출된다는 finding — 각 테스트의 `beforeEach`가 매번 default scenario로 reset한다.
+    - RPC error branch가 미검증이라는 finding — mock의 404 응답은 Supabase client의 `error` 경로를 실제로 발생시키며 해당 E2E가 로그와 bias 오류 상태를 확인한다.
+    - focus-visible 누락 finding — 전역 `:focus-visible` 규칙이 date input과 button에도 적용된다.
+    - invalid bias_date를 URL에서 즉시 정규화하지 않는다는 finding — 명세가 요구하는 것은 RPC 입력 정규화와 유효값 guard이며, 사용자 입력 후에는 HTML date required와 서버 정규화로 안전하게 처리된다.
+  - addressed_findings:
+    - [high] [patch] 전역 유니버스 수를 source마다 중복 차감하던 누락 산식을 `max(universe) - sum(intersection) + truncation correction`으로 수정하고 SQL fixture를 8로 고정했다.
+    - [medium] [patch] source 3행·정확한 by_source metadata·null 날짜를 fail-closed RPC 오류로 격리하고 malformed metadata fixture를 추가했다.
+    - [low] [patch] JavaScript 연도 0001~0099 ISO 날짜 검증을 `setUTCFullYear` 기반으로 보완했다.
+    - [low] [patch] populated row의 null count 거부와 날짜 기본값·기존 query 보존·history 복원을 단위/E2E로 보강했다.
+    - [low] [patch] bias metric grid에 list/listitem 접근성 semantics와 Playwright 검증을 추가했다.
+    - [low] [patch] review 상태와 manifest가 실제 변경 범위와 일치하도록 spec checklist 및 epic manifest를 정리했다.
 
 ## Design Notes
 
@@ -94,3 +116,13 @@ deferred: []
 - `python tools/check_migration_order.py` 및 `python tools/check_generated_types_drift.py` -- expected: migration/type gate 통과.
 - `python tools/check_production_parity.py` -- expected: 신규 migration이 운영 프로젝트 `qqhjeumlecaudsiqhhdu` 기준으로 정방향 확인된다.
 - 운영 Supabase MCP에서 migration과 SQL fixture를 rollback transaction으로 실행 -- expected: row shape·집합 산식·authenticated RPC·anon/direct SELECT 거부 통과.
+
+## Auto Run Result
+
+- 구현: 날짜 기반 `get_bias_diagnostic` 인증 RPC, A~F 합집합 네 지표, 명시적 no-data/error 상태, `/tracking` Bias diagnostic 패널과 query 보존을 추가했다.
+- 변경 파일: `apps/web/app/tracking/page.tsx` 라우트 RPC 호출, `apps/web/components/tracking/BiasDiagnosticPanel.tsx` UI, `apps/web/lib/bias-diagnostic.ts` 계약/날짜 guard, `apps/web/lib/dashboard-types.ts` 타입, `apps/web/app/globals.css` 반응형 스타일, `infra/supabase/migrations/202609141100_create_get_bias_diagnostic.sql` RPC, `packages/read-model/src/database.types.ts` generated RPC 타입, `e2e/mock-supabase-server.mjs`와 `e2e/tracking.spec.ts` E2E, `apps/web/lib/bias-diagnostic.test.ts` 단위 테스트, `tests/sql/test_get_bias_diagnostic.sql` SQL fixture, `tools/epic-path-manifests/epic-5.txt` scope manifest, 이 spec 및 sprint status.
+- 리뷰: patch 6건(High 1, Medium 1, Low 4)을 보완했고, Medium defer 1건(운영 migration history 및 production authenticated browser E2E)을 남겼다. dismissed finding은 위 Review Triage Log에 사유와 함께 기록했다.
+- 후속 리뷰 권고: `true` — 이번 pass patch 점수 규칙상 High finding이 있어 재검토 권고다.
+- 검증: `npm run typecheck` 통과, `npm test` 131개 통과, `npm run build` 통과, `npx playwright test e2e/tracking.spec.ts` 17개 통과, migration order 81 files 통과, generated type drift 통과, Epic 5 scope `out_of_scope=[]`, `git diff --check` 통과.
+- 운영 검증: 설정된 ref `qqhjeumlecaudsiqhhdu`의 catalog에서 함수가 `SECURITY DEFINER`, `search_path=pg_catalog, public`, authenticated/service_role execute, anon/direct bias 원본·canonical view SELECT 거부임을 확인했다. 동일 `tests/sql/test_get_bias_diagnostic.sql`을 Management API rollback transaction으로 실행해 `PASS`를 확인했다. Supabase MCP는 이 세션에 노출되지 않아 공식 Management API fallback을 사용했다.
+- 운영 잔여 위험: `python tools/check_production_parity.py`는 0 ERROR, 4 WARN을 반환했으며 신규 migration/function의 migration history 등록과 production authenticated browser E2E는 별도 운영 확인이 필요하다. 기존 사용자 변경 `tests/sql/test_get_outcome_metric_comparison.sql`은 보존했고 커밋하지 않았다.
