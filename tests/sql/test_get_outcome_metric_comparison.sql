@@ -150,6 +150,11 @@ begin
        or (not (metric_row->>'sample_gate_passed')::boolean and (metric_row->'ci_lower' <> 'null'::jsonb or metric_row->'ci_upper' <> 'null'::jsonb)) then
       raise exception '% CI gate contract failed: %', metric_strategy, metric_row;
     end if;
+    if jsonb_typeof(metric_row->'timeout_count') <> 'number'
+       or (metric_row->>'timeout_count')::numeric < 0
+       or (metric_row->>'timeout_count')::numeric <> trunc((metric_row->>'timeout_count')::numeric) then
+      raise exception '% TIMEOUT count must be a non-negative integer: %', metric_strategy, metric_row;
+    end if;
     if metric_strategy <> 'C' and (metric_row->>'timeout_count')::numeric < 1 then
       raise exception '% fixture TIMEOUT must survive existing-data contamination: %', metric_strategy, metric_row;
     end if;
@@ -158,6 +163,26 @@ begin
   select to_jsonb(v) into canonical_rollup from public.candidate_outcome_cutoff_bias_notice v where v.strategy is null;
   if canonical_rollup is null or all_rows->0 is distinct from canonical_rollup then
     raise exception 'rollup metric row must match canonical view';
+  end if;
+  metric_row := all_rows->0;
+  if metric_row->'expected_win_rate' <> 'null'::jsonb
+     or metric_row->'expected_profit_factor' <> 'null'::jsonb
+     or metric_row->'expected_in_ci' <> 'null'::jsonb
+     or metric_row->'win_rate_threshold_pp' <> 'null'::jsonb
+     or metric_row->'profit_factor_threshold_ratio' <> 'null'::jsonb
+     or metric_row->'win_rate_threshold_breached' <> 'null'::jsonb
+     or metric_row->'profit_factor_threshold_breached' <> 'null'::jsonb
+     or metric_row->'threshold_warning' <> 'null'::jsonb
+     or metric_row->'cutoff_bias_sample_size' <> 'null'::jsonb
+     or metric_row->'cutoff_bias_timeout_rate' <> 'null'::jsonb
+     or metric_row->'cutoff_bias_profit_factor_delta' <> 'null'::jsonb
+     or metric_row->'cutoff_bias_label' <> 'null'::jsonb
+     or (metric_row->>'timeout_count')::numeric < 5 then
+    raise exception 'rollup expectation/threshold/cutoff/TIMEOUT contract failed: %', metric_row;
+  end if;
+  if ((metric_row->>'sample_gate_passed')::boolean and (metric_row->'ci_lower' = 'null'::jsonb or metric_row->'ci_upper' = 'null'::jsonb))
+     or (not (metric_row->>'sample_gate_passed')::boolean and (metric_row->'ci_lower' <> 'null'::jsonb or metric_row->'ci_upper' <> 'null'::jsonb)) then
+    raise exception 'rollup CI gate contract failed: %', metric_row;
   end if;
   invalid_rows := public.get_outcome_metric_comparison('INVALID');
   if invalid_rows is distinct from all_rows then
