@@ -87,9 +87,9 @@ export default function BiasDiagnosticPanel({ row, fetchFailed, selectedDate }: 
       ) : !row || !row.has_data ? (
         <p className="bias-diagnostic__state" role="status">이 날짜의 편향 데이터가 없습니다</p>
       ) : (
-        <div className="bias-diagnostic__grid" aria-label={`${selectedDate} Bias diagnostic 수치`}>
+        <div className="bias-diagnostic__grid" role="list" aria-label={`${selectedDate} Bias diagnostic 수치`}>
           {METRICS.map((metric) => (
-            <article className="bias-diagnostic__metric" key={metric.key}>
+            <article className="bias-diagnostic__metric" role="listitem" key={metric.key}>
               <h3>{metric.label}</h3>
               <p className="bias-diagnostic__value">{formatBiasCount(row[metric.key])}</p>
               <p className="bias-diagnostic__metric-description">{metric.description}</p>

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   formatBiasCount,
   getKstToday,
+  isIsoDate,
   isBiasDiagnosticRpcResponse,
   normalizeBiasDate,
   toBiasDiagnosticRpcParams,
@@ -23,6 +24,7 @@ function row(overrides: Partial<BiasDiagnosticRpcRow> = {}): BiasDiagnosticRpcRo
 
 test("bias RPC row guard는 네 count와 미수집 nullable shape를 구분한다", () => {
   assert.equal(isBiasDiagnosticRpcResponse(row(), "2026-09-09"), true);
+  assert.equal(isBiasDiagnosticRpcResponse(row({ candidate_population_signal_count: null }), "2026-09-09"), false);
   assert.equal(isBiasDiagnosticRpcResponse(row({
     has_data: false,
     candidate_population_signal_count: null,
@@ -47,6 +49,14 @@ test("bias_date query는 유효한 날짜만 통과하고 잘못된 값은 KST �
   assert.equal(normalizeBiasDate({ bias_date: "<script>" }, now), "2026-09-14");
   assert.equal(normalizeBiasDate({ bias_date: ["2026-09-11", "2026-09-12"] }, now), "2026-09-11");
   assert.deepEqual(toBiasDiagnosticRpcParams("2026-09-12"), { p_trading_day: "2026-09-12" });
+});
+
+test("연도 0001-0099도 ISO 날짜의 윤년·월말을 정확히 검증한다", () => {
+  assert.equal(isIsoDate("0001-01-01"), true);
+  assert.equal(isIsoDate("0099-12-31"), true);
+  assert.equal(isIsoDate("0099-02-28"), true);
+  assert.equal(isIsoDate("0099-02-29"), false);
+  assert.equal(isIsoDate("0004-02-29"), true);
 });
 
 test("bias count format은 숫자와 미수집 null을 명시적으로 표현한다", () => {

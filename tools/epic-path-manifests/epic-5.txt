@@ -115,4 +115,3 @@ e2e/mock-supabase-server.mjs
 e2e/tracking.spec.ts
 tests/sql/test_get_bias_diagnostic.sql
 tools/epic-path-manifests/epic-5.txt
-tools/production_parity_baseline.json

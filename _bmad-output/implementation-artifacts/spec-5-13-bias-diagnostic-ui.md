@@ -47,7 +47,7 @@ deferred: []
 - `infra/supabase/migrations/202609141100_create_get_bias_diagnostic.sql` -- canonical bias event를 날짜로 제한하는 SECURITY DEFINER RPC와 authenticated/service_role 권한을 추가한다.
 - `packages/read-model/src/database.types.ts` -- 신규 RPC 인자/JSON 반환 계약을 동기화한다.
 - `e2e/mock-supabase-server.mjs`, `e2e/tracking.spec.ts`, `apps/web/lib/bias-diagnostic.test.ts` -- 정상·빈 날짜·오류/shape·query 보존·반응형 표면을 검증한다.
-- `tests/sql/test_get_bias_diagnostic.sql`, `tools/epic-path-manifests/epic-5.txt`, `tools/production_parity_baseline.json` -- row shape·집합 산식·ACL·운영 migration 범위를 고정한다.
+- `tests/sql/test_get_bias_diagnostic.sql`, `tools/epic-path-manifests/epic-5.txt` -- row shape·집합 산식·ACL·운영 migration 범위를 고정한다.
 
 ## Tasks & Acceptance
 
@@ -58,7 +58,7 @@ deferred: []
 - [x] `e2e/mock-supabase-server.mjs`, `e2e/tracking.spec.ts`, `apps/web/lib/bias-diagnostic.test.ts` -- 네 수치, 빈 데이터, 오류, 접근성·좁은 화면을 검증한다.
 - [x] `tests/sql/test_get_bias_diagnostic.sql`, `tools/epic-path-manifests/epic-5.txt` -- SQL shape·집합 누락 보정·권한·범위를 고정한다.
 - [ ] `tools/production_parity_baseline.json` -- 운영 catalog에 신규 migration/RPC가 아직 없어 baseline을 선반영하지 않는다.
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- Story 5.13 구현 상태를 `in-progress`로 동기화한다.
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- Story 5.13 구현 상태를 `review`로 동기화한다.
 
 **Acceptance Criteria:**
 - Given `/tracking`에서 날짜를 선택하면, when Bias diagnostic을 렌더링할 때, then 네 모집단 수치와 각각의 짧은 설명이 표시된다.
@@ -69,13 +69,21 @@ deferred: []
 
 ## Spec Change Log
 
+- 2026-09-14 review patch: 전체 기회 누락 산식을 `max(universe) - sum(intersection) + truncated_only_missed_count`로 고정하고, canonical source 3행·정확한 `by_source` 메타·null 거래일을 무결성 오류로 격리했다. 기존 source별 missed 합산과 부분 event의 정상 표시를 방지한다.
+
 ## Review Triage Log
+
+- patch: source별 universe-only 누락을 합산하면 중복 universe가 과대계상되므로 전역 max에서 교집합 합을 빼도록 수정했다. SQL fixture 기대값을 8로 고정했다.
+- patch: source 행이 정확히 3개가 아니거나 truncated metadata가 malformed이면 `BIAS_EVENT_INTEGRITY_ERROR`로 fail closed하고, null `p_trading_day`는 `BIAS_TRADING_DAY_REQUIRED`로 거부하도록 수정했다.
+- patch: 연도 0001-0099의 JavaScript `Date.UTC` 보정 문제를 `setUTCFullYear`로 수정하고 populated row의 nullable count를 거부하는 테스트를 추가했다.
+- patch: bias 날짜 변경 시 기존 status/strategy/ticker/metric_strategy query와 실제 URL history 복원을 E2E로 검증하고, 무쿼리 KST 기본 날짜를 고정했다.
+- patch: bias metric grid에 `list`/`listitem` semantics를 추가하고 Playwright 접근성 검증을 유지했다.
 
 ## Design Notes
 
 - RPC는 `{ p_trading_day: date }`를 받고 항상 `trading_day`, `has_data`, 네 nullable count key를 반환한다. 데이터가 없으면 `has_data=false`와 count `null`을 반환해 0과 미수집을 구분한다.
-- 전체 기회 누락은 source 행의 `backtest_universe_signal_count - intersection_count` 합과 `calculation_meta.by_source`의 `truncated_only_missed_count` 합으로 계산한다. source별 primary 귀속이므로 intersection은 중복되지 않으며 절단 종목 보정은 meta에 기록된 값만 사용한다.
-- 기본 날짜는 애플리케이션 서버의 KST 달력 날짜로 만들고, 날짜 입력은 `YYYY-MM-DD` 유효값만 통과시킨다.
+- 전체 기회 누락은 전역 `max(backtest_universe_signal_count) - sum(intersection_count) + calculation_meta.by_source`의 `truncated_only_missed_count` 합으로 계산한다. source 행의 universe 수가 반복되므로 source별 차이를 합산하지 않으며, 정확히 3개 source와 3개 truncated metadata가 모두 유효할 때만 정상 데이터를 반환한다.
+- 기본 날짜는 애플리케이션 서버의 KST 달력 날짜로 만들고, 날짜 입력은 연도 0001-0099를 포함한 실제 달력 기준 `YYYY-MM-DD` 유효값만 통과시킨다.
 
 ## Verification
 

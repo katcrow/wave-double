@@ -39,10 +39,11 @@ begin
     or (v->>'candidate_population_signal_count')::integer <> 8
     or (v->>'backtest_universe_signal_count')::integer <> 9
     or (v->>'intersection_count')::integer <> 4
-    or (v->>'missed_opportunity_count')::integer <> 26 then
+    or (v->>'missed_opportunity_count')::integer <> 8 then
     raise exception 'RPC aggregate mismatch: %', v;
   end if;
-  -- 8 + 8 + 9인 source별 missed를 합산하면 25다. RPC는 source별 missed를 합산하지 않는다.
+  -- 전역 max(9) - sum(intersection 4) + truncation 보정(3) = 8이다.
+  -- source별 missed(8 + 8 + 9)를 합산하면 25이므로 RPC는 이를 사용하지 않는다.
   if (v->>'missed_opportunity_count')::integer = 25 then
     raise exception 'source missed rows were summed directly';
   end if;
@@ -56,10 +57,127 @@ begin
 end $$;
 
 do $$
+declare
+  v_old uuid;
+  v_latest uuid;
+  v jsonb;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-09-15', date '2099-09-15', 'close')
+  on conflict (logical_run_key) do nothing;
+
+  insert into public.bias_events(trading_day, logical_run_key, calculation_meta, created_at)
+  values (date '2099-09-15', 'close:2099-09-15',
+    '{"by_source":{"t1859":{"truncated_only_missed_count":0},"t1852":{"truncated_only_missed_count":0},"t1856":{"truncated_only_missed_count":0}}}'::jsonb,
+    timestamptz '2099-09-15 00:00:00+00') returning bias_event_id into v_old;
+  insert into public.bias_event_by_source(
+    bias_event_id, source, candidate_pop_signal_count, backtest_universe_signal_count,
+    intersection_count, diff_count, missed_opportunity_count
+  ) values
+    (v_old, 't1859', 1, 2, 1, 0, 1),
+    (v_old, 't1852', 0, 2, 0, 0, 2),
+    (v_old, 't1856', 0, 2, 0, 0, 2);
+
+  insert into public.bias_events(trading_day, logical_run_key, calculation_meta, created_at)
+  values (date '2099-09-15', 'close:2099-09-15',
+    '{"by_source":{"t1859":{"truncated_only_missed_count":2},"t1852":{"truncated_only_missed_count":1},"t1856":{"truncated_only_missed_count":0}}}'::jsonb,
+    timestamptz '2099-09-15 00:01:00+00') returning bias_event_id into v_latest;
+  insert into public.bias_event_by_source(
+    bias_event_id, source, candidate_pop_signal_count, backtest_universe_signal_count,
+    intersection_count, diff_count, missed_opportunity_count
+  ) values
+    (v_latest, 't1859', 5, 9, 3, 2, 8),
+    (v_latest, 't1852', 2, 9, 1, 1, 8),
+    (v_latest, 't1856', 1, 9, 0, 1, 9);
+
+  v := public.get_bias_diagnostic(date '2099-09-15');
+  if v->>'has_data' <> 'true' or v->>'trading_day' <> '2099-09-15'
+    or (v->>'candidate_population_signal_count')::integer <> 8
+    or (v->>'missed_opportunity_count')::integer <> 8 then
+    raise exception 'latest canonical event was not selected: %', v;
+  end if;
+  raise notice 'story 5-13 latest canonical event selection: pass';
+end $$;
+
+do $$
+declare
+  v_event uuid;
+  v jsonb;
+  v_caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-09-16', date '2099-09-16', 'close')
+  on conflict (logical_run_key) do nothing;
+  insert into public.bias_events(trading_day, logical_run_key, calculation_meta)
+  values (date '2099-09-16', 'close:2099-09-16',
+    '{"by_source":{"t1859":{"truncated_only_missed_count":0},"t1852":{"truncated_only_missed_count":0},"t1856":{"truncated_only_missed_count":0}}}'::jsonb)
+  returning bias_event_id into v_event;
+  insert into public.bias_event_by_source(
+    bias_event_id, source, candidate_pop_signal_count, backtest_universe_signal_count,
+    intersection_count, diff_count, missed_opportunity_count
+  ) values
+    (v_event, 't1859', 5, 9, 3, 2, 8),
+    (v_event, 't1852', 2, 9, 1, 1, 8);
+
+  begin
+    v := public.get_bias_diagnostic(date '2099-09-16');
+  exception when others then
+    if sqlerrm <> 'BIAS_EVENT_INTEGRITY_ERROR' then raise; end if;
+    v_caught := true;
+  end;
+  if not v_caught then raise exception 'partial source event must fail closed: %', v; end if;
+  raise notice 'story 5-13 partial source event boundary: pass';
+end $$;
+
+do $$
+declare
+  v_event uuid;
+  v jsonb;
+  v_caught boolean := false;
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2099-09-17', date '2099-09-17', 'close')
+  on conflict (logical_run_key) do nothing;
+  insert into public.bias_events(trading_day, logical_run_key, calculation_meta)
+  values (date '2099-09-17', 'close:2099-09-17',
+    '{"by_source":{"t1859":{"truncated_only_missed_count":"2"},"t1852":{"truncated_only_missed_count":1},"t1856":{"truncated_only_missed_count":0}}}'::jsonb)
+  returning bias_event_id into v_event;
+  insert into public.bias_event_by_source(
+    bias_event_id, source, candidate_pop_signal_count, backtest_universe_signal_count,
+    intersection_count, diff_count, missed_opportunity_count
+  ) values
+    (v_event, 't1859', 5, 9, 3, 2, 8),
+    (v_event, 't1852', 2, 9, 1, 1, 8),
+    (v_event, 't1856', 1, 9, 0, 1, 9);
+
+  begin
+    v := public.get_bias_diagnostic(date '2099-09-17');
+  exception when others then
+    if sqlerrm <> 'BIAS_EVENT_INTEGRITY_ERROR' then raise; end if;
+    v_caught := true;
+  end;
+  if not v_caught then raise exception 'malformed truncated metadata must fail closed: %', v; end if;
+  raise notice 'story 5-13 malformed metadata boundary: pass';
+end $$;
+
+do $$
+declare v_caught boolean := false;
+begin
+  begin
+    perform public.get_bias_diagnostic(null::date);
+  exception when others then
+    if sqlerrm <> 'BIAS_TRADING_DAY_REQUIRED' then raise; end if;
+    v_caught := true;
+  end;
+  if not v_caught then raise exception 'null trading day must be rejected'; end if;
+  raise notice 'story 5-13 null trading day boundary: pass';
+end $$;
+
+do $$
 declare v jsonb;
 begin
-  v := public.get_bias_diagnostic(date '2099-09-15');
-  if v->>'trading_day' <> '2099-09-15' or v->>'has_data' <> 'false'
+  v := public.get_bias_diagnostic(date '2099-09-18');
+  if v->>'trading_day' <> '2099-09-18' or v->>'has_data' <> 'false'
     or v->'candidate_population_signal_count' <> 'null'::jsonb
     or v->'backtest_universe_signal_count' <> 'null'::jsonb
     or v->'intersection_count' <> 'null'::jsonb

@@ -200,9 +200,9 @@ test("tracking metric은 375px 폭에서도 전략 선택과 metric 결과를 �
   await expect(page.getByText("백테스트 기대 승률이 95% CI 안에 있습니다.")).toBeVisible();
 });
 
-test("tracking bias는 선택 날짜의 네 수치와 설명을 표시하고 query를 보존한다", async ({ page }) => {
+test("tracking bias는 기존 query를 유지한 채 날짜를 바꾸고 실제 URL 상태를 복원한다", async ({ page }) => {
   await signIn(page);
-  await page.goto("/tracking?bias_date=2026-09-08");
+  await page.goto("/tracking?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08");
 
   await expect(page.getByRole("heading", { name: "Bias diagnostic" })).toBeVisible();
   await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-08");
@@ -216,10 +216,39 @@ test("tracking bias는 선택 날짜의 네 수치와 설명을 표시하고 que
 
   await page.getByLabel("편향 진단 날짜").fill("2026-09-10");
   await page.getByRole("button", { name: "날짜 적용" }).click();
-  await expect(page).toHaveURL(/\/tracking\?bias_date=2026-09-10/);
+  await expect(page).toHaveURL(/\/tracking\?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-10/);
   await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-10");
+  await expect(page.getByLabel("상태")).toHaveValue("OPEN");
+  await expect(page.getByLabel("전략", { exact: true })).toHaveValue("D");
+  await expect(page.getByLabel("Ticker")).toHaveValue("051910");
+  await expect(page.getByLabel("성과 기준 전략")).toHaveValue("B");
   await page.reload();
   await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-10");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tracking\?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08/);
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue("2026-09-08");
+});
+
+test("tracking bias는 무쿼리일 때 KST 오늘을 기본값으로 쓰고 뒤로가기로 무쿼리 상태를 복원한다", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/tracking");
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const kstToday = `${values.year}-${values.month}-${values.day}`;
+  await expect(page).toHaveURL(/\/tracking$/);
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue(kstToday);
+
+  await page.getByLabel("편향 진단 날짜").fill("2026-09-10");
+  await page.getByRole("button", { name: "날짜 적용" }).click();
+  await expect(page).toHaveURL(/\/tracking\?bias_date=2026-09-10/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tracking$/);
+  await expect(page.getByLabel("편향 진단 날짜")).toHaveValue(kstToday);
 });
 
 test("tracking bias는 미수집·RPC 오류·shape 오류를 분리하고 기존 결과를 유지한다", async ({ page, request }) => {
@@ -248,5 +277,7 @@ test("tracking bias 네 수치는 좁은 화면에서도 읽을 수 있다", asy
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(page.getByLabel("편향 진단 날짜")).toBeVisible();
   await expect(page.locator(".bias-diagnostic__metric")).toHaveCount(4);
+  await expect(page.locator(".bias-diagnostic__grid")).toHaveRole("list");
+  await expect(page.locator(".bias-diagnostic__metric").first()).toHaveRole("listitem");
   await expect(page.locator(".bias-diagnostic__grid")).toBeVisible();
 });
