@@ -29,3 +29,4 @@ backtest/results/scratch/
 
 # supabase CLI 스크래치(npm run generate:read-model-types가 만든다)
 supabase/.temp/
+.vercel
