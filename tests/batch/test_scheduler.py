@@ -1251,29 +1251,62 @@ def test_close_success_publishes_after_tags_stage():
     }
 
 
-def test_premarket_and_intraday_do_not_publish():
-    """publish_attempt는 close 배치에만 배선된다(premarket/intraday 미호출)."""
+def test_premarket_does_not_publish():
+    """premarket은 supply_3day/market_supply stage 자체를 건너뛰므로 publish_attempt 게이트를
+    구조적으로 통과하지 못한다(별도 배치종류 제외 없이도 자연히 미호출)."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
-
-    for kind, moment in ((BatchKind.PREMARKET, datetime(2026, 9, 1, 8, 30)),
-                         (BatchKind.INTRADAY, datetime(2026, 9, 1, 9, 7))):
-        rpc = FakeRpc(attempt=attempt_payload())
-        gateway = RunStateGateway(rpc)
-        candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
-        deps = tags_deps()
-        result = run_scheduled_batch(
-            kind, moment,
-            repo, FakeProvider(), gateway, candidate_client,
-            deps["ohlcv_provider"], deps["ohlcv_repository"],
-            deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+    rpc = FakeRpc(attempt=attempt_payload())
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
+    result = run_scheduled_batch(
+        BatchKind.PREMARKET, datetime(2026, 9, 1, 8, 30),
+        repo, FakeProvider(), gateway, candidate_client,
+        deps["ohlcv_provider"], deps["ohlcv_repository"],
+        deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
         deps["tagged_candidate_fetcher"], deps["supply_provider"],
         deps["program_supply_provider"], deps["supply_repository"],
         FakeMarketSupplyProvider(), FakeMarketProgramSupplyProvider(), FakeMarketSupplyRepository(),
-        )
-        assert result.status in ("success", "partial")
-        assert result.published is False
-        assert _publish_attempt_calls(rpc) == []
+    )
+    assert result.status in ("success", "partial")
+    assert result.published is False
+    assert _publish_attempt_calls(rpc) == []
+
+
+def test_intraday_success_publishes_and_updates_dashboard_snapshot():
+    """intraday도 candidates+tags+supply_3day+market_supply가 모두 success면 publish_attempt를
+    호출해 대시보드의 current_complete_run_id를 갱신한다(2026-09-15: close 전용이라 장중엔
+    후보 수가 전날 종가 스냅샷에 고정되던 문제 수정). outcome_tracking은 close 전용으로 남아야
+    하므로 'success'로 보고하지 않는다."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    attempt = attempt_payload()
+    rpc = FakeRpc(attempt=attempt)
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[{"ticker": "005930", "trading_value": 1}]))
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.INTRADAY, datetime(2026, 9, 1, 9, 40),
+        repo, FakeProvider(), gateway, candidate_client,
+        deps["ohlcv_provider"], deps["ohlcv_repository"],
+        deps["candidate_fetcher"], deps["ohlcv_loader"], deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+        FakeMarketSupplyProvider(), FakeMarketProgramSupplyProvider(), FakeMarketSupplyRepository(),
+    )
+
+    assert result.status == "success"
+    assert result.published is True
+    assert result.outcome_tracking_status is None
+    pub_calls = _publish_attempt_calls(rpc)
+    assert len(pub_calls) == 1
+    assert pub_calls[0][1] == {
+        "p_run_id": attempt["run_id"],
+        "p_fence_token": attempt["fence_token"],
+        "p_lease_token": attempt["lease_token"],
+    }
 
 
 def test_partial_candidates_stage_does_not_publish():

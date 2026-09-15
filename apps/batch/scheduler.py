@@ -79,6 +79,7 @@ def _from_candidate_result(
     market_supply_result: MarketSupplyStageResult | None = None,
     *,
     published: bool = False,
+    is_close_batch: bool = False,
     bias_result: BiasStageResult | None = None,
 ) -> SchedulerResult:
     """candidates stage 결과와(있다면) tags/supply stage 결과를 하나의 ``SchedulerResult``로 합친다.
@@ -88,8 +89,11 @@ def _from_candidate_result(
     ``status``도 세 stage 중 더 나쁜 쪽을 따르게 한다(하나라도 failed면 배치 전체가
     success로 보고되지 않는다).
 
-    ``published``는 close 배치에서 publish_attempt 호출이 성공했는지 여부다. 성공 시
-    outcome_tracking stage가 DB 단에서 'success'로 기록되므로 SchedulerResult에도 반영한다.
+    ``published``는 close/intraday 배치에서 publish_attempt 호출이 성공했는지 여부다.
+    outcome_tracking stage는 close 배치일 때만 DB 단에서 'success'로 기록되므로(SQL의
+    ``publish_attempt``가 batch_kind='close'에서만 outcome 발행 루프를 실행), intraday의
+    ``published=True``를 outcome_tracking 성공으로 잘못 보고하지 않도록 ``is_close_batch``로
+    구분한다.
 
     ``bias_result``(옵션)가 주어지면 배치 성공과 무관하게 ``bias_status``/
     ``bias_result_code``로만 노출하며, severity 합산에는 참여하지 않는다.
@@ -134,7 +138,7 @@ def _from_candidate_result(
         market_supply_status=market_supply_status,
         market_supply_result_code=market_supply_result_code,
         published=published,
-        outcome_tracking_status="success" if published else None,
+        outcome_tracking_status="success" if published and is_close_batch else None,
         bias_status=bias_result.status if bias_result else None,
         bias_result_code=bias_result.result_code if bias_result else None,
     )
@@ -297,15 +301,19 @@ def run_scheduled_batch(
                 # 주입하므로 production 경로에서는 시장 stage를 건너뛰지 않는다.
                 market_supply_result = None
 
-    # Story 3.5 후속 조치(deferred-work gap 해소): close 배치가 candidates+tags 둘 다
-    # success로 종결되고 fence/lease가 확정된 경우에만 publish_attempt를 실제 호출해
-    # outcome 발행(emit_open_command)과 일일 관찰·SUSPENDED/TP/SL/TIMEOUT 판정 루프를
-    # 배치 오케스트레이터 파이프라인에 배선한다. publish_attempt는 단일 transaction으로
-    # 발행까지 완결하므로(AD-20) 실패 시 runs는 ready_to_publish에 그대로 남고, 여기서
-    # outcome_tracking stage를 failed로 기록해 관측 가능하게 만든다.
+    # Story 3.5 후속 조치(deferred-work gap 해소) + 대시보드 stale 스냅샷 수정
+    # (2026-09-15): close/intraday가 candidates+tags+supply_3day+market_supply 모두
+    # success로 종결되고 fence/lease가 확정된 경우 publish_attempt를 호출한다.
+    # publish_attempt SQL은 batch_kind='close'일 때만 outcome 발행(emit_open_command)과
+    # 일일 관찰·SUSPENDED/TP/SL/TIMEOUT 판정 루프를 실행하므로, intraday를 여기 포함해도
+    # outcome 파이프라인은 그대로 close 전용으로 남는다 -- 대신 intraday도
+    # current_complete_run_id/published_at을 갱신해 대시보드가 마지막 close가 아니라
+    # 가장 최근 성공한 attempt(장중 포함)의 후보 수·카드를 보여주게 한다.
+    # premarket은 supply_3day/market_supply stage 자체를 건너뛰므로(위 참고) 이 게이트를
+    # 자연히 통과하지 못해 별도 제외가 필요 없다.
     published = False
     if (
-        kind is BatchKind.CLOSE
+        kind in (BatchKind.CLOSE, BatchKind.INTRADAY)
         and result.status == "success"
         and result.fence_token is not None
         and result.run_id is not None
@@ -347,7 +355,7 @@ def run_scheduled_batch(
             )
 
     bias_result = None
-    if published and bias_repository is not None:
+    if published and kind is BatchKind.CLOSE and bias_repository is not None:
         try:
             bias_result = run_bias_stage(
                 gateway, bias_repository, ohlcv_provider, ohlcv_repository, ohlcv_loader,
@@ -360,7 +368,8 @@ def run_scheduled_batch(
                   f"failure_recorded=False message={exc}")
             bias_result = BiasStageResult("failed", "BIAS_FAILED", failure_recorded=False)
     return _from_candidate_result(result, tags_result, supply_result, market_supply_result,
-                                  published=published, bias_result=bias_result)
+                                  published=published, is_close_batch=kind is BatchKind.CLOSE,
+                                  bias_result=bias_result)
 
 
 __all__ = ["SchedulerResult", "run_scheduled_batch"]
