@@ -86,6 +86,19 @@ begin
   end if;
 end $$;
 
+-- 5b) 2026-09-15: active_attempt_run_id가 남아있어도 그 run이 이미 종결(skipped)됐으면
+-- conflict로 막지 않는다(skip_attempt는 active_attempt_run_id를 정리하지 않으므로, 이
+-- 잔재를 running/ready_to_publish와 구분해야 한다).
+do $$
+declare started jsonb; attempt_id uuid; res jsonb;
+begin
+  started := public.start_attempt('close:2099-03-12', date '2099-03-12', 'close', 'schedule', 300);
+  attempt_id := (started->>'run_id')::uuid;
+  perform public.skip_attempt(attempt_id, (started->>'fence_token')::bigint, (started->>'lease_token')::uuid, 'holiday');
+  res := public.request_manual_dispatch('idem-active-skipped', 'hash-active-skipped', 'neo@example.com', 'close:2099-03-12', date '2099-03-12', 'close');
+  if res->>'reason' <> 'created' then raise exception 'expected a fresh dispatch after the active run was skipped, got %', res; end if;
+end $$;
+
 -- 6) claim_dispatch_outbox: FOR UPDATE SKIP LOCKED로 queued 행을 claim하고 lease/attempts를 갱신한다.
 do $$
 declare res jsonb; claimed jsonb; claimed_outbox_id uuid; lease uuid;
