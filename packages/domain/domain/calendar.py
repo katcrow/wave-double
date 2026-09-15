@@ -45,6 +45,24 @@ def unavailable_decision() -> CalendarDecision:
     return CalendarDecision(CalendarStatus.UNAVAILABLE)
 
 
+def decide_from_weekday(trading_day: date) -> CalendarDecision:
+    """토/일요일만 휴장으로 판정한다.
+
+    LS 일봉 조회(``decide_from_daily_bar``)가 이른 시각 호출 시 당일 일봉이 아직
+    반영되지 않아 개장일을 휴장으로 오판한 사례(2026-09-15)가 있어, 공휴일 캘린더가
+    정비될 때까지 임시로 요일만으로 판정한다.
+    """
+    if trading_day.weekday() >= 5:
+        return CalendarDecision(
+            CalendarStatus.CLOSED,
+            TradingCalendarEntry(trading_day, False),
+        )
+    return CalendarDecision(
+        CalendarStatus.OPEN,
+        TradingCalendarEntry(trading_day, True, time(8), time(20)),
+    )
+
+
 def floor_to_intraday_slot(moment: datetime, interval_minutes: int = 20) -> datetime:
     """초/마이크로초를 버리고 분을 ``interval_minutes`` 단위로 내림한 시각을 반환한다.
 

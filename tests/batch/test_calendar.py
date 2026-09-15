@@ -31,25 +31,20 @@ class FakeRepository:
         return self._cached.get(trading_day)
 
 
-def test_open_and_closed_results_are_cached():
+def test_weekday_is_open_and_weekend_is_closed_regardless_of_provider():
     repo = FakeRepository()
-    assert resolve_and_cache(date(2026, 9, 1), FakeProvider(True), repo).status is CalendarStatus.OPEN
-    assert resolve_and_cache(date(2026, 10, 3), FakeProvider(False), repo).status is CalendarStatus.CLOSED
+    # 2026-09-01 is a Tuesday, 2026-10-03 is a Saturday.
+    assert resolve_and_cache(date(2026, 9, 1), FakeProvider(False), repo).status is CalendarStatus.OPEN
+    assert resolve_and_cache(date(2026, 10, 3), FakeProvider(True), repo).status is CalendarStatus.CLOSED
     assert len(repo.saved) == 2
 
 
-def test_lookup_failure_is_unavailable_and_not_cached_as_closed():
+def test_resolve_and_cache_never_calls_the_daily_bar_provider():
     repo = FakeRepository()
-    result = resolve_and_cache(date(2026, 9, 1), FakeProvider(error=TimeoutError()), repo)
-    assert result.status is CalendarStatus.UNAVAILABLE
-    assert repo.saved == []
-
-
-def test_malformed_lookup_result_is_unavailable():
-    repo = FakeRepository()
-    result = resolve_and_cache(date(2026, 9, 1), FakeProvider(value=None), repo)
-    assert result.status is CalendarStatus.UNAVAILABLE
-    assert repo.saved == []
+    provider = FakeProvider(error=TimeoutError("should not be called"))
+    result = resolve_and_cache(date(2026, 9, 1), provider, repo)
+    assert result.status is CalendarStatus.OPEN
+    assert provider.calls == 0
 
 
 def test_resolve_for_schedule_cache_hit_never_calls_provider():
@@ -72,17 +67,16 @@ def test_resolve_for_schedule_cache_hit_closed_never_calls_provider():
     assert provider.calls == 0
 
 
-def test_resolve_for_schedule_cache_miss_calls_provider_once_and_caches():
+def test_resolve_for_schedule_cache_miss_decides_from_weekday_and_caches():
     repo = FakeRepository()
     provider = FakeProvider(True)
     result = resolve_for_schedule(date(2026, 9, 1), provider, repo)
     assert result.status is CalendarStatus.OPEN
-    assert provider.calls == 1
+    assert provider.calls == 0
     assert len(repo.saved) == 1
     # 두 번째 호출은 이제 캐시를 사용해야 한다.
     second = resolve_for_schedule(date(2026, 9, 1), provider, repo)
     assert second.status is CalendarStatus.OPEN
-    assert provider.calls == 1
 
 
 class RaisingGetRepository(FakeRepository):
@@ -90,19 +84,9 @@ class RaisingGetRepository(FakeRepository):
         raise TimeoutError("supabase network error")
 
 
-def test_resolve_for_schedule_cache_read_failure_falls_through_to_provider():
+def test_resolve_for_schedule_cache_read_failure_falls_through_to_weekday_decision():
     repo = RaisingGetRepository()
     provider = FakeProvider(True)
     result = resolve_for_schedule(date(2026, 9, 1), provider, repo)
     assert result.status is CalendarStatus.OPEN
-    assert provider.calls == 1
     assert len(repo.saved) == 1
-
-
-def test_resolve_for_schedule_cache_miss_and_lookup_failure_is_unavailable():
-    repo = FakeRepository()
-    provider = FakeProvider(error=TimeoutError())
-    result = resolve_for_schedule(date(2026, 9, 1), provider, repo)
-    assert result.status is CalendarStatus.UNAVAILABLE
-    assert provider.calls == 1
-    assert repo.saved == []

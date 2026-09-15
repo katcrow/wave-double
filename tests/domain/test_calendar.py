@@ -6,6 +6,7 @@ from domain.calendar import (
     CalendarStatus,
     TradingCalendarEntry,
     decide_from_daily_bar,
+    decide_from_weekday,
     floor_to_intraday_slot,
     intraday_slots,
 )
@@ -22,6 +23,22 @@ def test_missing_daily_bar_means_closed_without_session_times():
     assert decision.status is CalendarStatus.CLOSED
     assert decision.entry and not decision.entry.is_open
     assert intraday_slots(decision.entry) == ()
+
+
+def test_decide_from_weekday_marks_weekdays_open():
+    # 2026-09-14 is a Monday, 2026-09-18 is a Friday.
+    for weekday in (date(2026, 9, 14), date(2026, 9, 15), date(2026, 9, 18)):
+        decision = decide_from_weekday(weekday)
+        assert decision.status is CalendarStatus.OPEN
+        assert decision.entry == TradingCalendarEntry(weekday, True, time(8), time(20))
+
+
+def test_decide_from_weekday_marks_weekend_closed():
+    # 2026-09-19 is a Saturday, 2026-09-20 is a Sunday.
+    for weekend_day in (date(2026, 9, 19), date(2026, 9, 20)):
+        decision = decide_from_weekday(weekend_day)
+        assert decision.status is CalendarStatus.CLOSED
+        assert decision.entry and not decision.entry.is_open
 
 
 def test_half_day_uses_stored_session_range():

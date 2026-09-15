@@ -963,7 +963,8 @@ def test_failed_candidates_stage_does_not_run_ohlcv_or_tags_pipeline():
     assert deps["ohlcv_repository"].existing_tickers_calls == []
 
 
-def test_calendar_unavailable_is_treated_as_open_and_proceeds():
+def test_daily_bar_provider_failure_does_not_affect_weekday_decision():
+    """캘린더 판정은 요일만으로 이뤄지므로(2026-09-15 임시 조치) provider 오류는 무관하다."""
     repo = FakeRepository()
     rpc = FakeRpc(attempt=attempt_payload())
     gateway = RunStateGateway(rpc)
@@ -988,7 +989,7 @@ def test_calendar_unavailable_is_treated_as_open_and_proceeds():
 
     assert result.status == "success"
     assert candidate_client.calls  # candidate stage was reached
-    assert repo.saved == []  # UNAVAILABLE 결정은 캐시하지 않는다
+    assert len(repo.saved) == 1  # 2026-09-01(화)은 OPEN으로 캐시된다
 
 
 def test_replayed_holiday_attempt_ends_without_skip_call():

@@ -8,8 +8,7 @@ from domain.calendar import (
     CalendarDecision,
     CalendarStatus,
     TradingCalendarEntry,
-    decide_from_daily_bar,
-    unavailable_decision,
+    decide_from_weekday,
 )
 
 
@@ -44,14 +43,14 @@ def resolve_and_cache(
     provider: DailyBarProvider,
     repository: CalendarRepository,
 ) -> CalendarDecision:
-    """일봉 결과를 판정하고, 확정된 open/closed만 캘린더에 저장한다."""
-    try:
-        has_bar = provider.has_daily_bar(trading_day)
-        if not isinstance(has_bar, bool):
-            raise ValueError("daily bar provider must return bool")
-        decision = decide_from_daily_bar(trading_day, has_bar)
-    except Exception:
-        decision = unavailable_decision()
+    """토/일요일만 휴장으로 판정하고 캘린더에 저장한다.
+
+    임시 조치(2026-09-15): LS 일봉 조회(``provider``)가 이른 시각 호출 시 당일 일봉
+    미반영을 휴장으로 오판해 실제 개장일을 스킵시킨 사고가 있어, 공휴일 캘린더가
+    정비될 때까지 일봉 조회를 우회하고 요일만으로 판정한다. ``provider``는 향후
+    복구를 위해 시그니처만 유지한다.
+    """
+    decision = decide_from_weekday(trading_day)
     if decision.entry is not None:
         repository.upsert(decision)
     return decision
