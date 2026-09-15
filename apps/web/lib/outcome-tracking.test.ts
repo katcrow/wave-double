@@ -28,7 +28,7 @@ test("RPC row shape는 6개 상태, 전략, nullable 필드와 유한 손익률�
   assert.equal(isOutcomeTrackingRpcResponse([row()]), true);
   assert.equal(isOutcomeTrackingRpcResponse([row({ status: "DELISTED", exit_date: null, return_pct: null })]), true);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), status: "UNKNOWN" }]), false);
-  assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), strategy: "G" }]), false);
+  assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), strategy: "I" }]), false);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), entry_date: "not-a-date" }]), false);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), exit_date: "2026-02-30" }]), false);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), return_pct: Number.NaN }]), false);
@@ -41,7 +41,7 @@ test("허용되지 않은 query 필터는 전체 조회로 안전하게 정규�
     { status: "OPEN", strategy: "F", ticker: "005930" },
   );
   assert.deepEqual(
-    normalizeOutcomeFilters({ status: "INVALID", strategy: "G", ticker: "<script>" }),
+    normalizeOutcomeFilters({ status: "INVALID", strategy: "I", ticker: "<script>" }),
     { status: "", strategy: "", ticker: "" },
   );
   assert.deepEqual(

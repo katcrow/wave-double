@@ -15,6 +15,8 @@ from backtest.strategy_api import (
 from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
 from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
 from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
+from backtest.indicator_opt.strategy_g import STRATEGY_G_PARAMS
+from backtest.indicator_opt.strategy_h import STRATEGY_H_PARAMS
 
 
 def _make_df(n: int = 200, *, close_nan: int | None = None) -> pd.DataFrame:
@@ -160,12 +162,17 @@ class TestLastBarDiscarded:
             "backtest.strategy_api.compute_strategy_e", return_value=last_bar.copy()
         ), patch(
             "backtest.strategy_api.compute_strategy_f", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_g", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_h", return_value=last_bar.copy()
         ):
             result = compute_abc(df, ticker="T")
 
         assert result.status == "READY"
         assert all(
-            not result.signals[key].any() for key in ("A", "B", "C", "D", "E", "F")
+            not result.signals[key].any()
+            for key in ("A", "B", "C", "D", "E", "F", "G", "H")
         )
 
 
@@ -212,8 +219,8 @@ class TestNormalCompute:
         assert result.ticker == "T"
         assert result.status == "READY"
         assert result.error is None
-        assert set(result.signals) == {"A", "B", "C", "D", "E", "F"}
-        for key in ("A", "B", "C", "D", "E", "F"):
+        assert set(result.signals) == {"A", "B", "C", "D", "E", "F", "G", "H"}
+        for key in ("A", "B", "C", "D", "E", "F", "G", "H"):
             assert result.signals[key].index.equals(df.index)
             assert result.signals[key].dtype == bool
             assert len(result.signals[key]) == 200
@@ -223,7 +230,9 @@ class TestNormalCompute:
         assert result.params_meta["D"] == STRATEGY_D_PARAMS.as_dict()
         assert result.params_meta["E"] == STRATEGY_E_PARAMS.as_dict()
         assert result.params_meta["F"] == STRATEGY_F_PARAMS.as_dict()
-        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F"}
+        assert result.params_meta["G"] == STRATEGY_G_PARAMS.as_dict()
+        assert result.params_meta["H"] == STRATEGY_H_PARAMS.as_dict()
+        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F", "G", "H"}
         for key in ("A", "B", "C"):
             assert result.params_meta[key] == {
                 "atr_window": 14,

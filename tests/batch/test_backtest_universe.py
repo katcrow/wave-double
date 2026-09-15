@@ -295,7 +295,7 @@ import apps.batch.universe_signal as universe_signal
 assert "yfinance" not in sys.modules
 # 전이 import는 실제로 일어난다 -- import 시점 부작용이 없다는 것이 보장의 내용이다.
 assert "backtest.data.loader" in sys.modules
-assert len(universe_signal.STRATEGY_KEYS) == 6
+assert len(universe_signal.STRATEGY_KEYS) == 8
 print("OK")
 """
 )

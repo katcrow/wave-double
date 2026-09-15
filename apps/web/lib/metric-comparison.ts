@@ -3,7 +3,7 @@ import type { SourceFilter } from "./source-filter";
 import { getStrategyLabel } from "./strategy-labels.ts";
 export type { OutcomeMetricComparisonRpcRow } from "./dashboard-types";
 
-export const METRIC_STRATEGY_OPTIONS = ["A", "B", "C", "D", "E", "F"] as const;
+export const METRIC_STRATEGY_OPTIONS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 export type MetricStrategy = OutcomeStrategy | "";
 
 const METRIC_ROW_KEYS = [

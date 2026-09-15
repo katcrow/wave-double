@@ -66,7 +66,7 @@ test("metric RPC row shape는 정확한 key, nullable 수치, 전략 중복을 �
   assert.equal(isOutcomeMetricComparisonRpcResponse([row()], ""), false);
   assert.equal(isOutcomeMetricComparisonRpcResponse([row({ strategy: "D" })], "D"), true);
   assert.equal(isOutcomeMetricComparisonRpcResponse([row({ strategy: "A" })], "D"), false);
-  assert.equal(isOutcomeMetricComparisonRpcResponse([{ ...row(), strategy: "G" }]), false);
+  assert.equal(isOutcomeMetricComparisonRpcResponse([{ ...row(), strategy: "I" }]), false);
   assert.equal(isOutcomeMetricComparisonRpcResponse([{ ...row(), wins: -1 }]), false);
   assert.equal(isOutcomeMetricComparisonRpcResponse([{ ...row(), ci_lower: Number.NaN }]), false);
   assert.equal(isOutcomeMetricComparisonRpcResponse({ rows: [row()] }), false);
@@ -107,7 +107,7 @@ test("metric RPC row guard는 게이트·범위·기대치·threshold/cutoff 불
 
 test("metric 범위 query와 RPC 인자는 허용 전략만 유지한다", () => {
   assert.equal(normalizeMetricStrategy({ metric_strategy: " D " }), "D");
-  assert.equal(normalizeMetricStrategy({ metric_strategy: "G" }), "");
+  assert.equal(normalizeMetricStrategy({ metric_strategy: "I" }), "");
   assert.equal(normalizeMetricStrategy(new URLSearchParams("metric_strategy=C")), "C");
   assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: undefined });
   assert.deepEqual(toMetricComparisonRpcParams("F"), { p_strategy: "F" });

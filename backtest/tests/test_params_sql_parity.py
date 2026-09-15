@@ -8,6 +8,10 @@ SQL `outcome_strategy_rules`에 각각 존재하며 상호 연결 테스트가 �
 SQL 기대값은 운영 `public.outcome_strategy_rules`(tp_pct/sl_pct/cutoff_n)를
 2026-09-09에 조회한 실제 값에서 가져왔다. SQL 스키마가 바뀌면 이 파일의
 SQL_RULES도 함께 갱신해야 한다.
+
+G/H는 2026-09-15에 추가됐다(story 없이 직접 적용, docs/양음돌파패턴.md,
+docs/240이평돌파_120이평우상향필터.md 참고). 원 설계는 분할청산이었으나
+운영 청산 규약(단일 TP%/SL%)에 맞춰 근사한 값이다.
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ SQL_RULES: dict[str, tuple[float, float, int]] = {
     "D": (3.0, 5.0, 20),
     "E": (2.0, 5.0, 30),
     "F": (3.0, 4.0, 999999),
+    "G": (5.0, 5.0, 20),
+    "H": (4.0, 5.0, 999999),
 }
 
 _SQL_UNBOUNDED_CUTOFF = 999999
@@ -55,7 +61,11 @@ def test_d_e_f_params_come_from_their_dataclasses() -> None:
     from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
     from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
     from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
+    from backtest.indicator_opt.strategy_g import STRATEGY_G_PARAMS
+    from backtest.indicator_opt.strategy_h import STRATEGY_H_PARAMS
 
     assert _STRATEGY_PARAMS["D"] == STRATEGY_D_PARAMS.as_dict()
     assert _STRATEGY_PARAMS["E"] == STRATEGY_E_PARAMS.as_dict()
     assert _STRATEGY_PARAMS["F"] == STRATEGY_F_PARAMS.as_dict()
+    assert _STRATEGY_PARAMS["G"] == STRATEGY_G_PARAMS.as_dict()
+    assert _STRATEGY_PARAMS["H"] == STRATEGY_H_PARAMS.as_dict()

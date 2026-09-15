@@ -1,8 +1,10 @@
 """Story 2.5/6.6/7.5: 후보 태깅 stage 오케스트레이터.
 
 candidates stage(screen)가 성공/부분성공한 뒤, 후보 모집단 한정으로 전략
-A/B/C/D/E/F 시그널을 계산하고 ``candidate_tags``에 저장한다. F는 각도가속·
+A/B/C/D/E/F/G/H 시그널을 계산하고 ``candidate_tags``에 저장한다. F는 각도가속·
 이평선 쌍바닥(slope-acceleration + moving-average double-bottom) 기법이다.
+G는 양음돌파패턴(거래량돌파양봉+음봉풀백+고가돌파), H는 240이평돌파+120이평
+우상향필터다(2026-09-15 추가, docs/양음돌파패턴.md·docs/240이평돌파_120이평우상향필터.md).
 
 ``ineligible``(이력 부족)과 ``error``(로딩 실패/``SIGNAL_COMPUTE_ERROR``)를 명확히
 구분해 집계한다 -- 전자는 정상적으로 태깅 대상에서 제외된 것이고, 후자만 stage
@@ -31,7 +33,7 @@ from .heartbeat import HeartbeatPolicy
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway
 
-_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F")
+_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H")
 
 
 class TagsClient(Protocol):
@@ -318,6 +320,8 @@ def _build_params_meta(batch_kind: str) -> dict[str, Any]:
     from backtest.indicator_opt.strategy_d import STRATEGY_D_PARAMS
     from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
     from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
+    from backtest.indicator_opt.strategy_g import STRATEGY_G_PARAMS
+    from backtest.indicator_opt.strategy_h import STRATEGY_H_PARAMS
     from backtest.indicator_opt.union import TOP3, VOLUME
 
     return {
@@ -336,6 +340,8 @@ def _build_params_meta(batch_kind: str) -> dict[str, Any]:
         "strategy_d_params": STRATEGY_D_PARAMS.as_dict(),
         "strategy_e_params": STRATEGY_E_PARAMS.as_dict(),
         "strategy_f_params": STRATEGY_F_PARAMS.as_dict(),
+        "strategy_g_params": STRATEGY_G_PARAMS.as_dict(),
+        "strategy_h_params": STRATEGY_H_PARAMS.as_dict(),
         "min_history_days": MIN_HISTORY_TRADING_DAYS,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
