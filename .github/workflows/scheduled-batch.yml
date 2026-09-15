@@ -26,6 +26,11 @@ on:
         required: false
         default: ""
         type: string
+      dispatch_trigger:
+        description: "outbox worker가 채우는 trigger 구분(사람이 직접 채우지 않는다): 자동 스케줄 enqueue는 schedule, 웹 UI 수동 실행은 manual"
+        required: false
+        default: "manual"
+        type: string
 
 concurrency:
   # 스케줄 트리거는 아직 logical_run_key(거래일·슬롯)를 모르므로 cron 문자열 단위로 근사한다.
@@ -72,11 +77,17 @@ jobs:
         id: trigger
         env:
           DISPATCH_BATCH_KIND: ${{ inputs.batch_kind }}
+          DISPATCH_TRIGGER: ${{ inputs.dispatch_trigger }}
         run: |
           # workflow_dispatch 호출(outbox worker 또는 사람의 수동 테스트)에서만 inputs.batch_kind가
           # 채워진다(default "close"). schedule 이벤트에서는 항상 빈 문자열이다.
+          # outbox worker는 요청자가 사람(웹 UI)인지 자동 스케줄 enqueue(마이그레이션
+          # 202609151600)인지에 따라 dispatch_trigger를 manual|schedule로 채워 보낸다.
           if [ -n "$DISPATCH_BATCH_KIND" ]; then
-            echo "value=manual" >> "$GITHUB_OUTPUT"
+            case "$DISPATCH_TRIGGER" in
+              schedule) echo "value=schedule" >> "$GITHUB_OUTPUT" ;;
+              *) echo "value=manual" >> "$GITHUB_OUTPUT" ;;
+            esac
           else
             echo "value=schedule" >> "$GITHUB_OUTPUT"
           fi

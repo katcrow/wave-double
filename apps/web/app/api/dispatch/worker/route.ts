@@ -26,6 +26,11 @@ const WORKER_LEASE_SECONDS = 120;
 const MAX_CLAIM = 20;
 const WORKFLOW_FILE = "scheduled-batch.yml";
 const WORKFLOW_REF = resolveWorkflowRef(process.env.GITHUB_DISPATCH_REF);
+// 2026-09-15: 자동 스케줄 enqueue(마이그레이션 202609151600)가 request_manual_dispatch를
+// 이 requested_by로 호출한다 -- 사람이 웹 UI로 요청한 행(requested_by=이메일)과 구분해
+// GitHub workflow_dispatch의 trigger 입력을 올바르게 채우기 위함(runs.trigger가 대시보드
+// 트러스트바에 노출되므로 자동 실행을 "manual"로 잘못 표시하면 안 된다).
+const AUTO_SCHEDULE_REQUESTER = "system:scheduler";
 
 interface ClaimedOutboxRow {
   outbox_id: string;
@@ -37,6 +42,7 @@ interface ClaimedOutboxRow {
   attempts: number;
   logical_run_key: string;
   idempotency_key: string;
+  requested_by: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -204,6 +210,7 @@ async function callGithubWorkflowDispatch(row: ClaimedOutboxRow): Promise<{ ok: 
           inputs: {
             batch_kind: batchKind,
             dispatch_request_id: row.dispatch_request_id,
+            dispatch_trigger: row.requested_by === AUTO_SCHEDULE_REQUESTER ? "schedule" : "manual",
           },
         }),
       }
