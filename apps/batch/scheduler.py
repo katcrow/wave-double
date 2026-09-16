@@ -277,6 +277,40 @@ def run_scheduled_batch(
             batch_kind=kind.value,
             heartbeat=heartbeat,
         )
+        # 전략 I(음봉수급쌍끌이): 16:00~20:00 KST 윈도우에서만 실행. OHLCV 캐시 갱신
+        # 이후(위 initialize/update) t1702 단일 거래일 조회로 오늘 양봉 여부와 외국인·기관
+        # 쌍끌이 순매수를 판단해 candidate_tags에 strategy='I' 태그를 저장한다.
+        # supply_3day보다 먼저 실행해야 한다 -- supply_3day는 tagged_candidate_fetcher로
+        # "이 시점까지 태깅된" 후보만 수급을 수집하므로, I 태깅이 그 뒤에 일어나면
+        # I 전용 후보(A~H 미해당)는 수급 증거 테이블에 영영 반영되지 않는다(Neo 확인,
+        # 2026-09-16).
+        if (
+            result.status in ("success", "partial")
+            and result.fence_token is not None
+            and result.lease_token is not None
+            and tags_result is not None
+            and tags_result.status == "success"
+            and is_strategy_i_window(now_kst)
+            and strategy_i_supply_provider is not None
+        ):
+            try:
+                strategy_i_result = run_strategy_i_stage(
+                    gateway,
+                    candidate_fetcher,
+                    ohlcv_loader,
+                    strategy_i_supply_provider,
+                    tags_repository,
+                    result.run_id,
+                    result.fence_token,
+                    result.lease_token,
+                    key.trading_day,
+                    heartbeat=heartbeat,
+                )
+            except Exception as exc:  # noqa: BLE001 - 전략 I 실패는 기존 배치 성공을 보존한다
+                print(f"run_id={result.run_id} stage=strategy_i strategy_i_status=failed "
+                      f"result_code=STRATEGY_I_FAILED message={exc}")
+                strategy_i_result = StrategyIResult("failed", "STRATEGY_I_FAILED")
+
         # Story 4.1 review patch: close/intraday에서만 tags stage 직후 supply stage를 실행한다
         # (Story 4.3 장중 D0 누적 전제). premarket은 당일(D0) 거래 데이터가 아직 없어 t1702
         # 응답에 D0 날짜가 누락되므로, 실행하면 모든 태깅된 후보가 상시 error로 집계되어
@@ -315,36 +349,6 @@ def run_scheduled_batch(
                 # 기존 외부 호출자의 시그니처 호환성. 실제 CLI는 항상 세 adapter를
                 # 주입하므로 production 경로에서는 시장 stage를 건너뛰지 않는다.
                 market_supply_result = None
-
-        # 전략 I(음봉수급쌍끌이): 16:00~20:00 KST 윈도우에서만 실행. OHLCV 캐시 갱신
-        # 이후(위 initialize/update) t1702 단일 거래일 조회로 오늘 양봉 여부와 외국인·기관
-        # 쌍끌이 순매수를 판단해 candidate_tags에 strategy='I' 태그를 저장한다.
-        if (
-            result.status in ("success", "partial")
-            and result.fence_token is not None
-            and result.lease_token is not None
-            and tags_result is not None
-            and tags_result.status == "success"
-            and is_strategy_i_window(now_kst)
-            and strategy_i_supply_provider is not None
-        ):
-            try:
-                strategy_i_result = run_strategy_i_stage(
-                    gateway,
-                    candidate_fetcher,
-                    ohlcv_loader,
-                    strategy_i_supply_provider,
-                    tags_repository,
-                    result.run_id,
-                    result.fence_token,
-                    result.lease_token,
-                    key.trading_day,
-                    heartbeat=heartbeat,
-                )
-            except Exception as exc:  # noqa: BLE001 - 전략 I 실패는 기존 배치 성공을 보존한다
-                print(f"run_id={result.run_id} stage=strategy_i strategy_i_status=failed "
-                      f"result_code=STRATEGY_I_FAILED message={exc}")
-                strategy_i_result = StrategyIResult("failed", "STRATEGY_I_FAILED")
 
     # Story 3.5 후속 조치(deferred-work gap 해소) + 대시보드 stale 스냅샷 수정
     # (2026-09-15): close/intraday가 candidates+tags+supply_3day+market_supply 모두
