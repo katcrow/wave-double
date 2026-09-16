@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from backtest.engine import TradeParams, run_backtest
 from backtest.indicator_opt._signals import SimpleSignal
@@ -10,6 +11,7 @@ from backtest.indicator_opt.strategy_ma_under_240 import (
     run_strategy_ma_backtest,
     strategy_ma_signals,
 )
+import backtest.indicator_opt.strategy_ma_under_240 as strategy_module
 
 
 def _frame(values: list[float]) -> pd.DataFrame:
@@ -31,9 +33,27 @@ def test_requires_240_below_and_20_above_60() -> None:
 def test_detects_strict_upward_cross_with_filters() -> None:
     close = [100.0] * 180 + list(np.linspace(100.0, 110.0, 60)) + [90.0, 90.0, 100.0, 100.0]
     frame = _frame(close)
-    signals = strategy_ma_signals(frame, 3, ticker="T")
+    stoch_db = pd.Series(False, index=frame.index)
+    stoch_db.iloc[242] = True
+    signals = strategy_ma_signals(frame, 3, ticker="T", stoch_db=stoch_db)
     assert [s.date for s in signals] == [frame.index[242]]
     assert signals[0].take_profit_pct == 3.0
+
+
+def test_stochastic_double_bottom_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    close = [100.0] * 180 + list(np.linspace(100.0, 110.0, 60)) + [90.0, 90.0, 100.0, 100.0]
+    frame = _frame(close)
+    monkeypatch.setattr(
+        strategy_module,
+        "sig_stoch_double_bottom",
+        lambda frame, **kwargs: pd.Series(False, index=frame.index),
+    )
+    assert strategy_ma_signals(frame, 3, ticker="T") == []
+
+    allowed = pd.Series(False, index=frame.index)
+    allowed.iloc[242] = True
+    monkeypatch.setattr(strategy_module, "sig_stoch_double_bottom", lambda frame, **kwargs: allowed)
+    assert [s.date for s in strategy_ma_signals(frame, 3, ticker="T")] == [frame.index[242]]
 
 
 def test_tp_first_and_same_ticker_reentry_are_engine_contracts() -> None:

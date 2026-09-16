@@ -17,6 +17,7 @@ import pandas as pd
 from ..data.loader import load_all
 from ..engine import TradeParams, run_backtest
 from ..indicators import sma
+from ._signals import sig_stoch_double_bottom
 from ..metrics import summarize
 from ..results_dir import scratch_root
 from ._signals import SimpleSignal
@@ -37,6 +38,7 @@ class MaUnder240Params:
     stop_loss_pct: float = 3.0
     cost_rate: float = 0.0005
     tp_first: bool = True
+    stoch_threshold: float = 30.0
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -61,6 +63,8 @@ def _validate_params(params: MaUnder240Params) -> None:
         raise ValueError("cost_rate은 [0, 1) 범위여야 합니다")
     if not isinstance(params.tp_first, bool):
         raise ValueError("tp_first는 bool이어야 합니다")
+    if not np.isfinite(params.stoch_threshold) or not 0 < params.stoch_threshold <= 100:
+        raise ValueError("stoch_threshold는 (0, 100] 범위여야 합니다")
 
 
 def _valid_segments(frame: pd.DataFrame) -> list[pd.DataFrame]:
@@ -92,6 +96,7 @@ def strategy_ma_signals(
     *,
     ticker: str = "",
     params: MaUnder240Params = MaUnder240Params(),
+    stoch_db: pd.Series | None = None,
 ) -> list[SimpleSignal]:
     """선택한 단기 SMA의 상향 교차 신호를 계산한다."""
 
@@ -102,11 +107,17 @@ def strategy_ma_signals(
     ma240 = sma(close, params.reference_ma)
     ma20 = sma(close, params.trend_fast_ma)
     ma60 = sma(close, params.trend_slow_ma)
+    if stoch_db is None:
+        stoch_db = sig_stoch_double_bottom(
+            frame, k_period=5, d_period=3, threshold=params.stoch_threshold
+        )
+    stoch_db = stoch_db.reindex(frame.index).fillna(False).astype(bool)
     mask = (
         (close.shift(1) <= selected.shift(1))
         & (close > selected)
         & (close < ma240)
         & (ma20 > ma60)
+        & stoch_db
     ).fillna(False).astype(bool)
     return [
         SimpleSignal(ticker=ticker, date=frame.index[i], price=float(close.iloc[i]),
@@ -139,7 +150,12 @@ def run_strategy_ma_backtest(
         signal_count = 0
         for ticker in sorted(data):
             for segment in _valid_segments(data[ticker]):
-                signals = strategy_ma_signals(segment, window, ticker=ticker, params=params)
+                stoch_db = sig_stoch_double_bottom(
+                    segment, k_period=5, d_period=3, threshold=params.stoch_threshold
+                )
+                signals = strategy_ma_signals(
+                    segment, window, ticker=ticker, params=params, stoch_db=stoch_db
+                )
                 signals = [s for s in signals if (start_ts is None or s.date >= start_ts) and (end_ts is None or s.date <= end_ts)]
                 signal_count += len(signals)
                 all_trades.extend(run_backtest(
