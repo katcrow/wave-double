@@ -20,12 +20,9 @@ class FakeClient:
         return self.response
 
 
-_WON_PER_EOK = 100_000_000
-
-
 def _response(total=99):
     return LsResponse(data={"t1631OutBlock1": [
-        {"value": 40 * _WON_PER_EOK}, {"value": 59 * _WON_PER_EOK}, {"value": total * _WON_PER_EOK},
+        {"value": 40}, {"value": 59}, {"value": total},
     ]})
 
 
@@ -47,7 +44,7 @@ def test_fetch_uses_market_gubun_and_selects_documented_total_row(market, gubun)
 
 def test_fetch_identifies_total_row_without_relying_on_response_order():
     client = FakeClient(LsResponse(data={"t1631OutBlock1": [
-        {"value": 99 * _WON_PER_EOK}, {"value": 40 * _WON_PER_EOK}, {"value": 59 * _WON_PER_EOK},
+        {"value": 99}, {"value": 40}, {"value": 59},
     ]}))
 
     assert LsMarketProgramSupplyProvider(client).fetch("KOSPI") == MarketProgramSupplyBar("KOSPI", 99.0)
@@ -59,7 +56,6 @@ def test_fetch_selects_integrated_total_from_current_nine_row_response():
         {"value": -914}, {"value": 8}, {"value": -906},
         {"value": -635}, {"value": -316}, {"value": -951},
     ]
-    rows = [{"value": row["value"] * _WON_PER_EOK} for row in rows]
     assert LsMarketProgramSupplyProvider(FakeClient(LsResponse(data={"t1631OutBlock1": rows}))).fetch("KOSPI") == MarketProgramSupplyBar("KOSPI", -951.0)
 
 

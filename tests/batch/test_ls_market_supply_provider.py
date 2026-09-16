@@ -22,17 +22,14 @@ class FakeClient:
         return self.response
 
 
-_WON_PER_EOK = 100_000_000
-
-
 def _block(foreign=10, institution=20, individual=-30):
     return {"svolume_17": foreign, "svolume_18": institution, "svolume_08": individual}
 
 
 def test_fetch_uses_market_endpoint_and_no_ticker_parameter_and_maps_blocks():
     client = FakeClient(LsResponse(data={
-        "t1601OutBlock1": _block(100 * _WON_PER_EOK, 200 * _WON_PER_EOK, -300 * _WON_PER_EOK),
-        "t1601OutBlock2": _block(-10 * _WON_PER_EOK, -20 * _WON_PER_EOK, 30 * _WON_PER_EOK),
+        "t1601OutBlock1": _block(100, 200, -300),
+        "t1601OutBlock2": _block(-10, -20, 30),
     }))
 
     values = LsMarketSupplyProvider(client).fetch()
@@ -77,7 +74,7 @@ def test_fetch_rejects_malformed_blocks(data):
 def test_fetch_preserves_valid_market_when_the_other_block_is_malformed():
     values = LsMarketSupplyProvider(FakeClient(LsResponse(data={
         "t1601OutBlock1": {"svolume_17": "bad"},
-        "t1601OutBlock2": _block(-10 * _WON_PER_EOK, -20 * _WON_PER_EOK, 30 * _WON_PER_EOK),
+        "t1601OutBlock2": _block(-10, -20, 30),
     }))).fetch()
 
     assert values == [MarketSupplyBar("KOSDAQ", -10.0, -20.0, 30.0)]
