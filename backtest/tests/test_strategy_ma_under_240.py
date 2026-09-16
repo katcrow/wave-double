@@ -35,7 +35,7 @@ def test_detects_strict_upward_cross_with_filters() -> None:
     frame = _frame(close)
     stoch_db = pd.Series(False, index=frame.index)
     stoch_db.iloc[242] = True
-    signals = strategy_ma_signals(frame, 3, ticker="T", stoch_db=stoch_db)
+    signals = strategy_ma_signals(frame, 3, ticker="T", stoch_filter=stoch_db)
     assert [s.date for s in signals] == [frame.index[242]]
     assert signals[0].take_profit_pct == 3.0
 

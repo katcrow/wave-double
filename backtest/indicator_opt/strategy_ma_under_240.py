@@ -16,11 +16,10 @@ import pandas as pd
 
 from ..data.loader import load_all
 from ..engine import TradeParams, run_backtest
-from ..indicators import sma
-from ._signals import sig_stoch_double_bottom
+from ..indicators import sma, stochastic
 from ..metrics import summarize
 from ..results_dir import scratch_root
-from ._signals import SimpleSignal
+from ._signals import SimpleSignal, sig_stoch_double_bottom
 
 RESULTS_DIR = scratch_root() / "ma_under_240"
 BASELINE_START = pd.Timestamp("2020-08-03")
@@ -39,6 +38,7 @@ class MaUnder240Params:
     cost_rate: float = 0.0005
     tp_first: bool = True
     stoch_threshold: float = 30.0
+    stoch_mode: str = "double_bottom"
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -65,6 +65,8 @@ def _validate_params(params: MaUnder240Params) -> None:
         raise ValueError("tp_first는 bool이어야 합니다")
     if not np.isfinite(params.stoch_threshold) or not 0 < params.stoch_threshold <= 100:
         raise ValueError("stoch_threshold는 (0, 100] 범위여야 합니다")
+    if params.stoch_mode not in {"double_bottom", "rising"}:
+        raise ValueError("stoch_mode는 double_bottom 또는 rising이어야 합니다")
 
 
 def _valid_segments(frame: pd.DataFrame) -> list[pd.DataFrame]:
@@ -96,7 +98,7 @@ def strategy_ma_signals(
     *,
     ticker: str = "",
     params: MaUnder240Params = MaUnder240Params(),
-    stoch_db: pd.Series | None = None,
+    stoch_filter: pd.Series | None = None,
 ) -> list[SimpleSignal]:
     """선택한 단기 SMA의 상향 교차 신호를 계산한다."""
 
@@ -107,17 +109,15 @@ def strategy_ma_signals(
     ma240 = sma(close, params.reference_ma)
     ma20 = sma(close, params.trend_fast_ma)
     ma60 = sma(close, params.trend_slow_ma)
-    if stoch_db is None:
-        stoch_db = sig_stoch_double_bottom(
-            frame, k_period=5, d_period=3, threshold=params.stoch_threshold
-        )
-    stoch_db = stoch_db.reindex(frame.index).fillna(False).astype(bool)
+    if stoch_filter is None:
+        stoch_filter = _stoch_filter(frame, params)
+    stoch_filter = stoch_filter.reindex(frame.index).fillna(False).astype(bool)
     mask = (
         (close.shift(1) <= selected.shift(1))
         & (close > selected)
         & (close < ma240)
         & (ma20 > ma60)
-        & stoch_db
+        & stoch_filter
     ).fillna(False).astype(bool)
     return [
         SimpleSignal(ticker=ticker, date=frame.index[i], price=float(close.iloc[i]),
@@ -125,6 +125,17 @@ def strategy_ma_signals(
                      stop_price=float(close.iloc[i]) * (1.0 - params.stop_loss_pct / 100.0))
         for i in np.flatnonzero(mask.to_numpy())
     ]
+
+
+def _stoch_filter(frame: pd.DataFrame, params: MaUnder240Params) -> pd.Series:
+    if params.stoch_mode == "rising":
+        values = stochastic(frame["Close"], frame["High"], frame["Low"], 5, 3, 3)
+        return (values["stoch_k"] > values["stoch_k"].shift(1)) & (
+            values["stoch_d"] > values["stoch_d"].shift(1)
+        )
+    return sig_stoch_double_bottom(
+        frame, k_period=5, d_period=3, threshold=params.stoch_threshold
+    )
 
 
 def run_strategy_ma_backtest(
@@ -150,11 +161,9 @@ def run_strategy_ma_backtest(
         signal_count = 0
         for ticker in sorted(data):
             for segment in _valid_segments(data[ticker]):
-                stoch_db = sig_stoch_double_bottom(
-                    segment, k_period=5, d_period=3, threshold=params.stoch_threshold
-                )
+                stoch_filter = _stoch_filter(segment, params)
                 signals = strategy_ma_signals(
-                    segment, window, ticker=ticker, params=params, stoch_db=stoch_db
+                    segment, window, ticker=ticker, params=params, stoch_filter=stoch_filter
                 )
                 signals = [s for s in signals if (start_ts is None or s.date >= start_ts) and (end_ts is None or s.date <= end_ts)]
                 signal_count += len(signals)
@@ -174,18 +183,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="240이평 아래 이평선 돌파 그리드 백테스트")
     parser.add_argument("--start", default=BASELINE_START.date().isoformat())
     parser.add_argument("--end", default=BASELINE_END.date().isoformat())
+    parser.add_argument("--stoch-mode", choices=("double_bottom", "rising"), default="rising")
     args = parser.parse_args()
-    result = run_strategy_ma_backtest(start=args.start, end=args.end)
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(result["summary"]).to_csv(RESULTS_DIR / "summary.csv", index=False)
+    params = MaUnder240Params(stoch_mode=args.stoch_mode)
+    result = run_strategy_ma_backtest(params=params, start=args.start, end=args.end)
+    output_dir = RESULTS_DIR.parent / f"{RESULTS_DIR.name}_{args.stoch_mode}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(result["summary"]).to_csv(output_dir / "summary.csv", index=False)
     trades = [trade for window in result["trades"].values() for trade in window]
-    pd.DataFrame(trades).to_csv(RESULTS_DIR / "trades.csv", index=False)
+    pd.DataFrame(trades).to_csv(output_dir / "trades.csv", index=False)
     summary = pd.DataFrame(result["summary"])
     ranked = summary.sort_values(["profit_factor", "cum_return"], ascending=False).head(10)
     print("=== 240이평 아래 이평선 상향돌파 그리드 ===")
     print(ranked.to_string(index=False))
-    print(f"\n요약 저장: {RESULTS_DIR / 'summary.csv'}")
-    print(f"거래 저장: {RESULTS_DIR / 'trades.csv'}")
+    print(f"\n요약 저장: {output_dir / 'summary.csv'}")
+    print(f"거래 저장: {output_dir / 'trades.csv'}")
 
 
 if __name__ == "__main__":
