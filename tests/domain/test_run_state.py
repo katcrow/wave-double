@@ -27,9 +27,9 @@ def test_invalid_logical_key_slot_is_rejected():
         LogicalRunKey.parse("close:2026-09-01:14:30")
 
 
-def test_initial_stage_registry_includes_optional_bias():
+def test_initial_stage_registry_includes_optional_bias_and_strategy_i():
     assert set(initial_stage_status()) == {
-        "candidates", "tags", "supply_3day", "market_supply", "outcome_tracking", "bias"
+        "candidates", "tags", "supply_3day", "market_supply", "outcome_tracking", "bias", "strategy_i"
     }
     assert all(value is StageStatus.PENDING for value in initial_stage_status().values())
 

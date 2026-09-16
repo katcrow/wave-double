@@ -31,6 +31,7 @@ from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
 from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
 from .run_state import RunStateGateway
 from .scheduler import SchedulerResult, run_scheduled_batch
+from .strategy_i_stage import StrategyISupplyProviderProtocol
 from .supabase_client import SupabaseCalendarRepository, SupabaseRpcClient
 from .supply_3day_repository import SupabaseSupply3DayRepository
 from .tagged_candidate_fetcher import TaggedCandidateFetcher
@@ -124,6 +125,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             market_supply_repository,
             condition_search_user_id=condition_search_user_id,
             bias_repository=bias_repository,
+            strategy_i_supply_provider=supply_provider,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,
         )

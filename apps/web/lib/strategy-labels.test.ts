@@ -19,8 +19,12 @@ test("전략 G/H는 정의된 라벨을 반환한다", () => {
   assert.equal(getStrategyLabel("H"), "전략 H · 240이평돌파");
 });
 
+test("전략 I는 정의된 라벨을 반환한다(운영 수동 확인 전용)", () => {
+  assert.equal(getStrategyLabel("I"), "전략 I · 음봉수급쌍끌이");
+});
+
 test("정의되지 않은 전략 코드는 undefined를 반환한다", () => {
-  assert.equal(getStrategyLabel("I"), undefined);
+  assert.equal(getStrategyLabel("Z"), undefined);
 });
 
 // prototype pollution 방지: Object.prototype에 존재하는 이름은 own-property가 아니므로 undefined.

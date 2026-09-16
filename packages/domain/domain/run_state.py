@@ -40,6 +40,7 @@ class Stage(StrEnum):
     MARKET_SUPPLY = "market_supply"
     OUTCOME_TRACKING = "outcome_tracking"
     BIAS = "bias"
+    STRATEGY_I = "strategy_i"
 
 
 class StageStatus(StrEnum):

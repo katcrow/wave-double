@@ -37,6 +37,12 @@ from .market_supply_stage import (
     MarketSupplyStageResult,
     run_market_supply_stage,
 )
+from .strategy_i_stage import (
+    StrategyISupplyProviderProtocol,
+    StrategyIResult,
+    is_strategy_i_window,
+    run_strategy_i_stage,
+)
 from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, run_tags_stage
 
 # status를 "얼마나 나쁜가"로 정렬한다 -- candidates/tags 결과를 합칠 때 더 나쁜 쪽이 이긴다.
@@ -62,6 +68,8 @@ class SchedulerResult:
     outcome_tracking_status: str | None = None
     bias_status: str | None = None
     bias_result_code: str | None = None
+    strategy_i_status: str | None = None
+    strategy_i_result_code: str | None = None
 
 
 def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalRunKey:
@@ -82,6 +90,7 @@ def _from_candidate_result(
     published: bool = False,
     is_close_batch: bool = False,
     bias_result: BiasStageResult | None = None,
+    strategy_i_result: StrategyIResult | None = None,
 ) -> SchedulerResult:
     """candidates stage 결과와(있다면) tags/supply stage 결과를 하나의 ``SchedulerResult``로 합친다.
 
@@ -96,8 +105,9 @@ def _from_candidate_result(
     ``published=True``를 outcome_tracking 성공으로 잘못 보고하지 않도록 ``is_close_batch``로
     구분한다.
 
-    ``bias_result``(옵션)가 주어지면 배치 성공과 무관하게 ``bias_status``/
-    ``bias_result_code``로만 노출하며, severity 합산에는 참여하지 않는다.
+    ``bias_result``(옵션)와 ``strategy_i_result``(옵션)는 배치 성공과 무관하게
+    ``bias_status``/``bias_result_code``, ``strategy_i_status``/``strategy_i_result_code``로만
+    노출하며, severity 합산에는 참여하지 않는다.
     """
     status = result.status
     tags_status: str | None = None
@@ -142,6 +152,8 @@ def _from_candidate_result(
         outcome_tracking_status="success" if published and is_close_batch else None,
         bias_status=bias_result.status if bias_result else None,
         bias_result_code=bias_result.result_code if bias_result else None,
+        strategy_i_status=strategy_i_result.status if strategy_i_result else None,
+        strategy_i_result_code=strategy_i_result.result_code if strategy_i_result else None,
     )
 
 
@@ -171,6 +183,7 @@ def run_scheduled_batch(
     dispatch_request_id: str | None = None,
     strategy_client: TagsClient | None = None,
     bias_repository: BiasRepositoryProtocol | None = None,
+    strategy_i_supply_provider: StrategyISupplyProviderProtocol | None = None,
 ) -> SchedulerResult:
     """휴장이면 attempt를 시작한 뒤 즉시 skip 처리하고, 개장일이면 candidate stage로 위임한다.
 
@@ -231,6 +244,7 @@ def run_scheduled_batch(
     tags_result: TagsStageResult | None = None
     supply_result: SupplyStageResult | None = None
     market_supply_result: MarketSupplyStageResult | None = None
+    strategy_i_result: StrategyIResult | None = None
     if result.status in ("success", "partial") and result.fence_token is not None:
         # item-11(F1, spec-2-5 deferred #2): 후보 수가 많거나 OHLCV 신규 적재가 길어지면
         # 기본 300초 lease 안에 tags stage가 끝나지 못할 수 있다. 같은 attempt로
@@ -302,6 +316,36 @@ def run_scheduled_batch(
                 # 주입하므로 production 경로에서는 시장 stage를 건너뛰지 않는다.
                 market_supply_result = None
 
+        # 전략 I(음봉수급쌍끌이): 16:00~20:00 KST 윈도우에서만 실행. OHLCV 캐시 갱신
+        # 이후(위 initialize/update) t1702 단일 거래일 조회로 오늘 양봉 여부와 외국인·기관
+        # 쌍끌이 순매수를 판단해 candidate_tags에 strategy='I' 태그를 저장한다.
+        if (
+            result.status in ("success", "partial")
+            and result.fence_token is not None
+            and result.lease_token is not None
+            and tags_result is not None
+            and tags_result.status == "success"
+            and is_strategy_i_window(now_kst)
+            and strategy_i_supply_provider is not None
+        ):
+            try:
+                strategy_i_result = run_strategy_i_stage(
+                    gateway,
+                    candidate_fetcher,
+                    ohlcv_loader,
+                    strategy_i_supply_provider,
+                    tags_repository,
+                    result.run_id,
+                    result.fence_token,
+                    result.lease_token,
+                    key.trading_day,
+                    heartbeat=heartbeat,
+                )
+            except Exception as exc:  # noqa: BLE001 - 전략 I 실패는 기존 배치 성공을 보존한다
+                print(f"run_id={result.run_id} stage=strategy_i strategy_i_status=failed "
+                      f"result_code=STRATEGY_I_FAILED message={exc}")
+                strategy_i_result = StrategyIResult("failed", "STRATEGY_I_FAILED")
+
     # Story 3.5 후속 조치(deferred-work gap 해소) + 대시보드 stale 스냅샷 수정
     # (2026-09-15): close/intraday가 candidates+tags+supply_3day+market_supply 모두
     # success로 종결되고 fence/lease가 확정된 경우 publish_attempt를 호출한다.
@@ -370,7 +414,7 @@ def run_scheduled_batch(
             bias_result = BiasStageResult("failed", "BIAS_FAILED", failure_recorded=False)
     return _from_candidate_result(result, tags_result, supply_result, market_supply_result,
                                   published=published, is_close_batch=kind is BatchKind.CLOSE,
-                                  bias_result=bias_result)
+                                  bias_result=bias_result, strategy_i_result=strategy_i_result)
 
 
 __all__ = ["SchedulerResult", "run_scheduled_batch"]
