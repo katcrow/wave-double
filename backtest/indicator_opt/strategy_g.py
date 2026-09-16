@@ -3,7 +3,7 @@
 원 설계는 docs/양음돌파패턴.md — 1일 보유 + 2%/4% 분할익절 + 익절우선이었으나,
 프로덕션 청산 규약(AD-5, SL_PRIORITY=True, 단일 TP%/SL%)에 맞춰
 단일청산으로 근사했다: TP 5% / SL 5% / 최대보유 20일 (SL-우선).
-근사 백테스트(baseline 관측창 2020-08-03~2026-08-27): 시그널 131, 거래 125건
+기존 baseline 기록(필터 적용 전, 관측창 2020-08-03~2026-08-27): 시그널 131, 거래 125건
 (73승/52패), 승률 58.4%, 평균 +0.740%, PF 1.35 (SL-우선).
 """
 
@@ -28,6 +28,8 @@ from .strategy_custom_vol_breakout_pullback import _breakout_pullback_mask
 _OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _PRICE_COLUMNS = ("Open", "High", "Low", "Close")
 _MAX_WINDOW = 100_000
+_OVEREXTENSION_WINDOW = 5
+_MAX_CLOSE_OVEREXTENSION_PCT = 5.0
 _TRADE_COLUMNS = (
     "ticker", "entry_date", "exit_date", "entry_price", "exit_price",
     "return_pct", "holding_bars", "exit_reason",
@@ -208,12 +210,12 @@ def compute_strategy_g(
     frame: pd.DataFrame,
     params: StrategyGParams = STRATEGY_G_PARAMS,
 ) -> pd.Series:
-    """거래량 5이평 돌파 7%+ 양봉 → 음봉풀백(1~N) → 풀백고가 돌파 진입 마스크."""
+    """양음돌파패턴과 5일 고점 대비 과열 필터를 적용한 진입 마스크."""
 
     _validate_frame(frame)
     _validate_params(params)
 
-    if len(frame) < params.vol_sma_window + params.max_pullback + 2:
+    if len(frame) < max(params.vol_sma_window, _OVEREXTENSION_WINDOW) + params.max_pullback + 2:
         return pd.Series(False, index=frame.index, dtype=bool)
 
     open_ = frame["Open"].to_numpy(dtype=float)
@@ -231,6 +233,19 @@ def compute_strategy_g(
     mask = _breakout_pullback_mask(
         open_, high, close, volume, vol_sma, params.min_gain_pct, params.max_pullback
     )
+    recent_high = (
+        frame["High"]
+        .rolling(_OVEREXTENSION_WINDOW, min_periods=_OVEREXTENSION_WINDOW)
+        .max()
+        .shift(1)
+        .to_numpy(dtype=float)
+    )
+    max_close = recent_high * (1.0 + _MAX_CLOSE_OVEREXTENSION_PCT / 100.0)
+    # 십진 호가의 정확한 5% 경계가 이진 부동소수점 오차로 제외되지 않게 한다.
+    boundary_tolerance = np.zeros_like(max_close)
+    finite_limits = np.isfinite(max_close)
+    boundary_tolerance[finite_limits] = np.spacing(max_close[finite_limits]) * 4.0
+    mask &= np.isfinite(recent_high) & (close <= max_close + boundary_tolerance)
     return pd.Series(mask, index=frame.index, dtype=bool)
 
 
