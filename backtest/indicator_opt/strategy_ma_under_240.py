@@ -16,7 +16,7 @@ import pandas as pd
 
 from ..data.loader import load_all
 from ..engine import TradeParams, run_backtest
-from ..indicators import sma, stochastic
+from ..indicators import atr, sma, stochastic
 from ..metrics import summarize
 from ..results_dir import scratch_root
 from ._signals import SimpleSignal, sig_stoch_double_bottom
@@ -39,6 +39,7 @@ class MaUnder240Params:
     tp_first: bool = True
     stoch_threshold: float = 30.0
     stoch_mode: str = "double_bottom"
+    candle_mode: str = "none"
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -67,6 +68,8 @@ def _validate_params(params: MaUnder240Params) -> None:
         raise ValueError("stoch_threshold는 (0, 100] 범위여야 합니다")
     if params.stoch_mode not in {"double_bottom", "rising"}:
         raise ValueError("stoch_mode는 double_bottom 또는 rising이어야 합니다")
+    if params.candle_mode not in {"none", "body", "atr", "full"}:
+        raise ValueError("candle_mode는 none, body, atr 또는 full이어야 합니다")
 
 
 def _valid_segments(frame: pd.DataFrame) -> list[pd.DataFrame]:
@@ -99,6 +102,7 @@ def strategy_ma_signals(
     ticker: str = "",
     params: MaUnder240Params = MaUnder240Params(),
     stoch_filter: pd.Series | None = None,
+    candle_filter: pd.Series | None = None,
 ) -> list[SimpleSignal]:
     """선택한 단기 SMA의 상향 교차 신호를 계산한다."""
 
@@ -112,12 +116,16 @@ def strategy_ma_signals(
     if stoch_filter is None:
         stoch_filter = _stoch_filter(frame, params)
     stoch_filter = stoch_filter.reindex(frame.index).fillna(False).astype(bool)
+    if candle_filter is None:
+        candle_filter = _candle_filter(frame, params)
+    candle_filter = candle_filter.reindex(frame.index).fillna(False).astype(bool)
     mask = (
         (close.shift(1) <= selected.shift(1))
         & (close > selected)
         & (close < ma240)
         & (ma20 > ma60)
         & stoch_filter
+        & candle_filter
     ).fillna(False).astype(bool)
     return [
         SimpleSignal(ticker=ticker, date=frame.index[i], price=float(close.iloc[i]),
@@ -136,6 +144,25 @@ def _stoch_filter(frame: pd.DataFrame, params: MaUnder240Params) -> pd.Series:
     return sig_stoch_double_bottom(
         frame, k_period=5, d_period=3, threshold=params.stoch_threshold
     )
+
+
+def _candle_filter(frame: pd.DataFrame, params: MaUnder240Params) -> pd.Series:
+    """의미 있는 양봉 단계별 필터를 계산한다."""
+
+    if params.candle_mode == "none":
+        return pd.Series(True, index=frame.index)
+    candle_range = (frame["High"] - frame["Low"]).replace(0.0, np.nan)
+    body = frame["Close"] - frame["Open"]
+    quality = (body > 0) & (body / candle_range >= 0.55)
+    if params.candle_mode == "body":
+        return quality
+    atr14 = atr(frame["High"], frame["Low"], frame["Close"], window=14)
+    result = quality & (body >= atr14 * 0.5)
+    if params.candle_mode == "atr":
+        return result
+    close_position = (frame["Close"] - frame["Low"]) / candle_range
+    upper_wick_ratio = (frame["High"] - frame["Close"]) / candle_range
+    return result & (close_position >= 0.75) & (upper_wick_ratio <= 0.25)
 
 
 def run_strategy_ma_backtest(
@@ -162,8 +189,14 @@ def run_strategy_ma_backtest(
         for ticker in sorted(data):
             for segment in _valid_segments(data[ticker]):
                 stoch_filter = _stoch_filter(segment, params)
+                candle_filter = _candle_filter(segment, params)
                 signals = strategy_ma_signals(
-                    segment, window, ticker=ticker, params=params, stoch_filter=stoch_filter
+                    segment,
+                    window,
+                    ticker=ticker,
+                    params=params,
+                    stoch_filter=stoch_filter,
+                    candle_filter=candle_filter,
                 )
                 signals = [s for s in signals if (start_ts is None or s.date >= start_ts) and (end_ts is None or s.date <= end_ts)]
                 signal_count += len(signals)
@@ -184,20 +217,22 @@ def main() -> None:
     parser.add_argument("--start", default=BASELINE_START.date().isoformat())
     parser.add_argument("--end", default=BASELINE_END.date().isoformat())
     parser.add_argument("--stoch-mode", choices=("double_bottom", "rising"), default="rising")
+    parser.add_argument("--candle-mode", choices=("none", "body", "atr", "full", "all"), default="all")
     args = parser.parse_args()
-    params = MaUnder240Params(stoch_mode=args.stoch_mode)
-    result = run_strategy_ma_backtest(params=params, start=args.start, end=args.end)
-    output_dir = RESULTS_DIR.parent / f"{RESULTS_DIR.name}_{args.stoch_mode}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(result["summary"]).to_csv(output_dir / "summary.csv", index=False)
-    trades = [trade for window in result["trades"].values() for trade in window]
-    pd.DataFrame(trades).to_csv(output_dir / "trades.csv", index=False)
-    summary = pd.DataFrame(result["summary"])
-    ranked = summary.sort_values(["profit_factor", "cum_return"], ascending=False).head(10)
-    print("=== 240이평 아래 이평선 상향돌파 그리드 ===")
-    print(ranked.to_string(index=False))
-    print(f"\n요약 저장: {output_dir / 'summary.csv'}")
-    print(f"거래 저장: {output_dir / 'trades.csv'}")
+    modes = ("none", "body", "atr", "full") if args.candle_mode == "all" else (args.candle_mode,)
+    for candle_mode in modes:
+        params = MaUnder240Params(stoch_mode=args.stoch_mode, candle_mode=candle_mode)
+        result = run_strategy_ma_backtest(params=params, start=args.start, end=args.end)
+        output_dir = RESULTS_DIR.parent / f"{RESULTS_DIR.name}_{args.stoch_mode}_{candle_mode}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(result["summary"]).to_csv(output_dir / "summary.csv", index=False)
+        trades = [trade for window in result["trades"].values() for trade in window]
+        pd.DataFrame(trades).to_csv(output_dir / "trades.csv", index=False)
+        summary = pd.DataFrame(result["summary"])
+        ranked = summary.sort_values(["profit_factor", "cum_return"], ascending=False).head(5)
+        print(f"=== candle={candle_mode} ===")
+        print(ranked[["ma_window", "n_trades", "win_rate", "profit_factor", "cum_return"]].to_string(index=False))
+        print(f"저장: {output_dir}")
 
 
 if __name__ == "__main__":

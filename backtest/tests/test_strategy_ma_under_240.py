@@ -56,6 +56,21 @@ def test_stochastic_double_bottom_is_required(monkeypatch: pytest.MonkeyPatch) -
     assert [s.date for s in strategy_ma_signals(frame, 3, ticker="T")] == [frame.index[242]]
 
 
+def test_meaningful_bullish_candle_filter_has_progressive_modes() -> None:
+    frame = _frame([100.0] * 20)
+    frame.iloc[15, frame.columns.get_loc("Open")] = 100.0
+    frame.iloc[15, frame.columns.get_loc("High")] = 110.0
+    frame.iloc[15, frame.columns.get_loc("Low")] = 95.0
+    frame.iloc[15, frame.columns.get_loc("Close")] = 101.0
+    from backtest.indicator_opt.strategy_ma_under_240 import _candle_filter
+
+    params = MaUnder240Params(candle_mode="body")
+    assert not _candle_filter(frame, params).iloc[15]
+    frame.iloc[15, frame.columns.get_loc("Close")] = 109.0
+    assert _candle_filter(frame, params).iloc[15]
+    assert _candle_filter(frame, MaUnder240Params(candle_mode="full")).iloc[15]
+
+
 def test_tp_first_and_same_ticker_reentry_are_engine_contracts() -> None:
     frame = _frame([100.0] * 25)
     frame.iloc[16, frame.columns.get_loc("High")] = 104.0
