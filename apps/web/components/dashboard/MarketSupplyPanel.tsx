@@ -126,7 +126,7 @@ export default function MarketSupplyPanel({ rows, fetchFailed }: MarketSupplyPan
                     </span>
                   </header>
                   <p className="market-supply-panel__value">
-                    {formatMarketSupplyNumber(metric.value)}<span>주</span>
+                    {formatMarketSupplyNumber(metric.value)}<span>억원</span>
                   </p>
                   <span className="market-supply-panel__bar" aria-hidden="true">
                     <span

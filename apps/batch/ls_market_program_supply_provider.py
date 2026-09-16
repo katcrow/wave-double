@@ -1,4 +1,9 @@
-"""시장 전체 프로그램 순매수(t1631) adapter."""
+"""시장 전체 프로그램 순매수(t1631) adapter.
+
+t1631OutBlock1 행은 ``volume``(순매수수량)과 ``value``(순매수금액, 원 단위)를
+함께 내려준다. t1601을 금액(억원) 기준으로 바꾼 것과 단위를 맞추기 위해
+``volume`` 대신 ``value``를 사용하고 억원으로 환산한다.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,7 @@ from .ls_market_supply_provider import MARKETS
 TR_CODE = "t1631"
 API_PATH = "/stock/program"
 _MARKET_TO_GUBUN = {"KOSPI": "1", "KOSDAQ": "2"}
+_WON_PER_EOK = 100_000_000
 
 
 class MarketProgramSupplyClient(Protocol):
@@ -23,7 +29,7 @@ class MarketProgramSupplyClient(Protocol):
 @dataclass(frozen=True)
 class MarketProgramSupplyBar:
     market: str
-    program_net: float
+    program_net: float  # 억원 단위 순매수 금액
 
     def __post_init__(self) -> None:
         if self.market not in MARKETS:
@@ -36,7 +42,7 @@ MarketProgramSupply = MarketProgramSupplyBar
 
 
 class LsMarketProgramSupplyProvider:
-    """t1631 당일조회에서 시장별 전체 행의 순매수수량을 반환한다.
+    """t1631 당일조회에서 시장별 전체 행의 순매수금액(억원)을 반환한다.
 
     문서 fixture의 세 행은 차익/비차익/전체 순서다. 전체 행을 임의 합산하지
     않고 마지막 행만 사용하며, 행 수가 달라지면 계약 위반으로 거부한다.
@@ -75,27 +81,27 @@ def _parse_response(data: Any, market: str) -> MarketProgramSupplyBar:
     if any(not isinstance(row, dict) for row in rows):
         raise RuntimeError("LS t1631 response malformed: aggregate row is not an object")
     try:
-        volumes = [_finite_number(row["volume"], "volume") for row in rows]
-        if len(volumes) == 3:
+        amounts = [_finite_number(row["value"], "value") for row in rows]
+        if len(amounts) == 3:
             total_indexes = [
-                index for index, volume in enumerate(volumes)
-                if isclose(volume, sum(other for other_index, other in enumerate(volumes) if other_index != index), abs_tol=1e-9)
+                index for index, amount in enumerate(amounts)
+                if isclose(amount, sum(other for other_index, other in enumerate(amounts) if other_index != index), abs_tol=1e-9)
             ]
             if len(total_indexes) != 1:
                 raise ValueError("t1631 response did not identify exactly one total row")
-            integrated_total = volumes[total_indexes[0]]
+            integrated_total = amounts[total_indexes[0]]
         else:
             # exchgubun=U currently returns three official aggregate groups.
             # Each group is [차익, 비차익, 전체], and the final group is the
             # integrated KRX+NXT result. Live values can differ by one unit
             # between component rows while the API is being updated, so the
             # documented aggregate position is the stable contract here.
-            integrated_total = volumes[-1]
-        # 공식 응답은 차익/비차익/전체 집계다. 전체 행을 식별해 value가 아니라
-        # t1601과 단위를 맞춘 순매수수량(volume)을 사용하며 응답 순서에는 의존하지 않는다.
-        return MarketProgramSupplyBar(market, integrated_total)
+            integrated_total = amounts[-1]
+        # 공식 응답은 차익/비차익/전체 집계다. 전체 행을 식별해 t1601과 단위를
+        # 맞춘 순매수금액(value, 원)을 사용하며 응답 순서에는 의존하지 않는다.
+        return MarketProgramSupplyBar(market, integrated_total / _WON_PER_EOK)
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
-        raise RuntimeError("LS t1631 response row malformed: missing/non-finite volume") from exc
+        raise RuntimeError("LS t1631 response row malformed: missing/non-finite value") from exc
 
 
 def _finite_number(value: Any, field: str) -> float:
