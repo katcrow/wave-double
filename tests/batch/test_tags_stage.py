@@ -89,7 +89,7 @@ class FakeTagsRepository:
         return {"vanished_count": self.vanished_count}
 
 
-def _frame(n: int = 3, *, last_signal_at_minus2: bool = False) -> pd.DataFrame:
+def _frame(n: int = 3) -> pd.DataFrame:
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
     return pd.DataFrame(
         {"Open": [1.0] * n, "High": [1.0] * n, "Low": [1.0] * n, "Close": [1.0] * n, "Volume": [1.0] * n},
@@ -97,18 +97,18 @@ def _frame(n: int = 3, *, last_signal_at_minus2: bool = False) -> pd.DataFrame:
     )
 
 
-def _signals(n: int, *, a_at_minus2: bool = False) -> dict[str, pd.Series]:
+def _signals(n: int, *, a_at_minus1: bool = False) -> dict[str, pd.Series]:
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
     a = pd.Series(False, index=idx)
-    if a_at_minus2:
-        a.iloc[-2] = True
+    if a_at_minus1:
+        a.iloc[-1] = True
     b = pd.Series(False, index=idx)
     c = pd.Series(False, index=idx)
     return {"A": a, "B": b, "C": c}
 
 
-def _ready_result(ticker: str, n: int, *, a_at_minus2: bool = False) -> StrategyResult:
-    return StrategyResult(ticker=ticker, status=OhlcvCacheStatus.READY, signals=_signals(n, a_at_minus2=a_at_minus2), error=None)
+def _ready_result(ticker: str, n: int, *, a_at_minus1: bool = False) -> StrategyResult:
+    return StrategyResult(ticker=ticker, status=OhlcvCacheStatus.READY, signals=_signals(n, a_at_minus1=a_at_minus1), error=None)
 
 
 def _error_result(ticker: str) -> StrategyResult:
@@ -136,7 +136,7 @@ def test_normal_tagging_all_ready_with_signal_is_success():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=True)})
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
 
@@ -160,7 +160,7 @@ def test_partial_signal_compute_error_on_one_ticker_others_still_saved():
     loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
     strategy = FakeStrategyClient({
         "005930": _error_result("005930"),
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
@@ -184,7 +184,7 @@ def test_insufficient_history_is_ineligible_not_error_and_stage_stays_success():
         "005930": OhlcvCacheStatus.INELIGIBLE_INSUFFICIENT_HISTORY,
         "000660": frame,
     })
-    strategy = FakeStrategyClient({"000660": _ready_result("000660", 3, a_at_minus2=True)})
+    strategy = FakeStrategyClient({"000660": _ready_result("000660", 3, a_at_minus1=True)})
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
 
@@ -204,7 +204,7 @@ def test_ready_but_no_signal_produces_no_tag_and_no_error():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=False)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=False)})
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
 
@@ -251,7 +251,7 @@ def test_tags_persist_failure_records_failed_stage():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=True)})
     tags_repo = FakeTagsRepository(fail=True)
     rpc = FakeRpc()
 
@@ -267,8 +267,8 @@ def test_multiple_strategies_on_same_ticker_are_all_tagged():
     n = 3
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
     signals = {
-        "A": pd.Series([False, True, False], index=idx),
-        "B": pd.Series([False, True, False], index=idx),
+        "A": pd.Series([False, False, True], index=idx),
+        "B": pd.Series([False, False, True], index=idx),
         "C": pd.Series(False, index=idx),
     }
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
@@ -291,7 +291,7 @@ def test_params_meta_and_batch_kind_are_recorded_on_saved_tags():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=True)})
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
 
@@ -315,8 +315,8 @@ def test_strategy_d_and_e_signals_are_tagged():
         "A": pd.Series(False, index=idx),
         "B": pd.Series(False, index=idx),
         "C": pd.Series(False, index=idx),
-        "D": pd.Series([False, True, False], index=idx),
-        "E": pd.Series([False, True, False], index=idx),
+        "D": pd.Series([False, False, True], index=idx),
+        "E": pd.Series([False, False, True], index=idx),
     }
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
     frame = _frame(n)
@@ -338,10 +338,10 @@ def test_strategy_a_and_d_multi_tag_on_same_ticker():
     n = 3
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
     signals = {
-        "A": pd.Series([False, True, False], index=idx),
+        "A": pd.Series([False, False, True], index=idx),
         "B": pd.Series(False, index=idx),
         "C": pd.Series(False, index=idx),
-        "D": pd.Series([False, True, False], index=idx),
+        "D": pd.Series([False, False, True], index=idx),
         "E": pd.Series(False, index=idx),
     }
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
@@ -368,7 +368,7 @@ def test_strategy_e_only_signal_is_tagged():
         "B": pd.Series(False, index=idx),
         "C": pd.Series(False, index=idx),
         "D": pd.Series(False, index=idx),
-        "E": pd.Series([False, True, False], index=idx),
+        "E": pd.Series([False, False, True], index=idx),
     }
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
     frame = _frame(n)
@@ -389,7 +389,7 @@ def test_strategy_e_only_signal_is_tagged():
 def test_all_five_strategies_signal_on_same_ticker():
     n = 3
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
-    signals = {key: pd.Series([False, True, False], index=idx) for key in ("A", "B", "C", "D", "E")}
+    signals = {key: pd.Series([False, False, True], index=idx) for key in ("A", "B", "C", "D", "E")}
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
     frame = _frame(n)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
@@ -416,7 +416,7 @@ def test_strategy_d_signal_compute_error_counts_as_error_not_silently_dropped():
     )
     strategy = FakeStrategyClient({
         "005930": error_result,
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
@@ -440,7 +440,7 @@ def test_strategy_f_only_signal_is_tagged():
         "C": pd.Series(False, index=idx),
         "D": pd.Series(False, index=idx),
         "E": pd.Series(False, index=idx),
-        "F": pd.Series([False, True, False], index=idx),
+        "F": pd.Series([False, False, True], index=idx),
     }
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
     frame = _frame(n)
@@ -462,12 +462,12 @@ def test_strategy_a_and_f_multi_tag_on_same_ticker():
     n = 3
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
     signals = {
-        "A": pd.Series([False, True, False], index=idx),
+        "A": pd.Series([False, False, True], index=idx),
         "B": pd.Series(False, index=idx),
         "C": pd.Series(False, index=idx),
         "D": pd.Series(False, index=idx),
         "E": pd.Series(False, index=idx),
-        "F": pd.Series([False, True, False], index=idx),
+        "F": pd.Series([False, False, True], index=idx),
     }
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
     frame = _frame(n)
@@ -488,7 +488,7 @@ def test_strategy_a_and_f_multi_tag_on_same_ticker():
 def test_all_six_strategies_signal_on_same_ticker():
     n = 3
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
-    signals = {key: pd.Series([False, True, False], index=idx) for key in ("A", "B", "C", "D", "E", "F")}
+    signals = {key: pd.Series([False, False, True], index=idx) for key in ("A", "B", "C", "D", "E", "F")}
     result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
     frame = _frame(n)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
@@ -515,7 +515,7 @@ def test_strategy_f_signal_compute_error_counts_as_error_not_silently_dropped():
     )
     strategy = FakeStrategyClient({
         "005930": error_result,
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()
@@ -530,7 +530,8 @@ def test_strategy_f_signal_compute_error_counts_as_error_not_silently_dropped():
     assert tags_repo.saved[0].strategy == "A"
 
 
-def test_signal_date_reflects_second_to_last_bar():
+def test_signal_date_reflects_last_bar():
+    """"당일 봉이 최종봉" 원칙(Neo 확인, 2026-09-16): 시그널 확정일은 프레임의 마지막 봉이다."""
     n = 4
     idx = pd.date_range("2026-08-01", periods=n, freq="D")
     frame = pd.DataFrame(
@@ -538,7 +539,7 @@ def test_signal_date_reflects_second_to_last_bar():
         index=idx,
     )
     signals = {
-        "A": pd.Series([False, False, True, False], index=idx),
+        "A": pd.Series([False, False, False, True], index=idx),
         "B": pd.Series(False, index=idx),
         "C": pd.Series(False, index=idx),
     }
@@ -551,8 +552,8 @@ def test_signal_date_reflects_second_to_last_bar():
 
     result = _run(rpc, fetcher, loader, tags_repo, strategy)
 
-    assert result.tagged_candidates[0].signal_date == idx[-2].date()
-    assert tags_repo.saved[0].signal_date == idx[-2].date()
+    assert result.tagged_candidates[0].signal_date == idx[-1].date()
+    assert tags_repo.saved[0].signal_date == idx[-1].date()
 
 
 # --- Story 2.8: sync_vanished 통합 ------------------------------------------
@@ -562,7 +563,7 @@ def test_sync_vanished_is_called_after_upsert_and_vanished_count_is_recorded():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=True)})
     tags_repo = FakeTagsRepository(vanished_count=2)
     rpc = FakeRpc()
 
@@ -580,7 +581,7 @@ def test_sync_vanished_failure_with_no_tagging_errors_records_partial_vanished_s
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=True)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=True)})
     tags_repo = FakeTagsRepository(sync_vanished_fail=True)
     rpc = FakeRpc()
 
@@ -604,7 +605,7 @@ def test_sync_vanished_failure_alongside_tagging_error_keeps_partial_tagging_cod
     loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
     strategy = FakeStrategyClient({
         "005930": _error_result("005930"),
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository(sync_vanished_fail=True)
     rpc = FakeRpc()
@@ -630,8 +631,8 @@ def test_all_persist_failures_stay_failed_tags_persist_failed():
     ])
     loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
     strategy = FakeStrategyClient({
-        "005930": _ready_result("005930", 3, a_at_minus2=True),
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "005930": _ready_result("005930", 3, a_at_minus1=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository(fail_candidate_ids={"c1", "c2"})
     rpc = FakeRpc()
@@ -656,9 +657,9 @@ def test_partial_persist_failure_isolates_bad_candidate_and_keeps_rest():
     ])
     loader = FakeOhlcvLoader({"005930": frame, "000660": frame, "035720": frame})
     strategy = FakeStrategyClient({
-        "005930": _ready_result("005930", 3, a_at_minus2=True),
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
-        "035720": _ready_result("035720", 3, a_at_minus2=True),
+        "005930": _ready_result("005930", 3, a_at_minus1=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
+        "035720": _ready_result("035720", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository(fail_candidate_ids={"c2"})
     rpc = FakeRpc()
@@ -683,7 +684,7 @@ def test_no_tags_skips_persist_entirely():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
     loader = FakeOhlcvLoader({"005930": frame})
-    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus2=False)})
+    strategy = FakeStrategyClient({"005930": _ready_result("005930", 3, a_at_minus1=False)})
 
     class ExplodingTagsRepository:
         def upsert_tags(self, tags):
@@ -708,8 +709,8 @@ def test_heartbeat_is_called_per_candidate_in_tags_stage():
     ])
     loader = FakeOhlcvLoader({"005930": frame, "000660": frame})
     strategy = FakeStrategyClient({
-        "005930": _ready_result("005930", 3, a_at_minus2=True),
-        "000660": _ready_result("000660", 3, a_at_minus2=True),
+        "005930": _ready_result("005930", 3, a_at_minus1=True),
+        "000660": _ready_result("000660", 3, a_at_minus1=True),
     })
     tags_repo = FakeTagsRepository()
     rpc = FakeRpc()

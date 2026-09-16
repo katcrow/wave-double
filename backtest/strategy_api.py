@@ -177,14 +177,22 @@ def _apply_atr_last_bar_filters(
     raw: dict[str, pd.Series], frame: pd.DataFrame,
     segments: list[pd.DataFrame],
     keys: tuple[str, ...],
+    exclude_terminal_bar: bool = True,
 ) -> dict[str, pd.Series]:
     # invalid 행을 가로질러 ATR을 계산하지 않도록 유효 구간별로 계산한다.
     atr_series = _segmented_atr(frame, segments)
-    terminal_indices = {segment.index[-1] for segment in segments if not segment.empty}
     result: dict[str, pd.Series] = {}
     for key in keys:
         mask = raw[key].reindex(frame.index).fillna(False).astype(bool).copy()
-        mask.loc[list(terminal_indices)] = False
+        if exclude_terminal_bar:
+            # 백테스트 엔진은 각 구간의 마지막 봉 시그널을 버린다(그 이후 청산을
+            # 시뮬레이션할 봉이 없음). 실전 태깅(exclude_terminal_bar=False)에서는
+            # "당일 봉이 최종봉"이라는 원칙에 따라 이 배제를 적용하지 않는다(Neo 확인,
+            # 2026-09-16 — 종가베팅은 당일 배치에서 당일 봉으로 확정돼야 한다).
+            terminal_indices = {
+                segment.index[-1] for segment in segments if not segment.empty
+            }
+            mask.loc[list(terminal_indices)] = False
         atr_valid = atr_series.notna() & (atr_series > 0)
         result[key] = (mask & atr_valid).astype(bool)
     return result
@@ -205,7 +213,17 @@ def _error_result(
     )
 
 
-def compute_abc(frame: pd.DataFrame, *, ticker: str = "") -> StrategyResult:
+def compute_abc(
+    frame: pd.DataFrame, *, ticker: str = "", exclude_terminal_bar: bool = True
+) -> StrategyResult:
+    """전략 A-H 시그널을 계산한다.
+
+    ``exclude_terminal_bar``(기본 True)는 각 유효 구간의 마지막 봉 시그널을 버린다
+    (백테스트 엔진 원본 규칙 — 그 이후 청산을 시뮬레이션할 봉이 없어서다). 운영
+    태깅(``apps/batch/tags_stage.py``)은 "당일 봉이 최종봉" 원칙에 따라
+    ``exclude_terminal_bar=False``로 호출해 당일 확정 종가로 즉시 시그널을 잡는다
+    (Neo 확인, 2026-09-16).
+    """
     if not isinstance(frame, pd.DataFrame):
         return _error_result(
             ticker, None, ValueError("OHLCV 입력은 DataFrame이어야 합니다")
@@ -242,7 +260,8 @@ def compute_abc(frame: pd.DataFrame, *, ticker: str = "") -> StrategyResult:
         return _error_result(ticker, None, exc)
     try:
         signals = _apply_atr_last_bar_filters(
-            raw, frame, [frame], ("A", "B", "C")
+            raw, frame, [frame], ("A", "B", "C"),
+            exclude_terminal_bar=exclude_terminal_bar,
         )
     except Exception as exc:
         return _error_result(ticker, None, exc)
@@ -273,7 +292,8 @@ def compute_abc(frame: pd.DataFrame, *, ticker: str = "") -> StrategyResult:
     try:
         signals.update(
             _apply_atr_last_bar_filters(
-                signals, frame, segments, ("D", "E", "F", "G", "H")
+                signals, frame, segments, ("D", "E", "F", "G", "H"),
+                exclude_terminal_bar=exclude_terminal_bar,
             )
         )
         valid_rows = _valid_ohlcv_rows(frame)

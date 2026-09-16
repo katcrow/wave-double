@@ -55,7 +55,8 @@ class FakeLoader:
 
 
 class FakeStrategyClient:
-    """``{ticker: {strategy: 성립여부}}``. 성립은 D-1 확정봉(``iloc[-2]``)에 True."""
+    """``{ticker: {strategy: 성립여부}}``. 성립은 당일 확정봉(``iloc[-1]``)에 True
+    (당일 봉이 최종봉 원칙, Neo 확인 2026-09-16)."""
 
     def __init__(self, signals_by_ticker: dict[str, dict[str, bool]] | None = None) -> None:
         self._signals = signals_by_ticker or {}
@@ -66,7 +67,7 @@ class FakeStrategyClient:
         for key in STRATEGY_KEYS:
             series = pd.Series(False, index=frame.index, dtype=bool)
             if wanted.get(key):
-                series.iloc[-2] = True
+                series.iloc[-1] = True
             signals[key] = series
         return StrategyResult(ticker=ticker, status=OhlcvCacheStatus.READY, signals=signals, error=None)
 

@@ -13,8 +13,8 @@
   (``scheduler.py``의 기존 두 호출)는 건드리지 않는다 -- 유니버스 백필은 별도 호출로만
   더한다(배선은 Story 5.4).
 - ``compute_universe_signals`` -- 실전 태깅과 **동일한** ``daily_ohlcv`` 로더에서 프레임을
-  받아 ``backtest.strategy_api.compute_abc``만으로 전략 A~F 시그널 종목 집합을 산출한다.
-  시그널 성립 봉은 운영 태깅과 같은 ``signals[key].iloc[-2]``(D-1 확정봉)다.
+  받아 ``backtest.strategy_api.compute_abc``만으로 전략 A~H 시그널 종목 집합을 산출한다.
+  시그널 성립 봉은 운영 태깅과 같은 ``signals[key].iloc[-1]``(당일 확정봉, 2026-09-16 변경)다.
 
 한 종목의 실패가 나머지를 막지 않고, 종목별 상태(``READY``/
 ``INELIGIBLE_INSUFFICIENT_HISTORY``/``ERROR``)가 집계로 노출된다. 모든 유니버스 종목은
@@ -116,15 +116,13 @@ class UniverseBackfillResult:
 class UniverseSignalResult:
     """임의 거래일에 대한 유니버스 시그널 계산 결과.
 
-    ``signal_dates``는 종목별로 **실제 확정된 시그널 봉 날짜**(프레임의 ``iloc[-2]``
-    인덱스)다. ``load_ohlcv``는 ``trading_day`` 이하의 행을 그대로 주므로 어떤 종목의
-    캐시가 T-10에서 끝나면 그 종목의 ``iloc[-2]``는 다른 달력일이 된다. 요청 거래일만
-    남기면 편향 지표의 두 집합이 서로 다른 날을 비교하게 되므로(review P4) 종목별 날짜를
-    그대로 노출한다. 날짜를 뽑을 수 없는 종목(2행 미만 등)은 ``None``이다.
+    ``signal_dates``는 종목별로 **실제 확정된 시그널 봉 날짜**(프레임의 ``iloc[-1]``
+    인덱스, 2026-09-16부터 "당일 봉이 최종봉"). ``load_ohlcv``는 ``trading_day`` 이하의
+    행을 그대로 주므로, 정상 종목은 ``iloc[-1]``이 ``trading_day``와 같지만 캐시가
+    T-10에서 끝난 종목은 그보다 이른 날짜가 나온다. 요청 거래일만 남기면 편향 지표의
+    두 집합이 서로 다른 날을 비교하게 되므로(review P4) 종목별 날짜를 그대로 노출한다.
+    날짜를 뽑을 수 없는 종목(프레임이 비어 있는 등)은 ``None``이다.
 
-    확정봉은 정의상 ``trading_day``가 아니라 **그 이전 거래일**이므로(마지막 봉 폐기
-    필터) 요청 거래일과의 일치로 뒤처짐을 판정할 수 없다 -- 그렇게 하면 정상 종목까지
-    전부 뒤처진 것으로 표시된다(운영 실측으로 확인). 대신
     ``stale_signal_date_tickers``는 **유니버스가 실제로 도달한 최신 확정봉 날짜**
     (``latest_signal_date``)를 기준으로, 그보다 이른(또는 미확인) 종목만 골라낸다 --
     캘린더 조회 없이 "이 종목만 다른 날을 보고 있다"를 정확히 잡는다.
@@ -237,8 +235,9 @@ def compute_universe_signals(
     """유니버스 전략 A~F 시그널 종목 집합과 종목별 상태 집계를 산출한다.
 
     프레임 원천은 실전 태깅과 동일한 ``daily_ohlcv`` 로더이고, 시그널은
-    ``compute_abc``(``DefaultStrategyClient``)만으로 계산한다. 시그널 성립 판정은 운영
-    태깅과 동일한 ``len(series) >= 2 and bool(series.iloc[-2])``(D-1 확정봉)다.
+    ``compute_abc``(``DefaultStrategyClient``, ``exclude_terminal_bar=False``)만으로
+    계산한다. 시그널 성립 판정은 운영 태깅과 동일한
+    ``len(series) >= 1 and bool(series.iloc[-1])``(당일 확정봉 — Neo 확인, 2026-09-16)다.
 
     모든 유니버스 종목은 ready/ineligible/error 중 정확히 하나에 들어가며(루프의 모든
     분기가 한 버킷에 append한 뒤 종료), READY 종목은 ``signal_dates``에 확정 봉 날짜를
@@ -289,7 +288,7 @@ def compute_universe_signals(
         signal_dates[ticker] = _extract_signal_date(load_result)
         for key in STRATEGY_KEYS:
             series = result.signals.get(key)
-            if series is not None and len(series) >= 2 and bool(series.iloc[-2]):
+            if series is not None and len(series) >= 1 and bool(series.iloc[-1]):
                 signals[key].append(ticker)
 
     return UniverseSignalResult(

@@ -76,10 +76,16 @@ class TagsStageResult:
 
 
 class DefaultStrategyClient:
-    """``backtest.strategy_api.compute_abc``를 직접 호출하는 기본 구현."""
+    """``backtest.strategy_api.compute_abc``를 직접 호출하는 기본 구현.
+
+    ``exclude_terminal_bar=False`` — "당일 봉이 최종봉" 원칙(Neo 확인, 2026-09-16).
+    백테스트 엔진의 마지막 봉 시그널 폐기 규칙은 원래 "그 이후 청산을 시뮬레이션할
+    봉이 없다"는 백테스트 한정 제약인데, 운영 태깅에 그대로 옮겨오면 당일 종가로
+    확정된 시그널도 다음 영업일까지 하루 늦게 노출된다(종가베팅이 불가능해짐).
+    """
 
     def compute(self, frame: pd.DataFrame, ticker: str) -> StrategyResult:
-        return compute_abc(frame, ticker=ticker)
+        return compute_abc(frame, ticker=ticker, exclude_terminal_bar=False)
 
 
 def run_tags_stage(
@@ -162,7 +168,7 @@ def run_tags_stage(
         strategies = [
             key
             for key in _STRATEGY_KEYS
-            if (series := result.signals.get(key)) is not None and len(series) >= 2 and bool(series.iloc[-2])
+            if (series := result.signals.get(key)) is not None and len(series) >= 1 and bool(series.iloc[-1])
         ]
         if not strategies:
             continue
@@ -350,12 +356,12 @@ def _build_params_meta(batch_kind: str) -> dict[str, Any]:
 def _extract_signal_date(frame: pd.DataFrame) -> date | None:
     """시그널이 발생한 거래일을 추출한다.
 
-    신호는 마지막-1 봉(``iloc[-2]``)에서 확인하므로(마지막 봉 폐기 필터), 해당 봉의
-    거래일(DatetimeIndex)을 반환한다. 인덱스가 2행 미만이면 None을 반환한다.
+    "당일 봉이 최종봉" 원칙(Neo 확인, 2026-09-16)에 따라 마지막 봉(``iloc[-1]``)의
+    거래일(DatetimeIndex)을 반환한다. 인덱스가 비어 있으면 None을 반환한다.
     """
-    if len(frame.index) < 2:
+    if len(frame.index) < 1:
         return None
-    idx_value = frame.index[-2]
+    idx_value = frame.index[-1]
     if hasattr(idx_value, "date"):
         return idx_value.date()
     if isinstance(idx_value, str):

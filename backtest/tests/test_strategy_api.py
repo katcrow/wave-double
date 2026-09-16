@@ -175,6 +175,35 @@ class TestLastBarDiscarded:
             for key in ("A", "B", "C", "D", "E", "F", "G", "H")
         )
 
+    def test_exclude_terminal_bar_false_keeps_last_bar_signal(self) -> None:
+        """운영 태깅(exclude_terminal_bar=False)은 "당일 봉이 최종봉" 원칙에 따라
+        마지막 봉 시그널을 버리지 않는다(Neo 확인, 2026-09-16)."""
+        df = _make_df(n=200)
+        last_bar = pd.Series(False, index=df.index)
+        last_bar.iloc[-1] = True
+
+        with patch(
+            "backtest.strategy_api.build_signals",
+            return_value=(last_bar.copy(), last_bar.copy(), last_bar.copy()),
+        ), patch(
+            "backtest.strategy_api.compute_strategy_d", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_e", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_f", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_g", return_value=last_bar.copy()
+        ), patch(
+            "backtest.strategy_api.compute_strategy_h", return_value=last_bar.copy()
+        ):
+            result = compute_abc(df, ticker="T", exclude_terminal_bar=False)
+
+        assert result.status == "READY"
+        assert all(
+            bool(result.signals[key].iloc[-1])
+            for key in ("A", "B", "C", "D", "E", "F", "G", "H")
+        )
+
 
 class TestATRFilter:
     def test_signal_on_zero_atr_row_excluded(self) -> None:

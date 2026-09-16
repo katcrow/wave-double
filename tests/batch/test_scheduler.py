@@ -891,7 +891,7 @@ def test_tags_persist_failure_surfaces_as_failed_scheduler_result():
         def compute(self, frame, ticker):
             idx = pd.date_range("2026-08-01", periods=3, freq="D")
             signals = {
-                "A": pd.Series([False, True, False], index=idx),
+                "A": pd.Series([False, False, True], index=idx),
                 "B": pd.Series([False, False, False], index=idx),
                 "C": pd.Series([False, False, False], index=idx),
             }

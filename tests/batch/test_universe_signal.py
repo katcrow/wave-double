@@ -58,10 +58,11 @@ class FakeLoader:
 
 
 class FakeStrategyClient:
-    """전략 A~F 마스크를 직접 지정하는 ``TagsClient`` fake.
+    """전략 A~H 마스크를 직접 지정하는 ``TagsClient`` fake.
 
     ``signals_by_ticker``는 ``{ticker: {strategy: 시그널 성립 여부}}``이며 성립은
-    운영 태깅과 동일한 ``iloc[-2]``(D-1 확정봉)에 True를 놓아 표현한다.
+    운영 태깅과 동일한 ``iloc[-1]``(당일 확정봉 -- "당일 봉이 최종봉" 원칙, Neo 확인,
+    2026-09-16)에 True를 놓아 표현한다.
     """
 
     def __init__(
@@ -69,11 +70,9 @@ class FakeStrategyClient:
         signals_by_ticker: dict[str, dict[str, bool]] | None = None,
         *,
         overrides: dict[str, object] | None = None,
-        last_bar_only: set[str] | None = None,
     ) -> None:
         self._signals = signals_by_ticker or {}
         self._overrides = overrides or {}
-        self._last_bar_only = last_bar_only or set()
         self.calls: list[str] = []
 
     def compute(self, frame: pd.DataFrame, ticker: str) -> StrategyResult:
@@ -88,10 +87,7 @@ class FakeStrategyClient:
         for key in STRATEGY_KEYS:
             series = pd.Series(False, index=frame.index, dtype=bool)
             if wanted.get(key):
-                if ticker in self._last_bar_only:
-                    series.iloc[-1] = True  # D0 미확정봉 -- 성립으로 보지 않아야 한다
-                else:
-                    series.iloc[-2] = True
+                series.iloc[-1] = True
             signals[key] = series
         return StrategyResult(
             ticker=ticker, status=OhlcvCacheStatus.READY, signals=signals, error=None
@@ -246,15 +242,15 @@ def test_full_universe_fixture_yields_ready_count_104():
     assert result.strategy_signals["A"] == [universe[0]]
 
 
-def test_last_bar_signal_is_not_counted():
-    """``iloc[-1]``(D0 미확정봉)만 True인 종목은 시그널로 세지 않는다."""
+def test_last_bar_signal_is_counted_under_same_day_final_bar_rule():
+    """"당일 봉이 최종봉" 원칙(Neo 확인, 2026-09-16): ``iloc[-1]`` 시그널도 확정으로 센다."""
     loader = FakeLoader({"005930": _frame()})
-    client = FakeStrategyClient({"005930": {"A": True}}, last_bar_only={"005930"})
+    client = FakeStrategyClient({"005930": {"A": True}})
 
     result = compute_universe_signals(loader, ["005930"], TRADING_DAY, strategy_client=client)
 
     assert result.ready_count == 1
-    assert result.strategy_signals["A"] == []
+    assert result.strategy_signals["A"] == ["005930"]
 
 
 def test_loader_receives_trading_day_as_cutoff():
@@ -783,7 +779,11 @@ def _frame_ending(last_day: date, rows: int = MIN_HISTORY_TRADING_DAYS + 5) -> p
 
 
 def test_signal_dates_expose_the_actual_confirmed_bar_per_ticker():
-    """캐시가 뒤처진 종목은 다른 달력일의 봉으로 판정되므로 그 날짜를 노출해야 한다."""
+    """캐시가 뒤처진 종목은 다른 달력일의 봉으로 판정되므로 그 날짜를 노출해야 한다.
+
+    "당일 봉이 최종봉" 원칙(Neo 확인, 2026-09-16)에 따라 확정봉은 각 종목 프레임의
+    마지막 행(``iloc[-1]``) 그 자체다 -- 더 이상 하루 전으로 미루지 않는다.
+    """
     stale_last_day = date(2026, 8, 26)  # 요청 거래일보다 열흘 이상 이르다
     loader = FakeLoader(
         {
@@ -797,24 +797,16 @@ def test_signal_dates_expose_the_actual_confirmed_bar_per_ticker():
         loader, ["000070", "005930"], TRADING_DAY, strategy_client=client
     )
 
-    # 최신 캐시 종목의 확정봉 = 요청 거래일의 직전 영업일
-    fresh_expected = pd.bdate_range(end=pd.Timestamp(TRADING_DAY), periods=2)[0].date()
-    stale_expected = pd.bdate_range(end=pd.Timestamp(stale_last_day), periods=2)[0].date()
-
-    assert result.signal_dates == {"000070": stale_expected, "005930": fresh_expected}
-    # 뒤처짐 기준선은 요청 거래일이 아니라 유니버스가 실제 도달한 최신 확정봉이다
-    # (확정봉은 정의상 요청 거래일의 직전 거래일이므로).
-    assert result.latest_signal_date == fresh_expected
+    # 최신 캐시 종목의 확정봉 = 요청 거래일 그 자체(당일 봉이 최종봉)
+    assert result.signal_dates == {"000070": stale_last_day, "005930": TRADING_DAY}
+    # 뒤처짐 기준선은 요청 거래일이 아니라 유니버스가 실제 도달한 최신 확정봉이다.
+    assert result.latest_signal_date == TRADING_DAY
     assert result.stale_signal_date_tickers == ["000070"]
     assert result.strategy_signals["A"] == ["000070", "005930"]
 
 
 def test_uniformly_fresh_universe_reports_no_stale_ticker():
-    """모든 종목이 같은 확정봉을 보고 있으면 stale 목록은 비어 있다.
-
-    확정봉이 요청 거래일의 직전 거래일이어도 stale이 아니다 -- 이것이 정상 상태다
-    (요청 거래일과의 일치로 판정하면 정상 종목까지 전부 stale로 표시된다).
-    """
+    """모든 종목이 같은 확정봉(=요청 거래일)을 보고 있으면 stale 목록은 비어 있다."""
     result = compute_universe_signals(
         FakeLoader({"005930": _frame(), "000070": _frame()}),
         ["000070", "005930"],
@@ -822,10 +814,8 @@ def test_uniformly_fresh_universe_reports_no_stale_ticker():
         strategy_client=FakeStrategyClient(),
     )
 
-    expected = pd.bdate_range(end=pd.Timestamp(TRADING_DAY), periods=2)[0].date()
-    assert expected != TRADING_DAY
-    assert result.signal_dates == {"000070": expected, "005930": expected}
-    assert result.latest_signal_date == expected
+    assert result.signal_dates == {"000070": TRADING_DAY, "005930": TRADING_DAY}
+    assert result.latest_signal_date == TRADING_DAY
     assert result.stale_signal_date_tickers == []
 
 
@@ -846,12 +836,16 @@ def test_signal_dates_only_cover_ready_tickers():
 
 
 def test_real_compute_abc_yields_non_empty_signals_from_golden_data():
-    """실데이터 + 실 ``compute_abc``로 (a) 비어있지 않은 시그널 (b) iloc[-2]/iloc[-1] 구분.
+    """실데이터 + 실 ``compute_abc``로 (a) 비어있지 않은 시그널 (b) exclude_terminal_bar 구분.
 
-    golden fixture(`tests/fixtures/golden/ohlcv_raw.json.gz`)의 고정 거래일
-    2026-08-26에서 전략 F는 `180640`이 **직전 확정봉(iloc[-2] = 2026-08-25)** 에서만
-    성립하고 마지막 미확정봉(iloc[-1] = 2026-08-26)에서는 성립하지 않는다. 상수 OHLCV
-    프레임으로는 실 커널에서 어떤 시그널도 나오지 않아 D-1 규약이 미검증으로 남는다.
+    golden fixture(`tests/fixtures/golden/ohlcv_raw.json.gz`)에서 ``180640``의 전략 F
+    조건은 **2026-08-25**에 성립하고 2026-08-26에는 성립하지 않는다(크로스 시점 자체가
+    08-25라 다음날엔 조건이 자연히 꺼진다 -- "지연"이 아니라 조건 자체가 그 날짜에만
+    참이다). 백테스트 커널 기본값(``exclude_terminal_bar=True``)에서는 08-26까지의
+    데이터 중 08-25가 ``iloc[-2]``로 확정되고 마지막 행(08-26, ``iloc[-1]``)은 폐기된다.
+    반면 "당일 봉이 최종봉" 원칙(``exclude_terminal_bar=False`` -- 운영 태깅 기본,
+    Neo 확인 2026-09-16)에서는 08-25가 실제로 프레임의 마지막 행일 때(=cutoff가
+    08-25일 때) 그 시그널이 그대로 확정된다.
     """
     import gzip
     import json
@@ -860,6 +854,7 @@ def test_real_compute_abc_yields_non_empty_signals_from_golden_data():
     from backtest.strategy_api import compute_abc
 
     golden_day = date(2026, 8, 26)
+    signal_day = date(2026, 8, 25)
     raw_path = (
         Path(__file__).resolve().parents[1] / "fixtures" / "golden" / "ohlcv_raw.json.gz"
     )
@@ -880,26 +875,34 @@ def test_real_compute_abc_yields_non_empty_signals_from_golden_data():
         )
 
     signal_ticker = "180640"
-    frames = {t: frame_of(f"{t}.KS") for t in (signal_ticker, "005930", "000070")}
+    frames_full = {t: frame_of(f"{t}.KS") for t in (signal_ticker, "005930", "000070")}
 
-    # (b) 실 커널 결과에서 iloc[-2]와 iloc[-1]이 실제로 다른 판정을 준다.
-    kernel = compute_abc(frames[signal_ticker], ticker=signal_ticker)
+    # (b) 커널 기본값(exclude_terminal_bar=True, 백테스트 규칙)에서는 08-25가
+    # iloc[-2]로 확정되고 08-26(iloc[-1], 마지막 행)은 폐기된다.
+    kernel = compute_abc(frames_full[signal_ticker], ticker=signal_ticker)
     assert kernel.status is OhlcvCacheStatus.READY, kernel.error
     assert bool(kernel.signals["F"].iloc[-2]) is True
     assert bool(kernel.signals["F"].iloc[-1]) is False
-    assert frames[signal_ticker].index[-1].date() == golden_day
+    assert frames_full[signal_ticker].index[-1].date() == golden_day
 
-    # (a) 기본 strategy_client(=compute_abc)로 돌린 유니버스 시그널이 비어있지 않다.
+    # (a) "당일 봉이 최종봉" 원칙(기본 strategy_client=DefaultStrategyClient,
+    # exclude_terminal_bar=False)에서는 cutoff=08-25로 로드된 프레임(08-25가 마지막
+    # 행)을 줘야 그날 확정된 시그널이 그대로 잡힌다 -- 운영에서 그날의 daily_ohlcv
+    # 로더가 실제로 반환하는 모양과 같다.
+    frames_up_to_signal_day = {
+        t: frame[frame.index <= pd.Timestamp(signal_day)] for t, frame in frames_full.items()
+    }
+    assert frames_up_to_signal_day[signal_ticker].index[-1].date() == signal_day
+
     result = compute_universe_signals(
-        FakeLoader(dict(frames)), list(frames), golden_day
+        FakeLoader(dict(frames_up_to_signal_day)), list(frames_up_to_signal_day), signal_day
     )
 
     assert result.ready_count == 3
     assert result.error_count == 0
     assert result.strategy_signals["F"] == [signal_ticker]
     assert any(result.strategy_signals[key] for key in STRATEGY_KEYS)
-    # 확정봉 날짜는 golden 거래일의 직전 봉이다(요청 거래일과 어긋남을 그대로 노출).
-    assert result.signal_dates[signal_ticker] == date(2026, 8, 25)
+    assert result.signal_dates[signal_ticker] == signal_day
 
 
 # --- 상수 단일 원천 / 캐시 탈출구 (review P8, P9b) ---------------------------
