@@ -33,7 +33,7 @@ def decide_from_daily_bar(trading_day: date, has_daily_bar: bool) -> CalendarDec
     if has_daily_bar:
         return CalendarDecision(
             CalendarStatus.OPEN,
-            TradingCalendarEntry(trading_day, True, time(8), time(20)),
+            TradingCalendarEntry(trading_day, True, time(8, 30), time(19, 30)),
         )
     return CalendarDecision(
         CalendarStatus.CLOSED,
@@ -59,23 +59,36 @@ def decide_from_weekday(trading_day: date) -> CalendarDecision:
         )
     return CalendarDecision(
         CalendarStatus.OPEN,
-        TradingCalendarEntry(trading_day, True, time(8), time(20)),
+        TradingCalendarEntry(trading_day, True, time(8, 30), time(19, 30)),
     )
 
 
-def floor_to_intraday_slot(moment: datetime, interval_minutes: int = 20) -> datetime:
-    """초/마이크로초를 버리고 분을 ``interval_minutes`` 단위로 내림한 시각을 반환한다.
+def floor_to_intraday_slot(
+    moment: datetime, interval_minutes: int = 20, offset_minutes: int = 0
+) -> datetime:
+    """초/마이크로초를 버리고 분을 ``interval_minutes`` 단위(``offset_minutes``만큼
+    어긋난, 예: interval=60/offset=30 -> 매시 30분)로 내림한 시각을 반환한다.
 
     스케줄러가 "지금이 몇 시 슬롯인가"를 판정하는 데만 쓰며, 세션 범위 나열은
-    ``intraday_slots``의 몫으로 남긴다.
+    ``intraday_slots``의 몫으로 남긴다. ``offset_minutes > 0``일 때는 ``moment``가
+    그날 자정 이후 최소 ``offset_minutes``분 지난 시각이어야 한다(장중 스케줄러
+    호출만 상정하며, 자정 부근 롤오버는 다루지 않는다).
     """
     if interval_minutes <= 0:
         raise ValueError("interval_minutes must be positive")
-    floored_minute = (moment.minute // interval_minutes) * interval_minutes
-    return moment.replace(minute=floored_minute, second=0, microsecond=0)
+    if not 0 <= offset_minutes < interval_minutes:
+        raise ValueError("offset_minutes must be in [0, interval_minutes)")
+    total_minutes = moment.hour * 60 + moment.minute
+    floored_total = (
+        (total_minutes - offset_minutes) // interval_minutes
+    ) * interval_minutes + offset_minutes
+    floored_hour, floored_minute = divmod(floored_total, 60)
+    return moment.replace(hour=floored_hour, minute=floored_minute, second=0, microsecond=0)
 
 
-def intraday_slots(entry: TradingCalendarEntry, interval_minutes: int = 20) -> tuple[datetime, ...]:
+def intraday_slots(
+    entry: TradingCalendarEntry, interval_minutes: int = 20
+) -> tuple[datetime, ...]:
     """세션 시작부터 종료 전까지의 KST 장중 슬롯을 반환한다."""
     if interval_minutes <= 0:
         raise ValueError("interval_minutes must be positive")

@@ -2,14 +2,15 @@ name: scheduled-batch
 
 on:
   schedule:
-    # 2026-09-14 거래소 정규 매매시간 변경(08:00~20:00, 20분 슬롯) 반영. premarket 구간이
-    # 없어져 더 이상 스케줄하지 않는다(수동 workflow_dispatch로는 여전히 선택 가능, 하위호환).
-    # intraday: 매 KST 08:00~08:40 20분 간격(월~금) = UTC 전날 23:00~23:40(일~목)
-    - cron: "0,20,40 23 * * 0-4"
-    # intraday: 매 KST 09:00~19:40 20분 간격(월~금) = UTC 00:00~10:40(월~금)
-    - cron: "0,20,40 0-10 * * 1-5"
-    # close: 매 KST 20:00(월~금) = UTC 11:00(월~금)
-    - cron: "0 11 * * 1-5"
+    # 2026-09-16 GitHub Actions 무료 플랜 사용량 절감을 위해 60분 간격(매시 30분)으로
+    # 축소(Neo 확인). premarket 구간은 스케줄하지 않는다(수동 workflow_dispatch로는
+    # 여전히 선택 가능, 하위호환).
+    # intraday: KST 08:30(월~금) = UTC 전날 23:30(일~목)
+    - cron: "30 23 * * 0-4"
+    # intraday: 매 KST 09:30~18:30 60분 간격(월~금) = UTC 00:30~09:30(월~금)
+    - cron: "30 0-9 * * 1-5"
+    # close: 매 KST 19:30(월~금) = UTC 10:30(월~금)
+    - cron: "30 10 * * 1-5"
   workflow_dispatch:
     inputs:
       batch_kind:

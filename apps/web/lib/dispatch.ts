@@ -42,7 +42,9 @@ export function validateCsrf(
 }
 
 const LOGICAL_RUN_KEY_PATTERNS: Record<string, RegExp> = {
-  intraday: /^intraday:\d{4}-\d{2}-\d{2}:([01]\d|2[0-3]):(00|20|40)$/,
+  // 2026-09-16부터 신규 슬롯은 :30(60분 간격, Neo 확인). :00/:20/:40은 이전 20분
+  // 간격 스케줄의 과거 이력과의 호환을 위해 남긴다.
+  intraday: /^intraday:\d{4}-\d{2}-\d{2}:([01]\d|2[0-3]):(00|20|30|40)$/,
   premarket: /^premarket:\d{4}-\d{2}-\d{2}$/,
   close: /^close:\d{4}-\d{2}-\d{2}$/,
 };

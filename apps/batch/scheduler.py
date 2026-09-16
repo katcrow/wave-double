@@ -67,7 +67,8 @@ class SchedulerResult:
 def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalRunKey:
     trading_day = now_kst.date()
     if batch_kind is BatchKind.INTRADAY:
-        slot = floor_to_intraday_slot(now_kst).time()
+        # 08:30 시작, 60분 간격(매시 30분), 19:30은 close 배치가 담당한다(Neo 확인, 2026-09-16).
+        slot = floor_to_intraday_slot(now_kst, interval_minutes=60, offset_minutes=30).time()
         return LogicalRunKey(trading_day, batch_kind, slot)
     return LogicalRunKey(trading_day, batch_kind)
 

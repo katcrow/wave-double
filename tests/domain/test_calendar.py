@@ -15,7 +15,9 @@ from domain.calendar import (
 def test_daily_bar_means_open_and_caches_default_session():
     decision = decide_from_daily_bar(date(2026, 9, 1), True)
     assert decision.status is CalendarStatus.OPEN
-    assert decision.entry == TradingCalendarEntry(date(2026, 9, 1), True, time(8), time(20))
+    assert decision.entry == TradingCalendarEntry(
+        date(2026, 9, 1), True, time(8, 30), time(19, 30)
+    )
 
 
 def test_missing_daily_bar_means_closed_without_session_times():
@@ -30,7 +32,9 @@ def test_decide_from_weekday_marks_weekdays_open():
     for weekday in (date(2026, 9, 14), date(2026, 9, 15), date(2026, 9, 18)):
         decision = decide_from_weekday(weekday)
         assert decision.status is CalendarStatus.OPEN
-        assert decision.entry == TradingCalendarEntry(weekday, True, time(8), time(20))
+        assert decision.entry == TradingCalendarEntry(
+            weekday, True, time(8, 30), time(19, 30)
+        )
 
 
 def test_decide_from_weekday_marks_weekend_closed():
@@ -79,3 +83,20 @@ def test_floor_to_intraday_slot_supports_a_custom_interval():
     assert floor_to_intraday_slot(datetime(2026, 9, 1, 9, 29), interval_minutes=30) == datetime(2026, 9, 1, 9, 0)
     with pytest.raises(ValueError):
         floor_to_intraday_slot(datetime(2026, 9, 1, 9, 0), interval_minutes=0)
+
+
+def test_floor_to_intraday_slot_supports_an_offset():
+    """08:30 시작 60분 간격(매시 30분) 스케줄(Neo 확인, 2026-09-16)을 지원한다."""
+    assert floor_to_intraday_slot(
+        datetime(2026, 9, 1, 9, 29), interval_minutes=60, offset_minutes=30
+    ) == datetime(2026, 9, 1, 8, 30)
+    assert floor_to_intraday_slot(
+        datetime(2026, 9, 1, 9, 30), interval_minutes=60, offset_minutes=30
+    ) == datetime(2026, 9, 1, 9, 30)
+    assert floor_to_intraday_slot(
+        datetime(2026, 9, 1, 10, 29, 59), interval_minutes=60, offset_minutes=30
+    ) == datetime(2026, 9, 1, 9, 30)
+    with pytest.raises(ValueError):
+        floor_to_intraday_slot(datetime(2026, 9, 1, 9, 0), interval_minutes=60, offset_minutes=60)
+    with pytest.raises(ValueError):
+        floor_to_intraday_slot(datetime(2026, 9, 1, 9, 0), interval_minutes=60, offset_minutes=-1)

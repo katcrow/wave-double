@@ -44,7 +44,8 @@ test("isValidLogicalRunKey: intraday는 20분 슬롯(HH:MM)만 허용한다", ()
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:09:00"), true);
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:20"), true);
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:40"), true);
-  assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:30"), false);
+  // 2026-09-16부터 :30이 신규 슬롯(60분 간격, Neo 확인)이라 valid로 바뀐다.
+  assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:15:30"), true);
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:09:15"), false);
   assert.equal(isValidLogicalRunKey("intraday", "intraday:2026-09-02:24:00"), false);
   assert.equal(isValidLogicalRunKey("intraday", "close:2026-09-02"), false);

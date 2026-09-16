@@ -1053,9 +1053,10 @@ def test_replayed_success_attempt_does_not_run_ohlcv_or_tags_pipeline():
 
 
 def test_intraday_slot_uses_floor_to_intraday_slot():
-    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    """08:30 시작 60분 간격(매시 30분) 스케줄(Neo 확인, 2026-09-16): 09:07은 08:30 슬롯."""
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(8, 30), time(19, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
-    rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:09:00"))
+    rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:08:30"))
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
     deps = tags_deps()
@@ -1077,7 +1078,7 @@ def test_intraday_slot_uses_floor_to_intraday_slot():
     )
 
     start_params = rpc.calls[0][1]
-    assert start_params["p_logical_run_key"] == "intraday:2026-09-01:09:00"
+    assert start_params["p_logical_run_key"] == "intraday:2026-09-01:08:30"
 
 
 def test_manual_trigger_is_passed_through_to_start_attempt():
