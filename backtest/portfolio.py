@@ -62,8 +62,8 @@ def simulate_portfolio(
     position_pct: 0~1, 진입 시점 계좌 평가액의 해당 비율만큼 투입.
     max_positions: 동시 보유 상한 (None = 자금에 의한 자동 제한만).
     """
-    close_of = {t: df["Close"] for t, df in data.items()}
     dates = next(iter(data.values())).index
+    close_of = {t: df["Close"].reindex(dates).ffill() for t, df in data.items()}
 
     trades_by_t: dict[str, list[Trade]] = {}
     for ticker, df in data.items():
