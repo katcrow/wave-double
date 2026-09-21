@@ -1,9 +1,10 @@
 """시장 전체 프로그램 순매수(t1631) adapter.
 
-t1631OutBlock1 행은 ``volume``(순매수수량)과 ``value``(순매수금액, 억원 단위)를
-함께 내려준다. t1601을 금액(억원) 기준으로 바꾼 것과 단위를 맞추기 위해
-``volume`` 대신 ``value``를 그대로 사용한다(LS가 이미 억원 단위로 내려주므로
-별도 환산은 하지 않는다 — 1e8로 나누면 소수점 쓰레기 값이 된다, 실측 확인됨).
+t1631OutBlock1 행은 ``volume``(순매수수량)과 ``value``(순매수금액)를 함께
+내려준다. ``value``는 백만원 단위이며, t1601을 금액(억원) 기준으로 바꾼 것과
+단위를 맞추기 위해 100으로 나눈다(1억원 = 100백만원). 프로덕션 데이터로
+확인한 결과 억원 단위로 그대로 쓰면 실제 KOSPI/KOSDAQ 하루 거래대금을
+초과하는 값이 나와, 백만원 단위임이 확인됐다.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from .ls_market_supply_provider import MARKETS
 TR_CODE = "t1631"
 API_PATH = "/stock/program"
 _MARKET_TO_GUBUN = {"KOSPI": "1", "KOSDAQ": "2"}
+_MILLION_WON_PER_EOK = 100
 
 
 class MarketProgramSupplyClient(Protocol):
@@ -98,8 +100,9 @@ def _parse_response(data: Any, market: str) -> MarketProgramSupplyBar:
             # documented aggregate position is the stable contract here.
             integrated_total = amounts[-1]
         # 공식 응답은 차익/비차익/전체 집계다. 전체 행을 식별해 t1601과 단위를
-        # 맞춘 순매수금액(value, 억원)을 그대로 사용하며 응답 순서에는 의존하지 않는다.
-        return MarketProgramSupplyBar(market, integrated_total)
+        # 맞춘 순매수금액(value, 백만원 → 억원)을 사용하며 응답 순서에는 의존하지
+        # 않는다.
+        return MarketProgramSupplyBar(market, integrated_total / _MILLION_WON_PER_EOK)
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
         raise RuntimeError("LS t1631 response row malformed: missing/non-finite value") from exc
 
