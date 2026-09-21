@@ -72,7 +72,6 @@ def test_fetch_rejects_non_ok_and_malformed_responses():
         {"t1637OutBlock1": ["not-an-object"]},
         {"t1637OutBlock1": [_row(date="202609011")]},
         {"t1637OutBlock1": [_row(date="20260230")]},
-        {"t1637OutBlock1": [_row(svolume=None)]},
         {"t1637OutBlock1": [_row(svolume="")]},
         {"t1637OutBlock1": [_row(svolume="not-a-number")]},
         {"t1637OutBlock1": [_row(svolume="nan")]},
@@ -82,6 +81,18 @@ def test_fetch_rejects_non_ok_and_malformed_responses():
             LsProgramSupplyProvider(FakeClient(LsResponse(data=data))).fetch(
                 "005930", date(2026, 8, 28), date(2026, 9, 1)
             )
+
+
+def test_fetch_treats_null_svolume_as_zero_program_net():
+    """그 날 프로그램 순매수 체결이 없으면 LS가 svolume을 null로 내려줄 수 있다 --
+    실제 데이터 부재이므로 0으로 계산한다(에러 아님)."""
+    response = LsResponse(data={"t1637OutBlock1": [_row(date="20260901", svolume=None)]})
+
+    bars = LsProgramSupplyProvider(FakeClient(response)).fetch(
+        "005930", date(2026, 9, 1), date(2026, 9, 1)
+    )
+
+    assert bars == [ProgramSupplyBar(date(2026, 9, 1), 0.0)]
 
 
 def test_fetch_rejects_reversed_date_range():

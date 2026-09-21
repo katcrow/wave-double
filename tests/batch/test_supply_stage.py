@@ -524,14 +524,36 @@ def test_program_api_failure_is_error_others_still_saved():
     assert write_stage_calls[-1][1]["p_result"]["errors"][0]["message"].startswith("t1637:")
 
 
-def test_program_missing_or_duplicate_day_saves_missing_rows_without_silent_overwrite():
+def test_program_missing_day_is_filled_with_zero_not_an_error():
+    """t1637은 그 날 프로그램 매매 체결이 없으면 행을 생략할 수 있다 -- 누락된
+    거래일은 실제 데이터 부재이므로 순매수 0으로 채워 정상 저장한다(에러 아님)."""
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930")])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    supply_provider = FakeSupplyProvider({"005930": _bars("005930")})
+    program_provider = FakeProgramSupplyProvider({"005930": _program_bars(missing_day=D1)})
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, calendar, supply_provider, repo, program_provider)
+
+    assert result.status == "success"
+    assert result.error_count == 0
+    assert result.row_count == 3
+    slots = {row.slot: row for row in repo.saved}
+    assert slots["D-1"].program_net == 0.0
+    assert slots["D-1"].investor_net_status == "confirmed"
+    assert slots["D-2"].program_net == 10.0
+    assert slots["D0"].program_net == 30.0
+
+
+def test_program_duplicate_day_saves_missing_rows_without_silent_overwrite():
     fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
     calendar = FakeCalendarClient([D0, D1, D2])
     supply_provider = FakeSupplyProvider({"005930": _bars("005930"), "000660": _bars("000660")})
     duplicate = _program_bars() + [ProgramSupplyBar(D0, 999.0)]
     program_provider = FakeProgramSupplyProvider({
-        "005930": _program_bars(missing_day=D1),
-        "000660": duplicate,
+        "005930": duplicate,
+        "000660": _program_bars(),
     })
     repo = FakeSupplyRepo()
     rpc = FakeRpc()
@@ -539,10 +561,14 @@ def test_program_missing_or_duplicate_day_saves_missing_rows_without_silent_over
     result = _run(rpc, fetcher, calendar, supply_provider, repo, program_provider)
 
     assert result.status == "partial"
-    assert result.error_count == 2
+    assert result.error_count == 1
     assert result.row_count == 6
-    assert {row.candidate_id for row in repo.saved} == {"c1", "c2"}
-    assert all(row.investor_net_status == "missing" for row in repo.saved)
+    c1_rows = [row for row in repo.saved if row.candidate_id == "c1"]
+    c2_rows = [row for row in repo.saved if row.candidate_id == "c2"]
+    assert len(c1_rows) == 3
+    assert all(row.investor_net_status == "missing" for row in c1_rows)
+    assert len(c2_rows) == 3
+    assert all(row.investor_net_status == "confirmed" for row in c2_rows)
 
 
 def test_missing_expected_trading_day_in_response_is_error_not_silently_dropped():

@@ -79,14 +79,19 @@ def _parse_row(row: dict[str, Any]) -> ProgramSupplyBar:
         trading_day = date(int(raw_date[0:4]), int(raw_date[4:6]), int(raw_date[6:8]))
         return ProgramSupplyBar(
             trading_day=trading_day,
-            program_net=_finite_number(row["svolume"], "svolume"),
+            program_net=_finite_number_or_zero(row["svolume"], "svolume"),
         )
     except (KeyError, TypeError, ValueError, IndexError, OverflowError) as exc:
         raise RuntimeError(f"LS t1637 response row malformed: {row}") from exc
 
 
-def _finite_number(value: Any, field: str) -> float:
-    if isinstance(value, bool) or value is None:
+def _finite_number_or_zero(value: Any, field: str) -> float:
+    """그 날 프로그램 순매수 체결이 없으면 LS가 svolume을 null로 내려줄 수 있다
+    -- 실제 데이터 부재이므로 0으로 계산한다. 숫자가 아닌/무한 값은 여전히
+    응답 손상으로 거부한다."""
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
         raise ValueError(f"{field} must be a finite number")
     parsed = float(value)
     if not isfinite(parsed):

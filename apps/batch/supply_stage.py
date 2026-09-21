@@ -172,7 +172,7 @@ def run_supply_stage(
             continue
 
         try:
-            program_by_day = _index_bars(program_bars, ordered_days, "t1637")
+            program_by_day = _index_program_bars(program_bars, ordered_days)
         except ValueError as exc:
             _append_missing_rows(all_rows, cand, run_id_str, ordered_days, slot_by_day, by_day)
             record_candidate_error(cand.ticker, f"t1637: {exc}")
@@ -195,7 +195,7 @@ def run_supply_stage(
                     program_supply_provider, cand.ticker, d_minus_2, d0, _SEMANTIC_RETRY_COUNT,
                 )
                 by_day = _index_bars(retry_bars, ordered_days, "t1702")
-                program_by_day = _index_bars(retry_program_bars, ordered_days, "t1637")
+                program_by_day = _index_program_bars(retry_program_bars, ordered_days)
             except Exception as exc:
                 # 가격은 첫 t1702 응답에서 확보했으므로 세 슬롯은 보존하되,
                 # 재시도로도 투자자 수급 확정에 실패한 사실은 missing으로 표시한다.
@@ -319,6 +319,23 @@ def _index_bars(bars: list[Any], ordered_days: list[date], source: str) -> dict[
     by_day = {bar.trading_day: bar for bar in bars}
     if set(by_day) != set(ordered_days):
         raise ValueError(f"{source}: expected exactly three unique trading days")
+    return by_day
+
+
+def _index_program_bars(
+    bars: list[ProgramSupplyBar], ordered_days: list[date],
+) -> dict[date, ProgramSupplyBar]:
+    """t1637은 그 날 프로그램 순매수 체결이 없으면 행 자체를 생략한다 -- 누락된
+    거래일은 실제 데이터 부재이므로 순매수 0으로 채운다. 중복/범위 밖 거래일은
+    여전히 응답 손상으로 간주해 거부한다(조용한 덮어쓰기 금지)."""
+    if len(bars) != len({bar.trading_day for bar in bars}):
+        raise ValueError("t1637: duplicate trading day")
+    by_day = {bar.trading_day: bar for bar in bars}
+    unexpected = set(by_day) - set(ordered_days)
+    if unexpected:
+        raise ValueError(f"t1637: unexpected trading day outside requested window: {sorted(unexpected)}")
+    for day in ordered_days:
+        by_day.setdefault(day, ProgramSupplyBar(trading_day=day, program_net=0.0))
     return by_day
 
 
