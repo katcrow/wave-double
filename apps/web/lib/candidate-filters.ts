@@ -44,14 +44,22 @@ export const MISSING_SUPPLY_LABEL: Record<CandidateMissingFilter, string> = {
   exclude: "수급 결측 제외",
 };
 
+/** 기본값: 소멸(vanished)·혼합(mixed) 시그널은 목록에서 숨기고 활성 시그널만 보여준다. */
+const DEFAULT_SIGNAL_STATUSES: CandidateSignalStatus[] = ["active"];
+
 export function getDefaultCandidateFilterState(): CandidateFilterState {
   return {
     strategies: [],
     hintStatuses: [],
-    signalStatuses: [],
+    signalStatuses: [...DEFAULT_SIGNAL_STATUSES],
     sources: [],
     missingSupply: "include",
   };
+}
+
+function sameSignalStatuses(values: CandidateSignalStatus[]): boolean {
+  if (values.length !== DEFAULT_SIGNAL_STATUSES.length) return false;
+  return DEFAULT_SIGNAL_STATUSES.every((status) => values.includes(status));
 }
 
 function compareDateValue(left: string | null | undefined, right: string | null | undefined): number {
@@ -158,7 +166,7 @@ export function hasActiveCandidateFilters(filters: CandidateFilterState): boolea
   return (
     filters.strategies.length > 0 ||
     filters.hintStatuses.length > 0 ||
-    filters.signalStatuses.length > 0 ||
+    !sameSignalStatuses(filters.signalStatuses) ||
     filters.sources.length > 0 ||
     filters.missingSupply === "exclude"
   );
@@ -173,8 +181,8 @@ export function summarizeCandidateFilters(filters: CandidateFilterState): string
   if (filters.hintStatuses.length > 0) {
     summary.push(`수급 힌트: ${filters.hintStatuses.map((status) => HINT_STATUS_LABEL[status]).join(", ")}`);
   }
-  if (filters.signalStatuses.length > 0) {
-    summary.push(`시그널 상태: ${filters.signalStatuses.map((status) => SIGNAL_STATUS_LABEL[status]).join(", ")}`);
+  if (!sameSignalStatuses(filters.signalStatuses)) {
+    summary.push(`시그널 상태: ${filters.signalStatuses.map((status) => SIGNAL_STATUS_LABEL[status]).join(", ") || "전체"}`);
   }
   if (filters.sources.length > 0) {
     summary.push(`원천: ${filters.sources.join(", ")}`);

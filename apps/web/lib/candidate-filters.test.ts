@@ -136,6 +136,7 @@ test("전략·힌트·시그널·원천을 그룹 내 OR, 그룹 간 AND로 조�
 
 test("vanished 전략도 전략 필터에서 선택할 수 있고 결측 제외는 pending/missing과 카드 결측을 제외한다", () => {
   const strategyFilter = getDefaultCandidateFilterState();
+  strategyFilter.signalStatuses = [];
   strategyFilter.strategies = ["C"];
   assert.deepEqual(
     filterCandidateItems(items, strategyFilter).map((item) => item.candidate.candidateId),
@@ -162,6 +163,16 @@ test("vanished와 mixed 시그널 상태를 각각 필터링한다", () => {
     filterCandidateItems(items, filters).map((item) => item.candidate.candidateId),
     ["candidate-missing"],
   );
+});
+
+test("기본 필터는 시그널 상태를 활성으로 고정해 소멸·혼합 후보를 숨긴다", () => {
+  const filters = getDefaultCandidateFilterState();
+  assert.deepEqual(filters.signalStatuses, ["active"]);
+  assert.deepEqual(
+    filterCandidateItems(items, filters).map((item) => item.candidate.candidateId),
+    ["candidate-good"],
+  );
+  assert.equal(hasActiveCandidateFilters(filters), false);
 });
 
 test("원천을 여러 개 선택하면 후보의 sources 중 하나와 일치하는 후보를 남긴다", () => {
@@ -210,6 +221,7 @@ test("중복 evidence/hint 행은 배열 순서와 무관하게 trading_day와 c
 test("힌트 RPC 실패는 판정 불가로 표시하되 결측 제외를 강제하지 않는다", () => {
   const failedItems = buildCandidateFilterItems(buildCandidateCardViewModels(candidateRows), evidenceRows, [], true);
   const filters = getDefaultCandidateFilterState();
+  filters.signalStatuses = [];
   filters.missingSupply = "exclude";
   assert.deepEqual(
     filterCandidateItems(failedItems, filters).map((item) => item.candidate.candidateId),
