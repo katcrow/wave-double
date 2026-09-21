@@ -378,15 +378,32 @@ def run_scheduled_batch(
             gateway.publish(result.run_id, result.fence_token, result.lease_token)
             published = True
         except Exception as exc:  # noqa: BLE001 - 발행 실패를 구조화된 failed stage로 전환
-            gateway.write_stage(
-                result.run_id,
-                Stage.OUTCOME_TRACKING,
-                result.fence_token,
-                result.lease_token,
-                StageStatus.RUNNING,
-                StageStatus.FAILED,
-                result={"result_code": "OUTCOME_PUBLISH_FAILED", "message": str(exc)},
-            )
+            # outcome_tracking은 publish_attempt가 직접 'success'로 기록하므로(write_stage를
+            # 거치지 않는다) publish 실패 시 항상 'pending'에 머물러 있다. write_stage의 일반
+            # 전이 규칙은 pending -> failed를 바로 허용하지 않으므로 pending -> running ->
+            # failed 두 단계로 기록한다. 이 기록 자체가 실패해도(예: 이미 다른 상태로 전이됨)
+            # 원래 publish 실패 원인을 가리는 2차 미처리 예외를 만들지 않도록 흡수한다.
+            try:
+                gateway.write_stage(
+                    result.run_id,
+                    Stage.OUTCOME_TRACKING,
+                    result.fence_token,
+                    result.lease_token,
+                    StageStatus.PENDING,
+                    StageStatus.RUNNING,
+                )
+                gateway.write_stage(
+                    result.run_id,
+                    Stage.OUTCOME_TRACKING,
+                    result.fence_token,
+                    result.lease_token,
+                    StageStatus.RUNNING,
+                    StageStatus.FAILED,
+                    result={"result_code": "OUTCOME_PUBLISH_FAILED", "message": str(exc)},
+                )
+            except Exception as record_exc:  # noqa: BLE001 - 원래 publish 실패 원인을 보존한다
+                print(f"run_id={result.run_id} stage=outcome_tracking "
+                      f"failed_to_record_failure={record_exc} publish_error={exc}")
             return SchedulerResult(
                 "failed",
                 "OUTCOME_PUBLISH_FAILED",

@@ -1394,8 +1394,11 @@ def test_publish_failure_marks_outcome_tracking_failed_and_fails_batch():
     write_stage_calls = [call for call in rpc.calls if call[0] == "write_stage"]
     outcome_calls = [call for call in write_stage_calls if call[1]["p_stage"] == "outcome_tracking"]
     # 성공 시 outcome_tracking success는 publish_attempt 내부(DB 트랜잭션)가 기록하므로,
-    # 오케스트레이터는 실패 시에만 failed로 기록한다(running 기록 없음).
-    assert [call[1]["p_status"] for call in outcome_calls] == ["failed"]
+    # 오케스트레이터는 publish 실패 시에만 관여한다. outcome_tracking은 그 시점까지 항상
+    # 'pending'이고 write_stage의 전이 규칙은 pending -> failed를 바로 허용하지 않으므로,
+    # pending -> running -> failed 두 단계로 기록한다.
+    assert [call[1]["p_status"] for call in outcome_calls] == ["running", "failed"]
+    assert [call[1]["p_expected_status"] for call in outcome_calls] == ["pending", "running"]
 
 
 @pytest.mark.parametrize("bias_status", ["success", "partial", "failed", "exception"])
