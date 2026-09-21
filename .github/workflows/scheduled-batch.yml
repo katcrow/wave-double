@@ -2,15 +2,15 @@ name: scheduled-batch
 
 on:
   schedule:
-    # 2026-09-16 GitHub Actions 무료 플랜 사용량 절감을 위해 60분 간격(매시 30분)으로
-    # 축소(Neo 확인). premarket 구간은 스케줄하지 않는다(수동 workflow_dispatch로는
-    # 여전히 선택 가능, 하위호환).
-    # intraday: KST 08:30(월~금) = UTC 전날 23:30(일~목)
-    - cron: "30 23 * * 0-4"
-    # intraday: 매 KST 09:30~18:30 60분 간격(월~금) = UTC 00:30~09:30(월~금)
-    - cron: "30 0-9 * * 1-5"
-    # close: 매 KST 19:30(월~금) = UTC 10:30(월~금)
-    - cron: "30 10 * * 1-5"
+    # 2026-09-21 배치 전략 변경(Neo 확인): 평일 KST 08:10 시작, 1시간 간격으로
+    # 19:10까지 intraday, 19:40에 최종 close 1회. premarket 구간은 스케줄하지
+    # 않는다(수동 workflow_dispatch로는 여전히 선택 가능, 하위호환).
+    # intraday: KST 08:10(월~금) = UTC 전날 23:10(일~목)
+    - cron: "10 23 * * 0-4"
+    # intraday: 매 KST 09:10~19:10 60분 간격(월~금) = UTC 00:10~10:10(월~금)
+    - cron: "10 0-10 * * 1-5"
+    # close: 매 KST 19:40(월~금) = UTC 10:40(월~금)
+    - cron: "40 10 * * 1-5"
   workflow_dispatch:
     inputs:
       batch_kind:
@@ -68,8 +68,8 @@ jobs:
           DISPATCH_BATCH_KIND: ${{ inputs.batch_kind }}
         run: |
           case "$SCHEDULE" in
-            "0,20,40 23 * * 0-4"|"0,20,40 0-10 * * 1-5") echo "value=intraday" >> "$GITHUB_OUTPUT" ;;
-            "0 11 * * 1-5") echo "value=close" >> "$GITHUB_OUTPUT" ;;
+            "10 23 * * 0-4"|"10 0-10 * * 1-5") echo "value=intraday" >> "$GITHUB_OUTPUT" ;;
+            "40 10 * * 1-5") echo "value=close" >> "$GITHUB_OUTPUT" ;;
             "") echo "value=${DISPATCH_BATCH_KIND:-close}" >> "$GITHUB_OUTPUT" ;;
             *) echo "::error::unrecognized schedule: $SCHEDULE" ; exit 1 ;;
           esac
