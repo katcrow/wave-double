@@ -1,5 +1,6 @@
 import { getStrategyLabel } from "./strategy-labels.ts";
 import type { OutcomeStatus, OutcomeStrategy, OutcomeTrackingRpcRow } from "./dashboard-types";
+import { toneFromSign, type ValueTone } from "./value-tone.ts";
 export type { OutcomeStatus, OutcomeStrategy, OutcomeTrackingRpcRow } from "./dashboard-types";
 
 export const OUTCOME_STATUS_OPTIONS = [
@@ -118,6 +119,10 @@ export function formatOutcomeReturnPct(value: number | null, status: OutcomeStat
   if (value === null) return status === "OPEN" || status === "SUSPENDED" || status === "DELISTED" ? "미확정" : "-";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
+}
+
+export function getOutcomeReturnTone(value: number | null): ValueTone {
+  return toneFromSign(value);
 }
 
 export function getOutcomeSummary(rows: readonly OutcomeTrackingRpcRow[]) {

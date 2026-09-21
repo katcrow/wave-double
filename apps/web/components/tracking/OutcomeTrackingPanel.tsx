@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   formatOutcomeDate,
   formatOutcomeReturnPct,
+  getOutcomeReturnTone,
   getOutcomeStatusMeta,
   getOutcomeStrategyLabel,
   getOutcomeSummary,
@@ -12,6 +13,11 @@ import {
   OUTCOME_STRATEGY_OPTIONS,
   type OutcomeTrackingRpcRow,
 } from "@/lib/outcome-tracking";
+import { toneClassName } from "@/lib/value-tone";
+
+function ReturnPct({ value, status }: { value: number | null; status: OutcomeTrackingRpcRow["status"] }) {
+  return <span className={toneClassName(getOutcomeReturnTone(value))}>{formatOutcomeReturnPct(value, status)}</span>;
+}
 
 interface OutcomeTrackingPanelProps {
   rows: OutcomeTrackingRpcRow[];
@@ -119,7 +125,7 @@ export default function OutcomeTrackingPanel({ rows, fetchFailed }: OutcomeTrack
                     <td><time dateTime={row.entry_date}>{formatOutcomeDate(row.entry_date)}</time></td>
                     <td><OutcomeStatus status={row.status} /></td>
                     <td>{row.exit_date ? <time dateTime={row.exit_date}>{formatOutcomeDate(row.exit_date)}</time> : "미종결"}</td>
-                    <td>{formatOutcomeReturnPct(row.return_pct, row.status)}</td>
+                    <td><ReturnPct value={row.return_pct} status={row.status} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -138,7 +144,7 @@ export default function OutcomeTrackingPanel({ rows, fetchFailed }: OutcomeTrack
                 <dl className="outcome-tracking__card-details">
                   <div><dt>진입일</dt><dd><time dateTime={row.entry_date}>{formatOutcomeDate(row.entry_date)}</time></dd></div>
                   <div><dt>종결일</dt><dd>{row.exit_date ? <time dateTime={row.exit_date}>{formatOutcomeDate(row.exit_date)}</time> : "미종결"}</dd></div>
-                  <div><dt>손익률</dt><dd>{formatOutcomeReturnPct(row.return_pct, row.status)}</dd></div>
+                  <div><dt>손익률</dt><dd><ReturnPct value={row.return_pct} status={row.status} /></dd></div>
                 </dl>
               </article>
             ))}

@@ -165,6 +165,13 @@ export function formatEvidenceNumber(value: number | null | undefined): string {
   return isUsableNumber(value) ? NUMBER_FORMATTER.format(value) : "미수집";
 }
 
+/** change_pct처럼 부호가 의미를 갖는 값은 양수에도 +를 붙여 보여준다. */
+export function formatEvidenceSignedNumber(value: number | null | undefined): string {
+  if (!isUsableNumber(value)) return "미수집";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${NUMBER_FORMATTER.format(value)}`;
+}
+
 export function formatEvidenceDateTime(iso: string | null): string {
   const timestamp = validDate(iso);
   return timestamp === null ? "시각 미상" : DATETIME_FORMATTER.format(new Date(timestamp));

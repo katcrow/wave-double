@@ -16,6 +16,9 @@
   --color-negative: #e27e83;
   --color-caution: #d9aa68;
   --color-informational: #7fa8d8;
+  /* 국내 주식시장 관례: 상승/양수는 빨강, 하락/음수는 파랑 */
+  --color-value-up: #e2555e;
+  --color-value-down: #4f8fe2;
   --color-overlay: rgba(4, 6, 9, 0.72);
 
   /* DESIGN.md typography */
@@ -1798,11 +1801,11 @@ a {
 }
 
 .market-supply-panel__direction--positive {
-  color: var(--color-positive);
+  color: var(--color-value-up);
 }
 
 .market-supply-panel__direction--negative {
-  color: var(--color-caution);
+  color: var(--color-value-down);
 }
 
 .market-supply-panel__direction--neutral {
@@ -1817,6 +1820,14 @@ a {
   font-weight: var(--font-weight-data);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+
+.market-supply-panel__value--positive {
+  color: var(--color-value-up);
+}
+
+.market-supply-panel__value--negative {
+  color: var(--color-value-down);
 }
 
 .market-supply-panel__value span {
@@ -1859,17 +1870,26 @@ a {
 }
 
 .market-supply-panel__bar-fill--positive {
-  background: var(--color-positive);
+  background: var(--color-value-up);
 }
 
 .market-supply-panel__bar-fill--negative {
-  background: var(--color-caution);
+  background: var(--color-value-down);
   transform: translateX(-100%);
 }
 
 .market-supply-panel__bar-fill--neutral {
   width: 0;
   background: var(--color-ink-muted);
+}
+
+/* 부호가 있는 숫자(금액, 등락률 등) 표시 공통 색상: 양수는 빨강, 음수는 파랑 */
+.value-tone--up {
+  color: var(--color-value-up);
+}
+
+.value-tone--down {
+  color: var(--color-value-down);
 }
 
 .market-supply-panel__state {

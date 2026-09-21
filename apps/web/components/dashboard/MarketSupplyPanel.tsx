@@ -125,7 +125,7 @@ export default function MarketSupplyPanel({ rows, fetchFailed }: MarketSupplyPan
                       {metric.directionLabel}
                     </span>
                   </header>
-                  <p className="market-supply-panel__value">
+                  <p className={`market-supply-panel__value market-supply-panel__value--${metric.direction}`}>
                     {formatMarketSupplyNumber(metric.value)}<span>억원</span>
                   </p>
                   <span className="market-supply-panel__bar" aria-hidden="true">

@@ -8,11 +8,13 @@ import {
   EVIDENCE_METRICS,
   formatEvidenceMetricValue,
   formatEvidenceStatusLabel,
+  getEvidenceMetricTone,
   getEvidenceTradingDay,
 } from "@/lib/candidate-evidence-view";
 import type {
   CandidateEvidenceRpcRow,
 } from "@/lib/dashboard-types";
+import { toneClassName } from "@/lib/value-tone";
 
 interface CandidateEvidencePanelProps {
   id: string;
@@ -106,7 +108,9 @@ export default function CandidateEvidencePanel({
                         key={metric.key}
                         aria-label={`${metric.label} ${formatEvidenceMetricValue(row, status, metric.key)}`}
                       >
-                        {formatEvidenceMetricValue(row, status, metric.key)}
+                        <span className={toneClassName(getEvidenceMetricTone(row, status, metric.key))}>
+                          {formatEvidenceMetricValue(row, status, metric.key)}
+                        </span>
                       </td>
                     ))}
                   </tr>
@@ -148,7 +152,9 @@ export default function CandidateEvidencePanel({
                   {EVIDENCE_METRICS.map((metric) => (
                     <div className="candidate-evidence-card__metric" key={metric.key}>
                       <dt>{metric.label}({metric.unit})</dt>
-                      <dd>{formatEvidenceMetricValue(row, status, metric.key)}</dd>
+                      <dd className={toneClassName(getEvidenceMetricTone(row, status, metric.key))}>
+                        {formatEvidenceMetricValue(row, status, metric.key)}
+                      </dd>
                     </div>
                   ))}
                 </dl>
