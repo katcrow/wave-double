@@ -14,6 +14,7 @@ import {
 function row(overrides: Partial<OutcomeTrackingRpcRow> = {}): OutcomeTrackingRpcRow {
   return {
     outcome_id: "11111111-1111-1111-1111-111111111111",
+    name: "삼성전자",
     ticker: "005930",
     strategy: "A",
     entry_date: "2026-09-09",
@@ -27,6 +28,8 @@ function row(overrides: Partial<OutcomeTrackingRpcRow> = {}): OutcomeTrackingRpc
 test("RPC row shape는 6개 상태, 전략, nullable 필드와 유한 손익률을 검증한다", () => {
   assert.equal(isOutcomeTrackingRpcResponse([row()]), true);
   assert.equal(isOutcomeTrackingRpcResponse([row({ status: "DELISTED", exit_date: null, return_pct: null })]), true);
+  assert.equal(isOutcomeTrackingRpcResponse([row({ name: null })]), true);
+  assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), name: "" }]), false);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), status: "UNKNOWN" }]), false);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), strategy: "I" }]), false);
   assert.equal(isOutcomeTrackingRpcResponse([{ ...row(), entry_date: "not-a-date" }]), false);

@@ -16,9 +16,10 @@ export type OutcomeStatus = "TP" | "SL" | "TIMEOUT" | "OPEN" | "SUSPENDED" | "DE
 export type OutcomeStrategy = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 export type TrackingSource = "t1859" | "t1852" | "t1856";
 
-/** Story 5.11 get_outcome_tracking_rows()가 브라우저에 반환하는 제한된 행. */
+/** get_outcome_tracking_rows()가 브라우저에 반환하는 제한된 행과 nullable 종목명 스냅샷. */
 export interface OutcomeTrackingRpcRow {
   outcome_id: string;
+  name: string | null;
   ticker: string;
   strategy: OutcomeStrategy;
   entry_date: string;

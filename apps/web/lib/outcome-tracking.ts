@@ -80,7 +80,7 @@ export function toOutcomeTrackingRpcParams(filters: OutcomeTrackingFilters) {
   };
 }
 
-const OUTCOME_ROW_KEYS = ["entry_date", "exit_date", "outcome_id", "return_pct", "status", "strategy", "ticker"];
+const OUTCOME_ROW_KEYS = ["entry_date", "exit_date", "name", "outcome_id", "return_pct", "status", "strategy", "ticker"];
 
 export function isOutcomeTrackingRpcRow(value: unknown): value is OutcomeTrackingRpcRow {
   if (!value || typeof value !== "object") return false;
@@ -88,6 +88,7 @@ export function isOutcomeTrackingRpcRow(value: unknown): value is OutcomeTrackin
   return (
     Object.keys(row).sort().join("|") === OUTCOME_ROW_KEYS.join("|") &&
     typeof row.outcome_id === "string" && row.outcome_id.length > 0 &&
+    (row.name === null || (typeof row.name === "string" && row.name.length > 0)) &&
     typeof row.ticker === "string" && row.ticker.length > 0 &&
     isOneOf(typeof row.strategy === "string" ? row.strategy : null, OUTCOME_STRATEGY_OPTIONS) &&
     isIsoDate(row.entry_date) &&

@@ -26,6 +26,15 @@ interface OutcomeTrackingPanelProps {
 
 const TABLE_COLUMNS = ["종목", "전략", "진입일", "상태", "종결일", "손익률"];
 
+function OutcomeIdentity({ row }: { row: OutcomeTrackingRpcRow }) {
+  return (
+    <span className="outcome-tracking__identity">
+      <span className="outcome-tracking__name">{row.name ?? "종목명 미확인"}</span>
+      <span className="outcome-tracking__ticker">{row.ticker}</span>
+    </span>
+  );
+}
+
 function OutcomeStatus({ status }: { status: OutcomeTrackingRpcRow["status"] }) {
   const meta = getOutcomeStatusMeta(status);
   return (
@@ -120,7 +129,7 @@ export default function OutcomeTrackingPanel({ rows, fetchFailed }: OutcomeTrack
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.outcome_id}>
-                    <th scope="row">{row.ticker}</th>
+                    <th scope="row"><OutcomeIdentity row={row} /></th>
                     <td>{getOutcomeStrategyLabel(row.strategy)}</td>
                     <td><time dateTime={row.entry_date}>{formatOutcomeDate(row.entry_date)}</time></td>
                     <td><OutcomeStatus status={row.status} /></td>
@@ -136,7 +145,7 @@ export default function OutcomeTrackingPanel({ rows, fetchFailed }: OutcomeTrack
               <article className="outcome-tracking__card" key={row.outcome_id}>
                 <header className="outcome-tracking__card-header">
                   <div>
-                    <h3>{row.ticker}</h3>
+                    <h3><OutcomeIdentity row={row} /></h3>
                     <p>{getOutcomeStrategyLabel(row.strategy)}</p>
                   </div>
                   <OutcomeStatus status={row.status} />

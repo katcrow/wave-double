@@ -199,12 +199,12 @@ function rpcPayload(name, body = {}) {
     if (activeScenario === "tracking-empty") return [];
 
       const rows = [
-      { outcome_id: "00000000-0000-4000-8000-000000000601", ticker: "005930", strategy: "A", entry_date: "2026-09-09", status: "TP", exit_date: "2026-09-12", return_pct: 2.9 },
-      { outcome_id: "00000000-0000-4000-8000-000000000602", ticker: "000660", strategy: "B", entry_date: "2026-09-08", status: "SL", exit_date: "2026-09-10", return_pct: -3.1 },
-      { outcome_id: "00000000-0000-4000-8000-000000000603", ticker: "035420", strategy: "C", entry_date: "2026-09-07", status: "TIMEOUT", exit_date: "2026-09-30", return_pct: 0.4 },
-      { outcome_id: "00000000-0000-4000-8000-000000000604", ticker: "051910", strategy: "D", entry_date: "2026-09-06", status: "OPEN", exit_date: null, return_pct: null },
-      { outcome_id: "00000000-0000-4000-8000-000000000605", ticker: "068270", strategy: "E", entry_date: "2026-09-05", status: "SUSPENDED", exit_date: null, return_pct: null },
-      { outcome_id: "00000000-0000-4000-8000-000000000606", ticker: "035720", strategy: "F", entry_date: "2026-09-04", status: "DELISTED", exit_date: "2026-09-05", return_pct: null },
+      { outcome_id: "00000000-0000-4000-8000-000000000601", name: "삼성전자", ticker: "005930", strategy: "A", entry_date: "2026-09-09", status: "TP", exit_date: "2026-09-12", return_pct: 2.9 },
+      { outcome_id: "00000000-0000-4000-8000-000000000602", name: "SK하이닉스", ticker: "000660", strategy: "B", entry_date: "2026-09-08", status: "SL", exit_date: "2026-09-10", return_pct: -3.1 },
+      { outcome_id: "00000000-0000-4000-8000-000000000603", name: "NAVER", ticker: "035420", strategy: "C", entry_date: "2026-09-07", status: "TIMEOUT", exit_date: "2026-09-30", return_pct: 0.4 },
+      { outcome_id: "00000000-0000-4000-8000-000000000604", name: "LG화학", ticker: "051910", strategy: "D", entry_date: "2026-09-06", status: "OPEN", exit_date: null, return_pct: null },
+      { outcome_id: "00000000-0000-4000-8000-000000000605", name: "셀트리온", ticker: "068270", strategy: "E", entry_date: "2026-09-05", status: "SUSPENDED", exit_date: null, return_pct: null },
+      { outcome_id: "00000000-0000-4000-8000-000000000606", name: "카카오", ticker: "035720", strategy: "F", entry_date: "2026-09-04", status: "DELISTED", exit_date: "2026-09-05", return_pct: null },
     ];
     const status = ["TP", "SL", "TIMEOUT", "OPEN", "SUSPENDED", "DELISTED"].includes(body?.p_status) ? body.p_status : null;
     const strategy = ["A", "B", "C", "D", "E", "F"].includes(body?.p_strategy) ? body.p_strategy : null;

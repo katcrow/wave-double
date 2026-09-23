@@ -55,6 +55,7 @@ test("인증된 tracking 라우트는 trust bar와 6개 상태를 표시한다",
     await expect(page.getByText(description).first()).toBeVisible();
   }
   const firstRow = page.locator(".outcome-tracking__table tbody tr").first();
+  await expect(firstRow).toContainText("삼성전자");
   await expect(firstRow).toContainText("005930");
   await expect(firstRow).toContainText("전략 A");
   await expect(firstRow).toContainText("2026.09.09");
