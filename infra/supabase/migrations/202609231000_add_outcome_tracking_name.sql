@@ -10,19 +10,26 @@ comment on column public.candidate_outcome.name is
   'OPEN 시점 candidates.name의 nullable 스냅샷. 원천 후보가 없거나 명칭이 없으면 NULL이며 UI는 ticker를 fallback으로 표시한다.';
 
 -- migration 시점에 아직 보존된 후보가 있는 기존 projection은 한 번만 보강한다.
+with source as (
+  select
+    co.outcome_id,
+    (
+      select nullif(btrim(c.name), '')
+      from public.candidates c
+      join public.runs r on r.run_id = c.attempt_run_id
+      where c.ticker = co.ticker
+        and c.trading_day = co.entry_date
+        and c.name is not null
+      order by r.started_at desc, r.run_id desc, c.candidate_id desc
+      limit 1
+    ) as name
+  from public.candidate_outcome co
+  where co.name is null
+)
 update public.candidate_outcome co
 set name = source.name
-from lateral (
-  select nullif(btrim(c.name), '') as name
-  from public.candidates c
-  join public.runs r on r.run_id = c.attempt_run_id
-  where c.ticker = co.ticker
-    and c.trading_day = co.entry_date
-    and c.name is not null
-  order by r.started_at desc, r.run_id desc, c.candidate_id desc
-  limit 1
-) source
-where co.name is null
+from source
+where co.outcome_id = source.outcome_id
   and source.name is not null;
 
 -- 새 OPEN event에는 후보 원천에서 확인한 이름을 payload에 스냅샷한다.
