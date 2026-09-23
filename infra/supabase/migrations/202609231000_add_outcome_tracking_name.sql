@@ -10,6 +10,8 @@ comment on column public.candidate_outcome.name is
   'OPEN 시점 candidates.name의 nullable 스냅샷. 원천 후보가 없거나 명칭이 없으면 NULL이며 UI는 ticker를 fallback으로 표시한다.';
 
 -- migration 시점에 아직 보존된 후보가 있는 기존 projection은 한 번만 보강한다.
+select set_config('wave_double.outcome_mutation_allowed', 'on', true);
+
 with source as (
   select
     co.outcome_id,
@@ -31,6 +33,8 @@ set name = source.name
 from source
 where co.outcome_id = source.outcome_id
   and source.name is not null;
+
+select set_config('wave_double.outcome_mutation_allowed', 'off', true);
 
 -- 새 OPEN event에는 후보 원천에서 확인한 이름을 payload에 스냅샷한다.
 create or replace function public.snapshot_outcome_open_name()
