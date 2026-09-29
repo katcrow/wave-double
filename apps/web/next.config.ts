@@ -86,6 +86,9 @@ async function headers() {
   ];
 }
 
-const nextConfig: NextConfig = { headers };
+const nextConfig: NextConfig = {
+  agentRules: false,
+  headers,
+};
 
 export default nextConfig;

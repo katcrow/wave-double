@@ -1,9 +1,9 @@
 <!-- bmad:context -->
-<!-- Verified 2026-09-16 against 95373e6. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-09-29 against a391e5a. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## wave-double
 
-개인투자자 Neo를 위한 매수후보 추천 대시보드. 실존 파이썬 백테스트 커널은 `backtest/`에 있다. MVP 1차 완료 이후 BMAD 계획 문서(에픽/스토리/아키텍처 스파인)는 더 이상 유지하지 않는다.
+개인투자자 Neo를 위한 매수후보 추천 대시보드다. 웹 대시보드는 `apps/web/`, Python 배치는 `apps/batch/`, 실존 백테스트 커널은 `backtest/`에 있다. MVP 1차 완료 이후 BMAD 계획 문서(에픽/스토리/아키텍처 스파인)는 더 이상 유지하지 않는다.
 
 ## Policy
 
@@ -16,7 +16,9 @@
 
 ## Where things are
 
+- 웹/Next.js 작업: `apps/web/`; 설치된 Next.js 버전 문서는 `node_modules/next/dist/docs/`
 - LS OpenAPI 참조: `docs/api/ls-openapi/`
+- Supabase migration 규약: `infra/supabase/migrations/README.md`
 
 ## Running and verifying
 
@@ -24,7 +26,7 @@
 
 ## Conventions that differ from defaults
 
-- 전략 A~F 태깅/파라미터는 `apps/web/lib/strategy-labels.ts`와 `backtest/` 커널 코드가 유일한 근거다(별도 스펙 문서 없음) — 커널 테스트가 회귀망이므로 깨뜨리지 말 것.
+- 운영 전략 라벨은 `apps/web/lib/strategy-labels.ts`, 백테스트 전략 계산 키·파라미터는 `backtest/strategy_api.py`와 `backtest/indicator_opt/`를 권위로 사용한다 — 별도 스펙 문서를 우선하지 말고 `backtest/tests/` 회귀망을 깨뜨리지 말 것.
 
 ## Known pitfalls
 
