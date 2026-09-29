@@ -52,12 +52,10 @@ class StageStatus(StrEnum):
 
 
 STAGES: tuple[Stage, ...] = tuple(Stage)
-REQUIRED_STAGES: tuple[Stage, ...] = (
-    Stage.CANDIDATES,
-    Stage.TAGS,
-    Stage.SUPPLY_3DAY,
-    Stage.MARKET_SUPPLY,
-)
+# 수급은 태깅 후보의 참고 근거다. 수급 부분/전체 실패가 후보 발행을 막지 않도록
+# 성공만을 요구하지 않되, 아직 수집 중인 pending/running 상태에서는 발행하지 않는다.
+REQUIRED_STAGES: tuple[Stage, ...] = (Stage.CANDIDATES, Stage.TAGS)
+REFERENCE_STAGES: tuple[Stage, ...] = (Stage.SUPPLY_3DAY, Stage.MARKET_SUPPLY)
 _SLOT_RE = re.compile(r"^(?:[01]\d|2[0-3]):(?:00|20|30|40)$")
 
 
@@ -144,4 +142,11 @@ def validate_stage_transition(
 
 
 def can_publish(stage_status: dict[str, str | StageStatus]) -> bool:
-    return all(stage_status.get(stage.value) == StageStatus.SUCCESS for stage in REQUIRED_STAGES)
+    if not all(stage_status.get(stage.value) == StageStatus.SUCCESS for stage in REQUIRED_STAGES):
+        return False
+    terminal_reference_statuses = {
+        StageStatus.SUCCESS,
+        StageStatus.PARTIAL,
+        StageStatus.FAILED,
+    }
+    return all(stage_status.get(stage.value) in terminal_reference_statuses for stage in REFERENCE_STAGES)

@@ -551,7 +551,7 @@ def test_market_supply_stage_runs_after_supply_and_exposes_two_market_rows():
     assert stages[-2:] == ["market_supply", "market_supply"]
 
 
-def test_partial_market_supply_blocks_close_publish_and_surfaces_failed_market():
+def test_partial_market_supply_does_not_block_close_publish_and_surfaces_failed_market():
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
     attempt = attempt_payload()
@@ -578,8 +578,8 @@ def test_partial_market_supply_blocks_close_publish_and_surfaces_failed_market()
 
     assert result.status == "partial"
     assert result.market_supply_status == "partial"
-    assert result.published is False
-    assert [call for call in rpc.calls if call[0] == "publish_attempt"] == []
+    assert result.published is True
+    assert len([call for call in rpc.calls if call[0] == "publish_attempt"]) == 1
 
 
 def test_intraday_scheduler_keeps_all_zero_d0_pending_and_retries_semantically():
@@ -642,8 +642,8 @@ def test_intraday_scheduler_keeps_all_zero_d0_pending_and_retries_semantically()
             rows["D0"].individual_net, rows["D0"].program_net) == (None, None, None, None)
 
 
-def test_supply_stage_failure_surfaces_in_scheduler_result_and_blocks_publish():
-    """supply stage가 failed로 종결되면 배치 전체 결과도 failed여야 하고 publish_attempt는 호출되지 않는다."""
+def test_supply_stage_failure_surfaces_in_scheduler_result_but_publishes_tags():
+    """supply stage가 failed여도 candidates/tags가 성공하면 태깅 후보를 발행한다."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
     attempt = attempt_payload()
@@ -677,11 +677,12 @@ def test_supply_stage_failure_surfaces_in_scheduler_result_and_blocks_publish():
     assert result.status == "failed"
     assert result.supply_status == "failed"
     assert result.supply_result_code == "TAGGED_CANDIDATE_FETCH_FAILED"
-    assert _publish_attempt_calls(rpc) == []
+    assert result.published is True
+    assert len(_publish_attempt_calls(rpc)) == 1
 
 
-def test_partial_program_supply_surfaces_in_scheduler_result_and_blocks_publish():
-    """후보별 t1637 실패는 supply partial로 전파되고 close publish를 막아야 한다."""
+def test_partial_program_supply_surfaces_in_scheduler_result_but_publishes_tags():
+    """후보별 t1637 실패는 supply partial로 전파되지만 close publish를 막지 않는다."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
     repo = FakeRepository(
         cached={date(2026, 9, 1): cached_open},
@@ -736,7 +737,8 @@ def test_partial_program_supply_surfaces_in_scheduler_result_and_blocks_publish(
         for row in missing_rows
         for value in (row.foreign_net, row.institution_net, row.individual_net, row.program_net)
     )
-    assert _publish_attempt_calls(rpc) == []
+    assert result.published is True
+    assert len(_publish_attempt_calls(rpc)) == 1
 
 
 def test_premarket_does_not_run_supply_stage():

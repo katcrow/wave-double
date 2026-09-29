@@ -42,13 +42,19 @@ def test_stage_transitions_are_forward_only_and_terminal_writes_are_idempotent()
         validate_stage_transition("success", "running")
 
 
-def test_candidates_tags_supply_and_market_must_all_be_success_to_publish():
+def test_candidates_and_tags_are_required_but_reference_supply_is_not():
     complete = {"candidates": "success", "tags": "success", "supply_3day": "success", "market_supply": "success"}
     assert can_publish(complete)
-    for stage in ("candidates", "tags", "supply_3day", "market_supply"):
+    assert can_publish({**complete, "supply_3day": "partial", "market_supply": "failed"})
+    for stage in ("candidates", "tags"):
         incomplete = {**complete, stage: "pending"}
         assert not can_publish(incomplete)
-    assert not can_publish({"candidates": "success", "tags": "success", "supply_3day": "success"})
+    assert not can_publish({"candidates": "success", "tags": "success"})
+    for stage in ("supply_3day", "market_supply"):
+        incomplete = {**complete, stage: "pending"}
+        assert not can_publish(incomplete)
+        incomplete[stage] = "running"
+        assert not can_publish(incomplete)
 
 
 def test_stage_registry_uses_run_id_and_stage_callable_contract():
@@ -83,4 +89,9 @@ def test_default_registry_has_candidates_tags_and_market_supply_verifiers():
 def test_bias_failure_does_not_affect_required_publish_stages():
     from domain.run_state import REQUIRED_STAGES, Stage
     assert Stage.BIAS not in REQUIRED_STAGES
-    assert can_publish({**{s.value: "success" for s in REQUIRED_STAGES}, "bias": "failed"})
+    assert can_publish({
+        **{s.value: "success" for s in REQUIRED_STAGES},
+        "supply_3day": "failed",
+        "market_supply": "partial",
+        "bias": "failed",
+    })

@@ -55,7 +55,7 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, params_meta)
     values (candidate_id, attempt_id, 'A', date '2099-02-01', '{"batch_kind": "premarket"}'::jsonb);
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 1));
-  -- Story 4.1: supply_3day stage가 success여야 publish_attempt가 통과한다.
+  -- Story 4.1 fixture: 정상 supply_3day 결과를 snapshot section으로 검증한다.
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success', jsonb_build_object('row_count', 0));
   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');

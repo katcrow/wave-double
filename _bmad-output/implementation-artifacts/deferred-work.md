@@ -16,3 +16,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-g-strategy-five-day-overextension-filter.md`
   summary: AGENTS 관리 블록 밖의 지속 보존 정책을 정리한다.
   evidence: 기존 Supabase 정책 일부가 refresh 시 교체되는 bmad 관리 블록 안으로 이동됐다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-publish-tags-with-reference-supply-partial.md`
+  summary: 운영 `get_dashboard_snapshot()` drift를 정리하고 published partial supply의 snapshot/UI/E2E 경계를 검증한다.
+  evidence: 운영 함수가 현재 candidates section만 반환해 기존 supply snapshot fixture가 실패하며, 이번 태깅 발행 fixture의 카드/RPC 검증과 독립된 문제다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-publish-tags-with-reference-supply-partial.md`
+  summary: production 외부 adapter 누락 시 market_supply stage를 명시적 terminal 상태로 기록하는 호환성 경로를 정리한다.
+  evidence: scheduler의 legacy optional adapter 경로는 market stage를 건너뛰어 pending으로 남길 수 있으나 production CLI는 모든 adapter를 주입한다.

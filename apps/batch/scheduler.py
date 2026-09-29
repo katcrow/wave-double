@@ -351,15 +351,16 @@ def run_scheduled_batch(
                 market_supply_result = None
 
     # Story 3.5 후속 조치(deferred-work gap 해소) + 대시보드 stale 스냅샷 수정
-    # (2026-09-15): close/intraday가 candidates+tags+supply_3day+market_supply 모두
-    # success로 종결되고 fence/lease가 확정된 경우 publish_attempt를 호출한다.
+    # (2026-09-15): close/intraday가 candidates+tags success로 종결되고
+    # fence/lease가 확정된 경우 publish_attempt를 호출한다. supply_3day와
+    # market_supply는 후보 태깅의 참고 근거이므로 partial/failed여도 발행을 막지 않는다.
     # publish_attempt SQL은 batch_kind='close'일 때만 outcome 발행(emit_open_command)과
     # 일일 관찰·SUSPENDED/TP/SL/TIMEOUT 판정 루프를 실행하므로, intraday를 여기 포함해도
     # outcome 파이프라인은 그대로 close 전용으로 남는다 -- 대신 intraday도
     # current_complete_run_id/published_at을 갱신해 대시보드가 마지막 close가 아니라
     # 가장 최근 성공한 attempt(장중 포함)의 후보 수·카드를 보여주게 한다.
-    # premarket은 supply_3day/market_supply stage 자체를 건너뛰므로(위 참고) 이 게이트를
-    # 자연히 통과하지 못해 별도 제외가 필요 없다.
+    # premarket은 supply_3day/market_supply stage 자체를 건너뛰므로(위 참고) 배치 종류
+    # 조건에서 계속 제외한다.
     published = False
     if (
         kind in (BatchKind.CLOSE, BatchKind.INTRADAY)
@@ -369,10 +370,6 @@ def run_scheduled_batch(
         and result.lease_token is not None
         and tags_result is not None
         and tags_result.status == "success"
-        and supply_result is not None
-        and supply_result.status == "success"
-        and market_supply_result is not None
-        and market_supply_result.status == "success"
     ):
         try:
             gateway.publish(result.run_id, result.fence_token, result.lease_token)

@@ -1,5 +1,5 @@
 -- Supabase SQL fixture for Story 4.1.
--- 실행 전 202609081000_create_market_supply.sql까지의 모든 migration을 적용한다.
+-- 실행 전 전체 migration과 202609291800_publish_tags_without_supply_success.sql을 적용한다.
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 begin;
 
@@ -47,12 +47,11 @@ begin
 end $$;
 insert into _supply_fixture_results values ('schema_and_grants', 'pass');
 
--- 시나리오 1: supply_3day가 아직 pending인 채 publish_attempt 호출 -- SUPPLY_3DAY_STAGE_NOT_COMPLETE 예외.
+-- 시나리오 1: supply_3day가 아직 pending이면 수급 수집 완료 전이므로 발행하지 않는다.
 do $$
 declare
   key text := 'close:2099-06-01'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
   candidate_id uuid := gen_random_uuid();
-  caught boolean := false;
 begin
   started := public.start_attempt(key, date '2099-06-01', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
@@ -66,25 +65,24 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   -- 의도적으로 supply_3day stage를 실행하지 않는다(여전히 'pending').
-
   begin
     perform public.publish_attempt(attempt_id, fence, lease);
   exception when others then
-    if sqlerrm = 'SUPPLY_3DAY_STAGE_NOT_COMPLETE' then caught := true; else raise; end if;
+    if sqlerrm <> 'SUPPLY_3DAY_STAGE_NOT_COMPLETE' then
+      raise exception 'unexpected pending supply guard error: %', sqlerrm;
+    end if;
   end;
-  if not caught then raise exception 'publish_attempt did not enforce SUPPLY_3DAY_STAGE_NOT_COMPLETE for a pending supply_3day stage'; end if;
   if (select status from public.runs where run_id = attempt_id) = 'published' then
-    raise exception 'attempt was published despite missing supply_3day stage';
+    raise exception 'attempt was published while supply_3day was still pending';
   end if;
 end $$;
-insert into _supply_fixture_results values ('pending_supply_gate', 'pass');
+insert into _supply_fixture_results values ('pending_supply_blocks_publish', 'pass');
 
--- 시나리오 2: supply_3day가 failed로 종결된 채 publish_attempt 호출 -- 동일하게 막혀야 한다.
+-- 시나리오 2: supply_3day가 failed로 종결돼도 태깅 후보를 발행한다.
 do $$
 declare
   key text := 'close:2099-06-02'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
   candidate_id uuid := gen_random_uuid();
-  caught boolean := false;
 begin
   started := public.start_attempt(key, date '2099-06-02', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
@@ -99,22 +97,21 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'failed');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'failed');
 
-  begin
-    perform public.publish_attempt(attempt_id, fence, lease);
-  exception when others then
-    if sqlerrm = 'SUPPLY_3DAY_STAGE_NOT_COMPLETE' then caught := true; else raise; end if;
-  end;
-  if not caught then raise exception 'publish_attempt did not enforce SUPPLY_3DAY_STAGE_NOT_COMPLETE for a failed supply_3day stage'; end if;
+  perform public.publish_attempt(attempt_id, fence, lease);
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'attempt was not published despite tags success and failed supply_3day stage';
+  end if;
 end $$;
-insert into _supply_fixture_results values ('failed_supply_gate', 'pass');
+insert into _supply_fixture_results values ('failed_supply_does_not_block_publish', 'pass');
 
--- 시나리오 3: supply_3day가 partial로 종결된 채 publish_attempt 호출 -- 동일하게 막혀야 한다.
+-- 시나리오 3: supply_3day가 partial로 종결돼도 태깅 후보를 발행한다.
 do $$
 declare
   key text := 'close:2099-06-03'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
   candidate_id uuid := gen_random_uuid();
-  caught boolean := false;
 begin
   started := public.start_attempt(key, date '2099-06-03', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
@@ -129,15 +126,15 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'partial', '{}'::jsonb, 1);
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
+  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'failed');
 
-  begin
-    perform public.publish_attempt(attempt_id, fence, lease);
-  exception when others then
-    if sqlerrm = 'SUPPLY_3DAY_STAGE_NOT_COMPLETE' then caught := true; else raise; end if;
-  end;
-  if not caught then raise exception 'publish_attempt did not enforce SUPPLY_3DAY_STAGE_NOT_COMPLETE for a partial supply_3day stage'; end if;
+  perform public.publish_attempt(attempt_id, fence, lease);
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'attempt was not published despite tags success and partial supply_3day stage';
+  end if;
 end $$;
-insert into _supply_fixture_results values ('partial_supply_gate', 'pass');
+insert into _supply_fixture_results values ('partial_supply_does_not_block_publish', 'pass');
 
 -- 시나리오 4: supply_3day success로 완료된 attempt -- A/F multi-tag publish_attempt가 통과하고,
 -- get_dashboard_snapshot()이 supply_3day를 missing_sections에서 제외하며 해당 section을 반영한다.

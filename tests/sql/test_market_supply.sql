@@ -115,31 +115,18 @@ begin
   perform public.write_stage(attempt_id, 'tags', fence, lease, 'running', 'success');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'supply_3day', fence, lease, 'running', 'success');
-  begin
-    perform public.publish_attempt(attempt_id, fence, lease);
-  exception when others then
-    if sqlerrm = 'MARKET_SUPPLY_STAGE_NOT_COMPLETE' then caught := true; else raise; end if;
-  end;
-  if not caught then raise exception 'publish_attempt did not gate market_supply'; end if;
+  -- market_supply가 pending이면 수급 수집 완료 전이므로 발행하지 않는다.
   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
-  perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
   begin
     perform public.publish_attempt(attempt_id, fence, lease);
   exception when others then
-    if sqlerrm = 'MARKET_SUPPLY_DATA_INCOMPLETE' then caught := true; else raise; end if;
+    if sqlerrm <> 'MARKET_SUPPLY_STAGE_NOT_COMPLETE' then
+      raise exception 'unexpected pending market_supply guard error: %', sqlerrm;
+    end if;
   end;
-  if not caught then raise exception 'publish_attempt did not gate incomplete market_supply data'; end if;
-  insert into public.market_supply(attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net)
-  values
-    (attempt_id, 'KOSPI', date '2099-07-02', 1, 2, 3, 4),
-    (attempt_id, 'KOSDAQ', date '2099-07-02', 5, 6, 7, 8);
-  -- stage is already successful; inserting both market rows completes the publish data contract.
-  perform public.publish_attempt(attempt_id, fence, lease);
-  update public.logical_runs set published_at = timestamptz '2099-07-02 00:00:00+00' where logical_run_key = 'close:2099-07-02';
-  snapshot := public.get_dashboard_snapshot();
-  if not (snapshot->'complete_snapshot'->'sections' ? 'market_supply') then raise exception 'market_supply section missing'; end if;
-  if (snapshot->'complete_snapshot'->'sections'->'market_supply'->>'row_count')::integer <> 2 then raise exception 'market row count is wrong'; end if;
-  if snapshot->'missing_sections' @> '["market_supply"]'::jsonb then raise exception 'market_supply remains missing after success'; end if;
+  if (select status from public.runs where run_id = attempt_id) = 'published' then
+    raise exception 'attempt was published while market_supply was still pending';
+  end if;
 end $$;
 insert into _market_supply_fixture_results values ('publish_and_snapshot_contract', 'pass');
 

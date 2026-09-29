@@ -174,7 +174,7 @@ begin
   -- Story 2.5: publish_attempt는 tags stage success도 게이트로 요구한다.
   perform public.write_stage(run_ok, 'tags', fence_ok, lease_ok, 'pending', 'running');
   perform public.write_stage(run_ok, 'tags', fence_ok, lease_ok, 'running', 'success');
-  -- Story 4.1: publish_attempt는 supply_3day stage success도 게이트로 요구한다.
+  -- Story 4.1 fixture: 정상 수급 stage 결과도 함께 기록한다(발행 필수조건은 아니다).
   perform public.write_stage(run_ok, 'supply_3day', fence_ok, lease_ok, 'pending', 'running');
   perform public.write_stage(run_ok, 'supply_3day', fence_ok, lease_ok, 'running', 'success');
   perform public.write_stage(run_ok, 'market_supply', fence_ok, lease_ok, 'pending', 'running');
