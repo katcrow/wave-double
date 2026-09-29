@@ -1,0 +1,2 @@
+strategy,start,end,n_signals,n_trades,decline_window,vol_window,tp_pct,sl_pct,max_hold,cost_rate,win_rate,profit_factor,n_win,n_loss,avg_return,total_return,cum_return,avg_win,avg_loss,max_drawdown,avg_holding_bars,best_return,worst_return,exit_counts,tickers_hit
+B_execution_strength,2020-08-03,2026-08-27,17065,15849,3,20,2.0,2.0,30,0.0005,0.5385,1.0554,8534,7315,0.0537,851.3498,21119.4737,1.8994,-2.0995,-99.9961,1.85,1.9,-2.1,"{'tp': 8530, 'sl': 7313, 'max_hold': 2, 'end': 4}",101

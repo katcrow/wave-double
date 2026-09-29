@@ -230,6 +230,34 @@ def rsi(close: pd.Series, window: int = 14) -> pd.Series:
     return out.fillna(50.0)
 
 
+# ── 체결강도 (execution strength / cpower) ───────────────────────────────────
+
+
+def execution_strength(
+    close: pd.Series,
+    high: pd.Series,
+    low: pd.Series,
+    volume: pd.Series,
+    vol_window: int = 20,
+) -> pd.Series:
+    """체결강도 (LS OpenAPI `cpower` 기준 유도).
+
+    일봉 기준 유도 수식:
+    ``((Close - Low) / (High - Low)) * (Volume / SMA(Volume)) * 100``
+
+    값이 100 기준으로 상승/하락 강도를 표현하며,
+    거래량 대비 가격 위치 강도를 나타낸다.
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        price_pos = (close - low) / (high - low)
+    price_pos = price_pos.replace([np.inf, -np.inf], np.nan)
+    vol_sma = volume.rolling(window=vol_window, min_periods=1).mean()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        vol_ratio = volume / vol_sma.replace(0.0, np.nan)
+    out = price_pos * vol_ratio * 100.0
+    return out.replace([np.inf, -np.inf], np.nan)
+
+
 # ── CCI ───────────────────────────────────────────────────────────────────
 
 

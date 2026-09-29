@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.indicators import angle_k, atr, compute_all, macd, sma
+from backtest.indicators import angle_k, atr, compute_all, execution_strength, macd, sma
 
 
 def _series(vals):
@@ -58,6 +58,19 @@ def test_atr_range():
     close = _series([9.5] * 30)
     out = atr(high, low, close, window=14)
     assert out.dropna().iloc[-1] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_execution_strength_basic():
+    # 강한 상승봉은 강도가 높고, 약한/하락봉은 낮아야 함
+    high = _series([10, 10, 10, 15, 20])
+    low = _series([8, 8, 8, 12, 15])
+    close = _series([9, 9.5, 9.8, 14, 19])
+    volume = _series([1000, 1200, 1500, 3000, 5000])
+    out = execution_strength(close, high, low, volume, vol_window=20)
+    # 상승 강도가 상승 방향이어야 함
+    assert out.iloc[-1] > out.iloc[0]
+    # 값이 NaN이 아닌지 확인
+    assert out.notna().all()
 
 
 def test_compute_all_adds_columns():
