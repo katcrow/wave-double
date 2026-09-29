@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { getSupabaseAuthBrowserClient } from "@/lib/supabase-browser-auth";
 
 /**
@@ -10,7 +9,6 @@ import { getSupabaseAuthBrowserClient } from "@/lib/supabase-browser-auth";
  * 제공하지 않는다. Never: 이 스토리는 새 디자인 요건이 없다 -- 최소 기능만 구현한다.
  */
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "signing-in" | "error">("idle");
@@ -29,8 +27,9 @@ export default function LoginPage() {
         setErrorMessage(error.message);
         return;
       }
-      router.push("/");
-      router.refresh();
+      // 보호 라우트의 App Router/RSC prefetch 캐시를 재사용하지 않고,
+      // 인증 쿠키가 저장된 뒤 proxy와 서버 컴포넌트를 처음부터 다시 태운다.
+      window.location.replace("/");
     } catch (error) {
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "로그인에 실패했습니다.");

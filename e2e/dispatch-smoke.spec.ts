@@ -33,15 +33,15 @@ test("인증된 세션의 수동 실행 요청이 /api/dispatch에서 202로 수
 
 test("유효한 세션 토큰이지만 CSRF 헤더가 없으면 dispatch는 403 CSRF_VALIDATION_FAILED를 반환한다", async ({ page }) => {
   let accessToken: string | null = null;
-  page.on("response", async (response) => {
-    if (response.url().includes("/auth/v1/token") && response.request().method() === "POST") {
-      try {
-        const body = await response.json();
-        accessToken = body?.access_token ?? null;
-      } catch {
-        // 비 JSON 응답(404 등)은 테스트의 몰래 실패 방지를 위해 무시하지 않고 그대로 둔다.
-      }
+  await page.route("**/auth/v1/token**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.body();
+    try {
+      accessToken = JSON.parse(body.toString("utf8"))?.access_token ?? null;
+    } catch {
+      // 비 JSON 응답(404 등)은 토큰을 설정하지 않고 테스트 assertion에서 실패시킨다.
     }
+    await route.fulfill({ response, body });
   });
 
   await page.goto("/login");

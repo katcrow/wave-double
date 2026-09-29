@@ -393,12 +393,29 @@ const server = http.createServer((request, response) => {
   }
 
   if (url.pathname === "/auth/v1/token") {
-    return sendJson(response, 200, {
-      access_token: signJwt(),
-      refresh_token: "e2e-refresh-token",
-      token_type: "bearer",
-      expires_in: 3600,
-      user: USER,
+    return readRequestBody(request).then((body) => {
+      if (body?.grant_type === "refresh_token") {
+        return sendJson(response, 200, {
+          access_token: signJwt(),
+          refresh_token: "e2e-refresh-token",
+          token_type: "bearer",
+          expires_in: 3600,
+          user: USER,
+        });
+      }
+      if (body?.email !== USER.email || body?.password !== "fixture-password") {
+        return sendJson(response, 400, {
+          error: "invalid_grant",
+          error_description: "Invalid login credentials",
+        });
+      }
+      return sendJson(response, 200, {
+        access_token: signJwt(),
+        refresh_token: "e2e-refresh-token",
+        token_type: "bearer",
+        expires_in: 3600,
+        user: USER,
+      });
     });
   }
 

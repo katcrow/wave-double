@@ -21,6 +21,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isLoginPage = pathname === "/login" || pathname.startsWith("/login/");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [announcement, setAnnouncement] = useState("");
 
@@ -132,6 +133,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  prefetch={isLoginPage ? false : undefined}
                   className={
                     active
                       ? "app-shell__link app-shell__link--active"
