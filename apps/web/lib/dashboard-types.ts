@@ -211,6 +211,19 @@ export interface TodayCandidateCardRow {
   supply_partial_missing: boolean;
 }
 
+/**
+ * infra/supabase/migrations/202609301000_create_get_top_tagged_candidates.sql의
+ * get_top_tagged_candidates(p_run_id) 반환 배열 원소 shape.
+ */
+export interface TopTradingCandidateRpcRow {
+  candidate_id: string;
+  attempt_run_id: string;
+  ticker: string;
+  name: string | null;
+  trading_day: string;
+  trading_value: number;
+}
+
 export type EvidenceSource = "t1859" | "t1852" | "t1856";
 export type EvidenceSlot = "D0" | "D-1" | "D-2";
 export type EvidenceInvestorStatus = "confirmed" | "pending" | "missing";

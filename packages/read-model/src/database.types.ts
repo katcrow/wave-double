@@ -1079,6 +1079,7 @@ export type Database = {
         Returns: Json
       }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
+      get_top_tagged_candidates: { Args: { p_run_id: string }; Returns: Json }
       get_today_disappeared_candidates: {
         Args: { p_run_id: string }
         Returns: Json

@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 
+test.afterEach(async ({ request }) => {
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "default" } });
+});
+
 test("잘못된 인증 정보는 로그인 페이지에 오류를 표시한다", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("이메일").fill("neo@example.test");
@@ -27,6 +31,9 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(page).toHaveURL(/\/$/);
   await expect.poll(() => documentNavigationRequests.length).toBeGreaterThan(0);
   await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toBeVisible();
+  await expect(page.locator(".top-trading-candidates__rank").first()).toContainText("1");
+  await expect(page.locator(".top-trading-candidates__value").first()).toContainText("123,456,789원");
 
   await page.getByRole("button", { name: "근거 보기" }).click();
   const evidence = page.getByRole("region", { name: "후보 근거 패널" });
@@ -47,4 +54,28 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(page.locator(".candidate-evidence-card-list")).toBeVisible();
   await page.evaluate(() => { document.documentElement.style.zoom = "200%"; });
   await expect(page.locator(".candidate-evidence-card-list")).toBeVisible();
+});
+
+test("상단 요약 shape 오류는 기존 후보 카드 표면을 막지 않는다", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "top-malformed" } });
+  await page.goto("/login");
+  await page.getByLabel("이메일").fill("neo@example.test");
+  await page.getByLabel("비밀번호").fill("fixture-password");
+  await page.getByRole("button", { name: "로그인" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
+});
+
+test("기존 카드 RPC 오류는 기존 오류 표면을 유지하고 상단 요약을 생략한다", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "card-error" } });
+  await page.goto("/login");
+  await page.getByLabel("이메일").fill("neo@example.test");
+  await page.getByLabel("비밀번호").fill("fixture-password");
+  await page.getByRole("button", { name: "로그인" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.locator(".notice-banner")).toContainText("오늘의 후보 카드를 불러오지 못했습니다");
 });

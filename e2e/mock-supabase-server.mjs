@@ -66,6 +66,8 @@ const SCENARIOS = new Set([
   "complete-vanish",
   "population-dropout",
   "collection-failure",
+  "card-error",
+  "top-malformed",
   "intraday",
   "strategy-f",
   "tracking-empty",
@@ -147,6 +149,7 @@ function rpcPayload(name, body = {}) {
     };
   }
   if (name === "get_today_candidate_cards") {
+    if (activeScenario === "card-error") return null;
     const base = { candidate_id: "00000000-0000-4000-8000-000000000401", ticker: "005930", name: "조정후보", strategies: ["A"], vanished_strategies: [], supply_partial_missing: false };
     if (activeScenario === "partial-vanish") {
       // active 태그와 vanished 태그가 함께 있는 상태 -> 카드는 남고 "소멸: 전략 B" 문구가 붙는다.
@@ -162,6 +165,19 @@ function rpcPayload(name, body = {}) {
     if (activeScenario === "strategy-f") {
       return [{ ...base, name: "F후보", strategies: ["F"], vanished_strategies: [] }];
     }
+    return [base];
+  }
+  if (name === "get_top_tagged_candidates") {
+    if (activeScenario === "complete-vanish") return [];
+    const base = {
+      candidate_id: "00000000-0000-4000-8000-000000000401",
+      attempt_run_id: RUN_ID,
+      ticker: "005930",
+      name: activeScenario === "strategy-f" ? "F후보" : "조정후보",
+      trading_day: TRADING_DAY,
+      trading_value: 123456789,
+    };
+    if (activeScenario === "top-malformed") return [{ ...base, trading_value: "not-a-number" }];
     return [base];
   }
   if (name === "get_candidate_evidence") {

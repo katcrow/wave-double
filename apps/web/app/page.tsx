@@ -1,4 +1,5 @@
 import CandidateList from "@/components/dashboard/CandidateList";
+import TopTradingCandidates from "@/components/dashboard/TopTradingCandidates";
 import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
@@ -17,6 +18,12 @@ import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow 
 import { buildDisappearedCandidateViewModels } from "@/lib/disappeared-candidates";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { deriveTrustBarState } from "@/lib/trust-bar";
+import {
+  buildTopTradingCandidateViewModels,
+  isTopTradingCandidateRpcRow,
+  type TopTradingCandidateViewModel,
+} from "@/lib/top-trading-candidates";
+import type { TopTradingCandidateRpcRow } from "@/lib/dashboard-types";
 
 // get_dashboard_snapshot()은 매 요청 최신 배치 상태를 읽어야 하므로 정적 캐싱을 막는다.
 export const dynamic = "force-dynamic";
@@ -50,6 +57,7 @@ export default async function HomePage() {
   let marketSupplyFetchFailed = false;
   let candidateSupplyHintRows: CandidateSupplyHintRpcRow[] = [];
   let candidateSupplyHintsFetchFailed = false;
+  let topTradingCandidates: TopTradingCandidateViewModel[] = [];
   if (snapshot.complete_snapshot) {
     const { data: cardRows, error: cardError } = await supabase.rpc("get_today_candidate_cards", {
       p_run_id: snapshot.complete_snapshot.run_id,
@@ -62,6 +70,26 @@ export default async function HomePage() {
     } else {
       candidateCardsFetchFailed = true;
       console.error("unexpected get_today_candidate_cards shape", cardRows);
+    }
+
+    // 상단 요약은 기존 카드 RPC와 오류 경계를 분리한다. 카드 조회가 실패하거나 malformed면
+    // 기존 후보 오류 표면은 유지하고, 새 참고 영역만 생략한다.
+    if (!candidateCardsFetchFailed) {
+      const { data: topTradingData, error: topTradingError } = await supabase.rpc(
+        "get_top_tagged_candidates",
+        { p_run_id: snapshot.complete_snapshot.run_id },
+      );
+      if (topTradingError) {
+        console.error("get_top_tagged_candidates failed", topTradingError);
+      } else if (Array.isArray(topTradingData) && topTradingData.every(isTopTradingCandidateRpcRow)) {
+        topTradingCandidates = buildTopTradingCandidateViewModels(
+          topTradingData as unknown as TopTradingCandidateRpcRow[],
+          snapshot.complete_snapshot.run_id,
+          snapshot.complete_snapshot.trading_day,
+        );
+      } else {
+        console.error("unexpected get_top_tagged_candidates shape", topTradingData);
+      }
     }
 
     const { data: evidenceRows, error: evidenceError } = await supabase.rpc("get_candidate_evidence", {
@@ -159,6 +187,8 @@ export default async function HomePage() {
       {candidateSupplyHintsFetchFailed && (
         <NoticeBanner message="수급 힌트를 불러오지 못했습니다. 힌트는 판정 불가로 표시합니다." />
       )}
+
+      <TopTradingCandidates candidates={topTradingCandidates} />
 
       <CandidateList
         candidates={candidateCards}

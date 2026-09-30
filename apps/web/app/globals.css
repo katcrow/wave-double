@@ -1133,6 +1133,115 @@ a {
   list-style: none;
 }
 
+/* 거래대금 상위 태깅 후보 참고 순위 */
+
+.top-trading-candidates {
+  margin-top: var(--space-6);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.top-trading-candidates__header,
+.top-trading-candidates__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.top-trading-candidates__eyebrow,
+.top-trading-candidates__description,
+.top-trading-candidates__identity h3,
+.top-trading-candidates__identity p,
+.top-trading-candidates__value dt,
+.top-trading-candidates__value dd {
+  margin: 0;
+}
+
+.top-trading-candidates__eyebrow {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-label);
+}
+
+.top-trading-candidates__header h2 {
+  margin: var(--space-1) 0;
+}
+
+.top-trading-candidates__description {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.top-trading-candidates__list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.top-trading-candidates__item {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.top-trading-candidates__rank {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-strong);
+  color: var(--color-surface);
+  font-family: var(--font-family-data);
+  font-weight: var(--font-weight-data);
+}
+
+.top-trading-candidates__identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.top-trading-candidates__identity h3 {
+  color: var(--color-ink-primary);
+  font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
+}
+
+.top-trading-candidates__identity p {
+  margin-top: var(--space-1);
+  color: var(--color-ink-muted);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-label);
+}
+
+.top-trading-candidates__value {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.top-trading-candidates__value dt {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.top-trading-candidates__value dd {
+  margin-top: var(--space-1);
+  color: var(--color-accent-strong);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-data);
+  font-weight: var(--font-weight-data);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 .candidate-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -1546,6 +1655,18 @@ a {
 }
 
 @media (max-width: 767px) {
+  .top-trading-candidates {
+    padding: var(--space-4);
+  }
+
+  .top-trading-candidates__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .top-trading-candidates__item {
+    align-items: center;
+  }
+
   .candidate-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
