@@ -32,7 +32,7 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect.poll(() => documentNavigationRequests.length).toBeGreaterThan(0);
   await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "조정후보" })).toHaveCount(1);
-  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toBeVisible();
   await expect(page.locator(".top-trading-candidates__item")).toHaveCount(3);
   await expect(page.locator(".top-trading-candidates__item").nth(0)).toContainText("조정후보");
   await expect(page.locator(".top-trading-candidates__item").nth(0)).toContainText("123,456,789원");
@@ -72,7 +72,7 @@ test("상단 요약 shape 오류는 기존 후보 카드 표면을 막지 않는
   await page.getByRole("button", { name: "로그인" }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
 });
 
@@ -84,7 +84,7 @@ test("상단 요약 RPC transport 오류는 기존 후보 카드를 유지한다
   await page.getByRole("button", { name: "로그인" }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
 });
 
@@ -96,6 +96,6 @@ test("기존 카드 RPC 오류는 기존 오류 표면을 유지하고 상단 �
   await page.getByRole("button", { name: "로그인" }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toHaveCount(0);
   await expect(page.locator(".notice-banner")).toContainText("오늘의 후보 카드를 불러오지 못했습니다");
 });

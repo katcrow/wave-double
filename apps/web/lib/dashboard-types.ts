@@ -212,8 +212,8 @@ export interface TodayCandidateCardRow {
 }
 
 /**
- * infra/supabase/migrations/202609301000_create_get_top_tagged_candidates.sql의
- * get_top_tagged_candidates(p_run_id) 반환 배열 원소 shape.
+ * get_top_tagged_candidates(p_run_id)가 반환하는 complete snapshot 후보 원소 shape.
+ * 함수명은 운영 호환성을 위해 유지되며 candidate_tags 상태와 무관하다.
  */
 export interface TopTradingCandidateRpcRow {
   candidate_id: string;

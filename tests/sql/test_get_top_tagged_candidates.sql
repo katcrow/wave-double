@@ -1,4 +1,4 @@
--- get_top_tagged_candidates()의 published snapshot lineage, active/vanished 태그,
+-- get_top_tagged_candidates()의 published snapshot lineage, 태그 상태 독립성,
 -- 거래대금 상위 3개와 ticker tie-break fixture.
 begin;
 
@@ -17,6 +17,8 @@ declare
   active_d uuid := gen_random_uuid();
   vanished_only uuid := gen_random_uuid();
   signal_date_mismatch uuid := gen_random_uuid();
+  untagged uuid := gen_random_uuid();
+  other_day_candidate uuid := gen_random_uuid();
 begin
   started := public.start_attempt(key, date '2099-09-30', 'intraday', 'manual', 300);
   run_id := (started->>'run_id')::uuid;
@@ -35,13 +37,20 @@ begin
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object('candidate_id', active_d, 'ticker', '000004', 'name', '상위외', 'trading_value', 100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
-      jsonb_build_object('candidate_id', vanished_only, 'ticker', '999999', 'name', '소멸전용', 'trading_value', 999,
+      jsonb_build_object('candidate_id', vanished_only, 'ticker', '999999', 'name', '소멸전용', 'trading_value', 1000,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object('candidate_id', signal_date_mismatch, 'ticker', '888888', 'name', '시그널일불일치', 'trading_value', 1000,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', untagged, 'ticker', '777777', 'name', '무태그상위', 'trading_value', 1100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
     ),
-    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 6,
-      'candidate_count', 6, 'excluded_count', 0, 'truncated_count', 0));
+    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 7,
+      'candidate_count', 7, 'excluded_count', 0, 'truncated_count', 0));
+  -- 같은 attempt에 남은 다른 거래일의 stale 행은 current snapshot에서 제외되어야 한다.
+  insert into public.candidates(candidate_id, attempt_run_id, ticker, name, trading_day, trading_value)
+    values (other_day_candidate, run_id, '666666', '이전거래일', date '2099-09-29', 9999);
+  insert into public.candidate_source_contrib(candidate_id, attempt_run_id, source, contribution_weight)
+    values (other_day_candidate, run_id, 't1859', 1.0);
   perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
 
   perform public.write_stage(run_id, 'tags', fence, lease, 'pending', 'running');
@@ -67,17 +76,28 @@ begin
   if jsonb_array_length(result) <> 3 then
     raise exception 'expected 3 top candidates, got %', jsonb_array_length(result);
   end if;
-  if (result->0->>'ticker') <> '000003' or (result->1->>'ticker') <> '000001' or (result->2->>'ticker') <> '000002' then
+  if (result->0->>'ticker') <> '777777' or (result->1->>'ticker') <> '888888' or (result->2->>'ticker') <> '999999' then
     raise exception 'unexpected trading value/ticker order: %', result;
   end if;
-  if exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '999999') then
-    raise exception 'vanished-only candidate must be excluded';
+  if not exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '777777') then
+    raise exception 'untagged candidate must be included';
   end if;
-  if exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '888888') then
-    raise exception 'candidate tag with a different signal_date must be excluded';
+  if not exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '999999') then
+    raise exception 'vanished-only candidate must be included';
+  end if;
+  if exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '666666') then
+    raise exception 'different trading_day candidate must be excluded';
+  end if;
+  if (result->0->>'candidate_id') <> untagged::text
+     or (result->0->>'name') <> '무태그상위'
+     or (result->0->>'trading_value') <> '1100' then
+    raise exception 'candidate payload fields are not preserved: %', result->0;
   end if;
   if exists (select 1 from jsonb_array_elements(result) e where (e->>'attempt_run_id')::uuid <> run_id or (e->>'trading_day') <> '2099-09-30') then
     raise exception 'snapshot lineage is not preserved';
+  end if;
+  if public.get_top_tagged_candidates(gen_random_uuid()) <> '[]'::jsonb then
+    raise exception 'nonexistent p_run_id must return an empty array';
   end if;
 end $$;
 
@@ -90,6 +110,7 @@ declare
   fence bigint;
   lease uuid;
   candidate_id uuid := gen_random_uuid();
+  untagged_candidate_id uuid := gen_random_uuid();
   result jsonb;
 begin
   started := public.start_attempt(key, date '2099-10-01', 'intraday', 'manual', 300);
@@ -99,10 +120,14 @@ begin
   lease := (started->>'lease_token')::uuid;
   perform public.write_stage(run_id, 'candidates', fence, lease, 'pending', 'running');
   perform public.write_candidates(run_id, fence, lease,
-    jsonb_build_array(jsonb_build_object('candidate_id', candidate_id, 'ticker', '000010', 'name', '소멸만', 'trading_value', 500,
-      'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))),
-    jsonb_build_object('selection_input_hash', repeat('b', 64), 'original_count', 1,
-      'candidate_count', 1, 'excluded_count', 0, 'truncated_count', 0));
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', candidate_id, 'ticker', '000010', 'name', '소멸만', 'trading_value', 500,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', untagged_candidate_id, 'ticker', '000011', 'name', '무태그만', 'trading_value', 400,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
+    ),
+    jsonb_build_object('selection_input_hash', repeat('b', 64), 'original_count', 2,
+      'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
   perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
   perform public.write_stage(run_id, 'tags', fence, lease, 'pending', 'running');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
@@ -116,8 +141,10 @@ begin
    where logical_run_key = key;
 
   result := public.get_top_tagged_candidates(run_id);
-  if result <> '[]'::jsonb then
-    raise exception 'vanished-only snapshot must return an empty array, got %', result;
+  if jsonb_array_length(result) <> 2
+     or (result->0->>'ticker') <> '000010'
+     or (result->1->>'ticker') <> '000011' then
+    raise exception 'no-active-tag snapshot must return both candidates, got %', result;
   end if;
 end $$;
 

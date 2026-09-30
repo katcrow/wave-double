@@ -169,7 +169,6 @@ function rpcPayload(name, body = {}) {
     return [base];
   }
   if (name === "get_top_tagged_candidates") {
-    if (activeScenario === "complete-vanish") return [];
     if (activeScenario === "top-error") return null;
     const base = {
       candidate_id: "00000000-0000-4000-8000-000000000401",

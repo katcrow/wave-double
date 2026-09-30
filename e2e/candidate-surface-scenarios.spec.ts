@@ -55,14 +55,17 @@ test("부분 소멸: 카드가 목록에 남고 소멸된 전략이 함께 표�
   await expect(page.locator(".candidate-card")).toHaveCount(1);
 });
 
-test("완전 소멸: active 태그가 0건이어도 카드는 남고 시그널이 소멸이다", async ({ page, request }) => {
+test("완전 소멸: active 태그가 0건이어도 거래대금 상위 후보는 노출된다", async ({ page, request }) => {
   await setScenario(request, "complete-vanish");
   await login(page);
 
+  // 기본 필터는 active만 보여주므로 완전 소멸 카드 회귀도 유지해서 검증한다.
+  await page.getByRole("checkbox", { name: "소멸" }).check();
   const card = page.locator(".candidate-card").first();
   await expect(card).toBeVisible();
   await expect(card).toContainText("시그널 소멸");
-  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toBeVisible();
+  await expect(page.locator(".top-trading-candidates__item")).toHaveCount(3);
   await expect(page.locator(".candidate-card")).toHaveCount(1);
 });
 

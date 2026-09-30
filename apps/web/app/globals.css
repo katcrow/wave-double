@@ -1133,7 +1133,7 @@ a {
   list-style: none;
 }
 
-/* 거래대금 상위 태깅 후보 참고 순위 */
+/* 거래대금 상위 후보 참고 순위 */
 
 .top-trading-candidates {
   margin-top: var(--space-6);

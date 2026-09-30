@@ -12,8 +12,8 @@ export default function TopTradingCandidates({
       <header className="top-trading-candidates__header">
         <div>
           <p className="top-trading-candidates__eyebrow">참고 순위</p>
-          <h2 id="top-trading-candidates-heading">거래대금 상위 태깅 후보</h2>
-          <p className="top-trading-candidates__description">오늘 태깅된 전체 후보 중 일간 거래대금 기준</p>
+          <h2 id="top-trading-candidates-heading">거래대금 상위 후보</h2>
+          <p className="top-trading-candidates__description">오늘 후보 모집단 중 일간 거래대금 기준</p>
         </div>
       </header>
       <ol className="top-trading-candidates__list">
