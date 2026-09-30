@@ -1,9 +1,9 @@
-"""Story 4.1: 태깅된(active) 후보만 조회하는 fetcher.
+"""수급 수집 대상 후보를 조회하는 fetcher.
 
 ``candidate_tags``(``status='active'``)로 이번 attempt에 태깅된 ``candidate_id``
-목록을 얻은 뒤, ``candidates`` 테이블에서 ``ticker``를 재조회한다. 전체 후보를
-반환하는 ``CandidateFetcher``와 구분되는, supply stage 전용 조회다(story 4.1 AC1:
-"태깅된" 후보만 대상).
+목록을 얻고 거래대금 상위 3개 후보를 추가해 ``candidates``에서 ticker를 조회한다.
+active 후보 수급 수집은 유지하면서 거래대금 상위 참고 영역에 필요한 프로그램 수급도
+태그 상태와 무관하게 수집한다.
 
 실패를 흡수하지 않고 그대로 전파한다(``supply_stage``가 잡아 stage를 명시적으로
 ``failed``로 기록한다 -- ``candidate_fetcher.py``와 동일한 원칙, AD-5).
@@ -18,14 +18,14 @@ import httpx
 
 @dataclass(frozen=True)
 class TaggedCandidateRow:
-    """supply stage에 전달할 최소한의 태깅된 후보 행."""
+    """supply stage에 전달할 최소한의 수급 대상 후보 행."""
 
     candidate_id: str
     ticker: str
 
 
 class TaggedCandidateFetcher:
-    """``candidate_tags``(active) → ``candidates`` 순서로 태깅된 후보를 조회한다."""
+    """active 태그 후보와 거래대금 상위 3개 후보의 합집합을 조회한다."""
 
     def __init__(
         self,
@@ -52,7 +52,7 @@ class TaggedCandidateFetcher:
         self.close()
 
     def fetch(self, run_id: str) -> list[TaggedCandidateRow]:
-        """``run_id``(attempt)에서 ``status='active'``인 태그를 가진 후보 목록을 반환한다.
+        """active 태그 후보와 거래대금 상위 3개 후보를 중복 없이 반환한다.
 
         실패 시 예외를 그대로 전파한다(흡수하지 않음).
         """
@@ -71,17 +71,15 @@ class TaggedCandidateFetcher:
         if not isinstance(tag_rows, list):
             raise RuntimeError("Supabase candidate_tags response malformed: expected a list")
 
-        candidate_ids = sorted({str(row["candidate_id"]) for row in tag_rows})
-        if not candidate_ids:
-            return []
+        active_candidate_ids = {str(row["candidate_id"]) for row in tag_rows}
 
         response = self._http.get(
             f"{self._base_url}/rest/v1/candidates",
             headers=self._headers(),
             params={
-                "candidate_id": f"in.({','.join(candidate_ids)})",
                 "attempt_run_id": f"eq.{run_id}",
-                "select": "candidate_id,ticker",
+                "select": "candidate_id,ticker,trading_value",
+                "order": "trading_value.desc,ticker.asc",
             },
             timeout=self._timeout,
         )
@@ -89,7 +87,20 @@ class TaggedCandidateFetcher:
         rows = response.json()
         if not isinstance(rows, list):
             raise RuntimeError("Supabase candidates response malformed: expected a list")
-        return [TaggedCandidateRow(str(row["candidate_id"]), str(row["ticker"])) for row in rows]
+        if any(
+            not isinstance(row, dict)
+            or not row.get("candidate_id")
+            or not row.get("ticker")
+            for row in rows
+        ):
+            raise RuntimeError("Supabase candidates response malformed: invalid candidate row")
+        top_candidate_ids = {str(row["candidate_id"]) for row in rows[:3]}
+        selected_ids = active_candidate_ids | top_candidate_ids
+        return [
+            TaggedCandidateRow(str(row["candidate_id"]), str(row["ticker"]))
+            for row in rows
+            if isinstance(row, dict) and str(row.get("candidate_id")) in selected_ids
+        ]
 
     def _headers(self) -> dict[str, str]:
         return {

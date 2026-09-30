@@ -22,3 +22,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-publish-tags-with-reference-supply-partial.md`
   summary: production 외부 adapter 누락 시 market_supply stage를 명시적 terminal 상태로 기록하는 호환성 경로를 정리한다.
   evidence: scheduler의 legacy optional adapter 경로는 market stage를 건너뛰어 pending으로 남길 수 있으나 production CLI는 모든 adapter를 주입한다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-top-trading-candidate-details.md`
+  summary: 거래대금 상위 후보의 실제 주요 섹터 원천과 배치 수집 및 기존 후보 backfill을 추가한다.
+  evidence: 현재 candidates에 major_sector_name 저장 칼럼과 RPC/UI fallback은 있지만 t1859와 기존 배치가 섹터명을 제공하지 않아 운영 결과가 미확인으로 남는다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-top-trading-candidate-details.md`
+  summary: 거래대금 상위 참고 영역에 snapshot 거래일과 freshness 상태를 함께 표시한다.
+  evidence: 현재 영역은 complete snapshot의 거래일을 데이터로 사용하지만 화면에는 오늘이라는 고정 설명만 표시한다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-top-trading-candidate-details.md`
+  summary: 구버전 top RPC 응답의 선택적 상세 필드에 대한 점진 배포 호환 처리를 추가한다.
+  evidence: 새 웹 shape guard는 migration 적용 후의 상세 필드 계약을 요구하며, migration 선적용 후 웹 배포 순서를 전제로 한다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-top-trading-candidate-details.md`
+  summary: top RPC 조회 실패와 상세 지표 결측을 화면 상태로 구분해 안내한다.
+  evidence: 기존 오류 경계는 콘솔 로깅 후 상단 영역을 숨기고 상세 결측은 미확인으로 표시한다.

@@ -34,8 +34,12 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(page.getByRole("heading", { name: "조정후보" })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toBeVisible();
   await expect(page.locator(".top-trading-candidates__item")).toHaveCount(3);
-  await expect(page.locator(".top-trading-candidates__item").nth(0)).toContainText("조정후보");
-  await expect(page.locator(".top-trading-candidates__item").nth(0)).toContainText("123,456,789원");
+  const topCandidate = page.locator(".top-trading-candidates__item").nth(0);
+  await expect(topCandidate).toContainText("조정후보");
+  await expect(topCandidate.locator("dt").filter({ hasText: "거래대금" }).locator("..").locator("dd")).toHaveText("1억원");
+  await expect(topCandidate.locator("dt").filter({ hasText: "당일 상승률" }).locator("..").locator("dd")).toHaveText("+2.90%");
+  await expect(topCandidate.locator("dt").filter({ hasText: "주요 섹터" }).locator("..").locator("dd")).toHaveText("반도체");
+  await expect(topCandidate.locator("dt").filter({ hasText: "프로그램 순매수금액" }).locator("..").locator("dd")).toHaveText("12억원");
   await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("SK하이닉스");
   await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("000660");
   await expect(page.locator(".top-trading-candidates__item").nth(2)).toContainText("NAVER");

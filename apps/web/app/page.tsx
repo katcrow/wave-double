@@ -72,28 +72,26 @@ export default async function HomePage() {
       console.error("unexpected get_today_candidate_cards shape", cardRows);
     }
 
-    // 상단 요약은 기존 카드 RPC와 오류 경계를 분리한다. 카드 조회가 실패하거나 malformed면
-    // 기존 후보 오류 표면은 유지하고, 새 참고 영역만 생략한다.
-    if (!candidateCardsFetchFailed) {
-      try {
-        const { data: topTradingData, error: topTradingError } = await supabase.rpc(
-          "get_top_tagged_candidates",
-          { p_run_id: snapshot.complete_snapshot.run_id },
+    // 상단 요약은 기존 카드 RPC와 독립적으로 조회한다. 카드 조회가 실패해도
+    // complete snapshot의 거래대금 상위 참고 영역은 계속 보여준다.
+    try {
+      const { data: topTradingData, error: topTradingError } = await supabase.rpc(
+        "get_top_tagged_candidates",
+        { p_run_id: snapshot.complete_snapshot.run_id },
+      );
+      if (topTradingError) {
+        console.error("get_top_tagged_candidates failed", topTradingError);
+      } else if (Array.isArray(topTradingData) && topTradingData.every(isTopTradingCandidateRpcRow)) {
+        topTradingCandidates = buildTopTradingCandidateViewModels(
+          topTradingData as unknown as TopTradingCandidateRpcRow[],
+          snapshot.complete_snapshot.run_id,
+          snapshot.complete_snapshot.trading_day,
         );
-        if (topTradingError) {
-          console.error("get_top_tagged_candidates failed", topTradingError);
-        } else if (Array.isArray(topTradingData) && topTradingData.every(isTopTradingCandidateRpcRow)) {
-          topTradingCandidates = buildTopTradingCandidateViewModels(
-            topTradingData as unknown as TopTradingCandidateRpcRow[],
-            snapshot.complete_snapshot.run_id,
-            snapshot.complete_snapshot.trading_day,
-          );
-        } else {
-          console.error("unexpected get_top_tagged_candidates shape", topTradingData);
-        }
-      } catch (topTradingError) {
-        console.error("get_top_tagged_candidates threw", topTradingError);
+      } else {
+        console.error("unexpected get_top_tagged_candidates shape", topTradingData);
       }
+    } catch (topTradingError) {
+      console.error("get_top_tagged_candidates threw", topTradingError);
     }
 
     const { data: evidenceRows, error: evidenceError } = await supabase.rpc("get_candidate_evidence", {

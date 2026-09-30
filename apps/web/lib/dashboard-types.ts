@@ -222,6 +222,9 @@ export interface TopTradingCandidateRpcRow {
   name: string | null;
   trading_day: string;
   trading_value: number;
+  change_pct: number | null;
+  major_sector_name: string | null;
+  program_buy_value: number | null;
 }
 
 export type EvidenceSource = "t1859" | "t1852" | "t1856";

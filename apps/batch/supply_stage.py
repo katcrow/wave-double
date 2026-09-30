@@ -1,12 +1,12 @@
-"""Story 4.1: 태깅된 후보의 3일치(D-2/D-1/D0) 가격·수급 수집 stage.
+"""후보의 3일치(D-2/D-1/D0) 가격·수급 수집 stage.
 
-candidates/tags stage 뒤에 배선되어, 태깅된(``candidate_tags.status='active'``)
-각 후보에 대해 LS ``t1702``를 후보당 1콜(fromdt=D-2 거래일, todt=D0) 호출하고,
+candidates/tags stage 뒤에 배선되어, active 태그 후보와 거래대금 상위 3개 후보의
+합집합에 대해 LS ``t1702``를 후보당 1콜(fromdt=D-2 거래일, todt=D0) 호출하고,
 ``trading_calendar`` 기준 정확한 3거래일에 매핑해 ``supply_3day``에 저장한다.
 
 한 종목의 실패(비-ok 응답, 예상 3거래일 중 누락된 날짜)가 나머지 후보 처리를
 막지 않고 error로 집계한다(``tags_stage.py`` 패턴). 태깅된 후보가 없으면 0행
-처리로 success를 기록한다(에러 아님).
+대상 후보가 없으면 0행 처리로 success를 기록한다(에러 아님).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ _SEMANTIC_RETRY_COUNT = 1
 
 
 class TaggedCandidateFetcherProtocol(Protocol):
-    """``candidate_tags``(active) 기반 태깅된 후보 조회 프로토콜."""
+    """active 후보와 거래대금 상위 참고 후보 조회 프로토콜."""
 
     def fetch(self, run_id: str) -> list[Any]: ...
 

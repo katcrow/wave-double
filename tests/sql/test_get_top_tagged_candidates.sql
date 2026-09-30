@@ -46,6 +46,20 @@ begin
     ),
     jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 7,
       'candidate_count', 7, 'excluded_count', 0, 'truncated_count', 0));
+  update public.candidates
+     set major_sector_name = '테스트 섹터'
+   where candidate_id = untagged and attempt_run_id = run_id;
+  insert into public.daily_ohlcv(ticker, trading_day, open, high, low, close, volume, adjusted)
+  values
+    ('777777', date '2099-09-29', 100, 101, 99, 100, 1000, true),
+    ('777777', date '2099-09-30', 109, 111, 108, 110, 2000, true);
+  insert into public.supply_3day(
+    candidate_id, attempt_run_id, trading_day, slot, close, volume, change_pct,
+    foreign_net, institution_net, individual_net, program_net, investor_net_status
+  ) values (
+    untagged, run_id, date '2099-09-30', 'D0', 110, 2000, 10,
+    1, 1, -1, 2272727, 'confirmed'
+  );
   -- 같은 attempt에 남은 다른 거래일의 stale 행은 current snapshot에서 제외되어야 한다.
   insert into public.candidates(candidate_id, attempt_run_id, ticker, name, trading_day, trading_value)
     values (other_day_candidate, run_id, '666666', '이전거래일', date '2099-09-29', 9999);
@@ -92,6 +106,16 @@ begin
      or (result->0->>'name') <> '무태그상위'
      or (result->0->>'trading_value') <> '1100' then
     raise exception 'candidate payload fields are not preserved: %', result->0;
+  end if;
+  if not (result->0 ? 'change_pct')
+     or not (result->0 ? 'major_sector_name')
+     or not (result->0 ? 'program_buy_value') then
+    raise exception 'candidate detail fields are missing: %', result->0;
+  end if;
+  if (result->0->>'change_pct')::numeric <> 10
+     or (result->0->>'major_sector_name') <> '테스트 섹터'
+     or (result->0->>'program_buy_value')::numeric <> 2.5 then
+    raise exception 'candidate detail fields are not calculated or preserved: %', result->0;
   end if;
   if exists (select 1 from jsonb_array_elements(result) e where (e->>'attempt_run_id')::uuid <> run_id or (e->>'trading_day') <> '2099-09-30') then
     raise exception 'snapshot lineage is not preserved';

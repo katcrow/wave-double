@@ -26,9 +26,23 @@ export default function TopTradingCandidates({
               <p className="top-trading-candidates__name">{candidate.displayName}</p>
               <p className="top-trading-candidates__ticker">{candidate.ticker}</p>
             </div>
-            <dl className="top-trading-candidates__value">
-              <dt>일간 거래대금</dt>
-              <dd>{candidate.formattedTradingValue}원</dd>
+            <dl className="top-trading-candidates__metrics">
+              <div className="top-trading-candidates__metric">
+                <dt>거래대금</dt>
+                <dd>{candidate.formattedTradingValue}억원</dd>
+              </div>
+              <div className="top-trading-candidates__metric">
+                <dt>당일 상승률</dt>
+                <dd>{candidate.formattedChangePct}</dd>
+              </div>
+              <div className="top-trading-candidates__metric top-trading-candidates__metric--sector">
+                <dt>주요 섹터</dt>
+                <dd>{candidate.majorSectorName ?? "미확인"}</dd>
+              </div>
+              <div className="top-trading-candidates__metric">
+                <dt>프로그램 순매수금액</dt>
+                <dd>{candidate.formattedProgramBuyValue}{candidate.programBuyValue === null ? "" : "억원"}</dd>
+              </div>
             </dl>
           </li>
         ))}

@@ -10,11 +10,21 @@ export interface TopTradingCandidateViewModel {
   ticker: string;
   tradingValue: number;
   formattedTradingValue: string;
+  changePct: number | null;
+  formattedChangePct: string;
+  majorSectorName: string | null;
+  programBuyValue: number | null;
+  formattedProgramBuyValue: string;
 }
 
 const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
+const PERCENT_FORMATTER = new Intl.NumberFormat("ko-KR", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+});
+const WON_PER_EOK = 100_000_000;
 
 function isSafeNonNegativeNumber(value: unknown): value is number {
   return (
@@ -23,6 +33,10 @@ function isSafeNonNegativeNumber(value: unknown): value is number {
     value >= 0 &&
     value <= Number.MAX_SAFE_INTEGER
   );
+}
+
+function isFiniteNumberOrNull(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value));
 }
 
 function isIsoDate(value: unknown): value is string {
@@ -42,7 +56,10 @@ export function isTopTradingCandidateRpcRow(value: unknown): value is TopTrading
     typeof row.ticker === "string" && row.ticker.length > 0 &&
     (row.name === null || typeof row.name === "string") &&
     isIsoDate(row.trading_day) &&
-    isSafeNonNegativeNumber(row.trading_value)
+    isSafeNonNegativeNumber(row.trading_value) &&
+    isFiniteNumberOrNull(row.change_pct) &&
+    (row.major_sector_name === null || typeof row.major_sector_name === "string") &&
+    isFiniteNumberOrNull(row.program_buy_value)
   );
 }
 
@@ -70,10 +87,26 @@ export function buildTopTradingCandidateViewModels(
       displayName: row.name?.trim() || row.ticker,
       ticker: row.ticker,
       tradingValue: row.trading_value,
-      formattedTradingValue: NUMBER_FORMATTER.format(row.trading_value),
+      formattedTradingValue: formatTradingValue(row.trading_value),
+      changePct: row.change_pct,
+      formattedChangePct: formatChangePct(row.change_pct),
+      majorSectorName: row.major_sector_name?.trim() || null,
+      programBuyValue: row.program_buy_value,
+      formattedProgramBuyValue: formatEokValue(row.program_buy_value),
     }));
 }
 
 export function formatTradingValue(value: number): string {
-  return isSafeNonNegativeNumber(value) ? NUMBER_FORMATTER.format(value) : "미확인";
+  return isSafeNonNegativeNumber(value) ? NUMBER_FORMATTER.format(value / WON_PER_EOK) : "미확인";
+}
+
+export function formatChangePct(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "미확인";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${PERCENT_FORMATTER.format(value)}%`;
+}
+
+/** program_buy_value는 RPC에서 이미 억원 단위로 반환된다. */
+export function formatEokValue(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? NUMBER_FORMATTER.format(value) : "미확인";
 }

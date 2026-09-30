@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildTopTradingCandidateViewModels,
+  formatChangePct,
+  formatEokValue,
   formatTradingValue,
   isTopTradingCandidateRpcRow,
 } from "./top-trading-candidates.ts";
@@ -18,6 +20,9 @@ function row(overrides: Partial<TopTradingCandidateRpcRow> = {}): TopTradingCand
     name: "삼성전자",
     trading_day: TRADING_DAY,
     trading_value: 100000000,
+    change_pct: null,
+    major_sector_name: null,
+    program_buy_value: null,
     ...overrides,
   };
 }
@@ -62,14 +67,26 @@ test("다른 run 또는 trading_day 행은 같은 complete snapshot에 섞지 �
   assert.deepEqual(result.map(({ ticker }) => ticker), ["000003"]);
 });
 
-test("거래대금은 원 단위 한국어 숫자 문자열로 표시한다", () => {
-  assert.equal(formatTradingValue(123456789), "123,456,789");
+test("거래대금은 소수점 없는 억원 단위로 반올림해 표시한다", () => {
+  assert.equal(formatTradingValue(123456789), "1");
+  assert.equal(formatTradingValue(150000000), "2");
   assert.equal(formatTradingValue(-1), "미확인");
   assert.equal(formatTradingValue(Number.MAX_SAFE_INTEGER + 1), "미확인");
 });
 
+test("상승률과 프로그램 금액은 부호·결측·억원 단위를 보존한다", () => {
+  assert.equal(formatChangePct(2.9), "+2.90%");
+  assert.equal(formatChangePct(-0.8), "-0.80%");
+  assert.equal(formatChangePct(0), "0.00%");
+  assert.equal(formatChangePct(null), "미확인");
+  assert.equal(formatEokValue(12.4), "12");
+  assert.equal(formatEokValue(-2.1), "-2");
+  assert.equal(formatEokValue(null), "미확인");
+});
+
 test("RPC shape guard는 유한 숫자와 날짜를 강제한다", () => {
-  assert.equal(isTopTradingCandidateRpcRow(row()), true);
+  assert.equal(isTopTradingCandidateRpcRow({ ...row(), change_pct: 2.9, major_sector_name: "반도체", program_buy_value: 12.4 }), true);
+  assert.equal(isTopTradingCandidateRpcRow({ ...row(), change_pct: null, major_sector_name: null, program_buy_value: null }), true);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: "123" }), false);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: -1 }), false);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: Number.MAX_SAFE_INTEGER + 1 }), false);

@@ -177,11 +177,14 @@ function rpcPayload(name, body = {}) {
       name: activeScenario === "strategy-f" ? "F후보" : "조정후보",
       trading_day: TRADING_DAY,
       trading_value: 123456789,
+      change_pct: 2.9,
+      major_sector_name: "반도체",
+      program_buy_value: 12.4,
     };
     const additional = [
-      { ...base, candidate_id: "00000000-0000-4000-8000-000000000402", ticker: "000660", name: "SK하이닉스", trading_value: 100000000 },
-      { ...base, candidate_id: "00000000-0000-4000-8000-000000000403", ticker: "035420", name: "NAVER", trading_value: 100000000 },
-      { ...base, candidate_id: "00000000-0000-4000-8000-000000000404", ticker: "051910", name: "LG화학", trading_value: 90000000 },
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000402", ticker: "000660", name: "SK하이닉스", trading_value: 100000000, change_pct: 1.2, major_sector_name: "반도체", program_buy_value: 8.6 },
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000403", ticker: "035420", name: "NAVER", trading_value: 100000000, change_pct: -0.8, major_sector_name: "인터넷", program_buy_value: -2.1 },
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000404", ticker: "051910", name: "LG화학", trading_value: 90000000, change_pct: 0, major_sector_name: "2차전지", program_buy_value: 0 },
     ];
     if (activeScenario === "top-malformed") return [{ ...base, trading_value: "not-a-number" }];
     return [base, ...additional];
