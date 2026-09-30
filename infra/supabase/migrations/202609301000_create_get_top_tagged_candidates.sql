@@ -30,6 +30,7 @@ as $$
     inner join public.runs r
       on r.run_id = lr.current_complete_run_id
       and r.run_id = p_run_id
+      and r.logical_run_key = lr.logical_run_key
       and r.status = 'published'
     inner join public.candidates c
       on c.attempt_run_id = r.run_id
@@ -39,6 +40,7 @@ as $$
       from public.candidate_tags t
       where t.candidate_id = c.candidate_id
         and t.attempt_run_id = c.attempt_run_id
+        and t.signal_date = c.trading_day
         and t.status = 'active'
     )
     order by c.trading_value desc, c.ticker asc

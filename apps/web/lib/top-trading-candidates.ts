@@ -16,8 +16,13 @@ const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
+function isSafeNonNegativeNumber(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= Number.MAX_SAFE_INTEGER
+  );
 }
 
 function isIsoDate(value: unknown): value is string {
@@ -37,7 +42,7 @@ export function isTopTradingCandidateRpcRow(value: unknown): value is TopTrading
     typeof row.ticker === "string" && row.ticker.length > 0 &&
     (row.name === null || typeof row.name === "string") &&
     isIsoDate(row.trading_day) &&
-    isFiniteNumber(row.trading_value)
+    isSafeNonNegativeNumber(row.trading_value)
   );
 }
 
@@ -61,8 +66,8 @@ export function buildTopTradingCandidateViewModels(
     .map((row, index) => ({
       rank: index + 1,
       candidateId: row.candidate_id,
-      name: row.name,
-      displayName: row.name ?? row.ticker,
+      name: row.name?.trim() || null,
+      displayName: row.name?.trim() || row.ticker,
       ticker: row.ticker,
       tradingValue: row.trading_value,
       formattedTradingValue: NUMBER_FORMATTER.format(row.trading_value),
@@ -70,5 +75,5 @@ export function buildTopTradingCandidateViewModels(
 }
 
 export function formatTradingValue(value: number): string {
-  return isFiniteNumber(value) ? NUMBER_FORMATTER.format(value) : "미확인";
+  return isSafeNonNegativeNumber(value) ? NUMBER_FORMATTER.format(value) : "미확인";
 }

@@ -31,9 +31,15 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(page).toHaveURL(/\/$/);
   await expect.poll(() => documentNavigationRequests.length).toBeGreaterThan(0);
   await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "조정후보" })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toBeVisible();
-  await expect(page.locator(".top-trading-candidates__rank").first()).toContainText("1");
-  await expect(page.locator(".top-trading-candidates__value").first()).toContainText("123,456,789원");
+  await expect(page.locator(".top-trading-candidates__item")).toHaveCount(3);
+  await expect(page.locator(".top-trading-candidates__item").nth(0)).toContainText("조정후보");
+  await expect(page.locator(".top-trading-candidates__item").nth(0)).toContainText("123,456,789원");
+  await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("SK하이닉스");
+  await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("000660");
+  await expect(page.locator(".top-trading-candidates__item").nth(2)).toContainText("NAVER");
+  await expect(page.locator(".top-trading-candidates__item").nth(2)).toContainText("035420");
 
   await page.getByRole("button", { name: "근거 보기" }).click();
   const evidence = page.getByRole("region", { name: "후보 근거 패널" });
@@ -43,6 +49,8 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
 
   await page.getByRole("checkbox", { name: "좋은 수급" }).check();
   await expect(page.locator(".candidate-filter__result-count")).toContainText("필터 결과 1건");
+  await expect(page.locator(".top-trading-candidates__item")).toHaveCount(3);
+  await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("SK하이닉스");
 
   await page.getByRole("tab", { name: "KOSDAQ" }).click();
   await expect(page).toHaveURL(/market=KOSDAQ/);
@@ -58,6 +66,18 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
 
 test("상단 요약 shape 오류는 기존 후보 카드 표면을 막지 않는다", async ({ page, request }) => {
   await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "top-malformed" } });
+  await page.goto("/login");
+  await page.getByLabel("이메일").fill("neo@example.test");
+  await page.getByLabel("비밀번호").fill("fixture-password");
+  await page.getByRole("button", { name: "로그인" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
+});
+
+test("상단 요약 RPC transport 오류는 기존 후보 카드를 유지한다", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:54321/__e2e/scenario", { data: { scenario: "top-error" } });
   await page.goto("/login");
   await page.getByLabel("이메일").fill("neo@example.test");
   await page.getByLabel("비밀번호").fill("fixture-password");

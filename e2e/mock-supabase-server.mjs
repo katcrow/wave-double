@@ -67,6 +67,7 @@ const SCENARIOS = new Set([
   "population-dropout",
   "collection-failure",
   "card-error",
+  "top-error",
   "top-malformed",
   "intraday",
   "strategy-f",
@@ -169,6 +170,7 @@ function rpcPayload(name, body = {}) {
   }
   if (name === "get_top_tagged_candidates") {
     if (activeScenario === "complete-vanish") return [];
+    if (activeScenario === "top-error") return null;
     const base = {
       candidate_id: "00000000-0000-4000-8000-000000000401",
       attempt_run_id: RUN_ID,
@@ -177,8 +179,13 @@ function rpcPayload(name, body = {}) {
       trading_day: TRADING_DAY,
       trading_value: 123456789,
     };
+    const additional = [
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000402", ticker: "000660", name: "SK하이닉스", trading_value: 100000000 },
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000403", ticker: "035420", name: "NAVER", trading_value: 100000000 },
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000404", ticker: "051910", name: "LG화학", trading_value: 90000000 },
+    ];
     if (activeScenario === "top-malformed") return [{ ...base, trading_value: "not-a-number" }];
-    return [base];
+    return [base, ...additional];
   }
   if (name === "get_candidate_evidence") {
     return [{

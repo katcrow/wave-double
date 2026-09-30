@@ -64,10 +64,33 @@ test("다른 run 또는 trading_day 행은 같은 complete snapshot에 섞지 �
 
 test("거래대금은 원 단위 한국어 숫자 문자열로 표시한다", () => {
   assert.equal(formatTradingValue(123456789), "123,456,789");
+  assert.equal(formatTradingValue(-1), "미확인");
+  assert.equal(formatTradingValue(Number.MAX_SAFE_INTEGER + 1), "미확인");
 });
 
 test("RPC shape guard는 유한 숫자와 날짜를 강제한다", () => {
   assert.equal(isTopTradingCandidateRpcRow(row()), true);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: "123" }), false);
+  assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: -1 }), false);
+  assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: Number.MAX_SAFE_INTEGER + 1 }), false);
+  assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: Number.POSITIVE_INFINITY }), false);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_day: "2026-02-30" }), false);
+});
+
+test("이름이 공백이면 ticker를 표시 이름으로 사용하고 유효한 이름은 trim한다", () => {
+  const [fallback] = buildTopTradingCandidateViewModels(
+    [row({ name: "   ", ticker: "005930" })],
+    RUN_ID,
+    TRADING_DAY,
+  );
+  const [trimmed] = buildTopTradingCandidateViewModels(
+    [row({ name: "  삼성전자  " })],
+    RUN_ID,
+    TRADING_DAY,
+  );
+
+  assert.equal(fallback.name, null);
+  assert.equal(fallback.displayName, "005930");
+  assert.equal(trimmed.name, "삼성전자");
+  assert.equal(trimmed.displayName, "삼성전자");
 });

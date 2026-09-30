@@ -23,8 +23,8 @@ export default function TopTradingCandidates({
               {candidate.rank}
             </span>
             <div className="top-trading-candidates__identity">
-              <h3>{candidate.displayName}</h3>
-              <p>{candidate.ticker}</p>
+              <p className="top-trading-candidates__name">{candidate.displayName}</p>
+              <p className="top-trading-candidates__ticker">{candidate.ticker}</p>
             </div>
             <dl className="top-trading-candidates__value">
               <dt>일간 거래대금</dt>

@@ -62,6 +62,7 @@ test("완전 소멸: active 태그가 0건이어도 카드는 남고 시그널�
   const card = page.locator(".candidate-card").first();
   await expect(card).toBeVisible();
   await expect(card).toContainText("시그널 소멸");
+  await expect(page.getByRole("heading", { name: "거래대금 상위 태깅 후보" })).toHaveCount(0);
   await expect(page.locator(".candidate-card")).toHaveCount(1);
 });
 

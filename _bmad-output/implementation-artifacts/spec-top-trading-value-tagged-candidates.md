@@ -6,7 +6,7 @@ status: 'done'
 baseline_revision: '989de87e7d16c13c3db035cc901410cd31b0ec0e'
 baseline_commit: '989de87e7d16c13c3db035cc901410cd31b0ec0e'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['C:/dev/wave-double/AGENTS.md']
 warnings: []
 deferred: []
@@ -85,7 +85,22 @@ deferred: []
 
 ## Review Triage Log
 
-- 독립 리뷰 subagent 레이어는 현재 세션에 해당 capability가 없어 실행하지 못했다. 수동 staged diff 리뷰와 지정 검증은 완료했고, 별도 유지 finding은 없었다.
+### 2026-09-30 — Review pass
+
+- intent_gap: 0
+- bad_spec: 0
+- patch: 4 (medium 4)
+- defer: 1 (low 1)
+- dismissed:
+  - 이 작업은 전략 신호를 추가하는 것이 아니라 기존 active 태깅 후보를 참고용으로 정렬하는 기능이다. 별도 전략 조건을 도입하지 않았다.
+  - 운영 migration parity 전체 검사는 기존 migration drift와 중복 timestamp가 있어 이 작업의 acceptance blocker로 분류하지 않았다. 신규 함수·grant·fixture는 별도로 검증했다.
+  - ticker ASC 정렬의 DB/JS collation 차이는 시장 ticker가 고정 6자리 코드라는 전제에서 재현 가능한 문제로 확인되지 않아 유지 finding으로 남기지 않았다.
+- addressed_findings:
+  - `[medium][patch]` 상단 카드의 종목명이 기존 `조정후보` heading과 충돌하던 문제를 일반 텍스트 요소로 변경하고 E2E count assertion으로 고정했다.
+  - `[medium][patch]` 상단 전용 RPC의 transport 예외가 기존 후보 목록을 가리던 문제를 독립 `try/catch` 오류 경계로 수정했다.
+  - `[medium][patch]` RPC SQL의 run lineage·signal date 누락 및 이름/거래대금 입력 검증 취약점을 같은 lineage/date 조건과 안전한 숫자·이름 fallback으로 보강했다.
+  - `[medium][patch]` E2E에 top 3·동률·top RPC 오류·complete 빈 상태·기존 후보 필터와의 독립성 검증을 추가했다.
+- follow-up review recommendation: true (medium 4, score 12; 재검토 권고는 후속 작업 큐에 기록하되 현재 패치에서 발견된 항목은 모두 addressed 상태다).
 
 ## Suggested Review Order
 
@@ -123,3 +138,41 @@ deferred: []
 
 - 인증 화면의 요약 표시와 오류 경계를 Playwright 시나리오로 검증한다.
   [`authenticated-dashboard.spec.ts:34`](../../e2e/authenticated-dashboard.spec.ts#L34)
+
+## Auto Run Result
+
+### Summary
+
+오늘의 active 태깅 후보 중 일간 거래대금 상위 3개를 기존 후보 목록과 독립적인 참고 영역으로 표시한다. 후보 목록의 필터를 바꿔도 상단 요약은 유지되며, 전용 RPC 실패나 빈 결과는 기존 대시보드 화면을 가리지 않는다.
+
+### Files changed
+
+- `infra/supabase/migrations/202609301000_create_get_top_tagged_candidates.sql`
+- `apps/web/app/page.tsx`
+- `apps/web/components/dashboard/TopTradingCandidates.tsx`
+- `apps/web/lib/dashboard-types.ts`
+- `apps/web/lib/top-trading-candidates.ts`
+- `apps/web/lib/top-trading-candidates.test.ts`
+- `apps/web/app/globals.css`
+- `e2e/authenticated-dashboard.spec.ts`
+- `e2e/candidate-surface-scenarios.spec.ts`
+- `e2e/mock-supabase-server.mjs`
+- `tests/sql/test_get_top_tagged_candidates.sql`
+
+### Verification
+
+- 웹 단위 테스트: 145 passed
+- `npm run typecheck`: passed
+- `npm run build`: passed
+- Python candidate ordering regression: 13 passed
+- `git diff --check`: passed
+- Playwright MCP 수동 검증: top 3, 동률 정렬, 필터 독립성, top RPC 오류, complete 빈 상태, desktop 3열/mobile 1열 확인
+- 운영 Supabase에서 신규 RPC 존재·권한·migration 기록을 확인하고 SQL fixture를 rollback 경계로 실행
+- `python tools/check_migration_order.py`: 기존 `202609161200` 중복 timestamp로 실패; 신규 변경과 무관한 기존 repository issue
+- production parity gate: 기존 migration drift 10건과 warning 11건이 남아 있어 전체 parity pass로 주장하지 않음
+
+### Delivery
+
+- 기준 구현 commit: `774e24ca28370ffb64e6b341ee940e49b5df6989`
+- review patch는 최종 검증 후 별도 commit으로 기록한다.
+- 웹 push/Vercel 배포는 명시 요청 범위가 아니므로 수행하지 않았다.

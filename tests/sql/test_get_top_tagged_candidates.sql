@@ -4,9 +4,10 @@ begin;
 
 do $$
 declare
-  key text := 'close:2099-09-30';
+  key text := 'intraday:2099-09-30:09:00';
   started jsonb;
   run_id uuid;
+  test_run_id uuid;
   fence bigint;
   lease uuid;
   result jsonb;
@@ -15,9 +16,11 @@ declare
   active_c uuid := gen_random_uuid();
   active_d uuid := gen_random_uuid();
   vanished_only uuid := gen_random_uuid();
+  signal_date_mismatch uuid := gen_random_uuid();
 begin
-  started := public.start_attempt(key, date '2099-09-30', 'close', 'manual', 300);
+  started := public.start_attempt(key, date '2099-09-30', 'intraday', 'manual', 300);
   run_id := (started->>'run_id')::uuid;
+  test_run_id := run_id;
   fence := (started->>'fence_token')::bigint;
   lease := (started->>'lease_token')::uuid;
 
@@ -33,10 +36,12 @@ begin
       jsonb_build_object('candidate_id', active_d, 'ticker', '000004', 'name', '상위외', 'trading_value', 100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object('candidate_id', vanished_only, 'ticker', '999999', 'name', '소멸전용', 'trading_value', 999,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', signal_date_mismatch, 'ticker', '888888', 'name', '시그널일불일치', 'trading_value', 1000,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
     ),
-    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 5,
-      'candidate_count', 5, 'excluded_count', 0, 'truncated_count', 0));
+    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 6,
+      'candidate_count', 6, 'excluded_count', 0, 'truncated_count', 0));
   perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
 
   perform public.write_stage(run_id, 'tags', fence, lease, 'pending', 'running');
@@ -46,9 +51,17 @@ begin
     (active_b, run_id, 'C', date '2099-09-30', 'vanished'),
     (active_c, run_id, 'D', date '2099-09-30', 'active'),
     (active_d, run_id, 'E', date '2099-09-30', 'active'),
-    (vanished_only, run_id, 'F', date '2099-09-30', 'vanished');
+    (vanished_only, run_id, 'F', date '2099-09-30', 'vanished'),
+    (signal_date_mismatch, run_id, 'A', date '2099-09-29', 'active');
   perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success');
-  perform public.publish_attempt(run_id, fence, lease);
+  -- 이 fixture의 대상은 publish_attempt가 아니라 읽기 RPC이므로, 수급/시장수급
+  -- 원천 데이터를 요구하는 publish 경로를 호출하지 않고 published lineage만 구성한다.
+  update public.runs
+     set status = 'published', finished_at = now()
+   where public.runs.run_id = test_run_id;
+  update public.logical_runs
+     set current_complete_run_id = test_run_id, published_at = now()
+   where logical_run_key = key;
 
   result := public.get_top_tagged_candidates(run_id);
   if jsonb_array_length(result) <> 3 then
@@ -60,6 +73,9 @@ begin
   if exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '999999') then
     raise exception 'vanished-only candidate must be excluded';
   end if;
+  if exists (select 1 from jsonb_array_elements(result) e where (e->>'ticker') = '888888') then
+    raise exception 'candidate tag with a different signal_date must be excluded';
+  end if;
   if exists (select 1 from jsonb_array_elements(result) e where (e->>'attempt_run_id')::uuid <> run_id or (e->>'trading_day') <> '2099-09-30') then
     raise exception 'snapshot lineage is not preserved';
   end if;
@@ -67,16 +83,18 @@ end $$;
 
 do $$
 declare
-  key text := 'close:2099-10-01';
+  key text := 'intraday:2099-10-01:09:00';
   started jsonb;
   run_id uuid;
+  test_run_id uuid;
   fence bigint;
   lease uuid;
   candidate_id uuid := gen_random_uuid();
   result jsonb;
 begin
-  started := public.start_attempt(key, date '2099-10-01', 'close', 'manual', 300);
+  started := public.start_attempt(key, date '2099-10-01', 'intraday', 'manual', 300);
   run_id := (started->>'run_id')::uuid;
+  test_run_id := run_id;
   fence := (started->>'fence_token')::bigint;
   lease := (started->>'lease_token')::uuid;
   perform public.write_stage(run_id, 'candidates', fence, lease, 'pending', 'running');
@@ -90,7 +108,12 @@ begin
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
     values (candidate_id, run_id, 'A', date '2099-10-01', 'vanished');
   perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success');
-  perform public.publish_attempt(run_id, fence, lease);
+  update public.runs
+     set status = 'published', finished_at = now()
+   where public.runs.run_id = test_run_id;
+  update public.logical_runs
+     set current_complete_run_id = test_run_id, published_at = now()
+   where logical_run_key = key;
 
   result := public.get_top_tagged_candidates(run_id);
   if result <> '[]'::jsonb then
