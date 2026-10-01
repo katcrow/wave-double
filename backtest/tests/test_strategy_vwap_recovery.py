@@ -15,15 +15,20 @@ from backtest.indicator_opt.strategy_vwap_recovery import (
     EXIT_CLOSE_PROFIT,
     EXIT_SL,
     EXIT_TP,
+    STRATEGY_L_PARAMS,
     STRATEGY_VWAP_RECOVERY_PARAMS,
     _TRADE_COLUMNS,
     _baseline_row,
     compute_vwap_recovery,
+    compute_strategy_l,
     rolling_vwap,
     run_vwap_recovery,
+    run_strategy_l_backtest,
     run_vwap_recovery_backtest,
     validate_strategy_vwap_recovery_params,
+    validate_strategy_l_params,
     vwap_recovery_signals,
+    strategy_l_signals,
 )
 
 
@@ -229,7 +234,7 @@ def test_runner_applies_observation_window_after_warmup_and_flattens_result() ->
         {"T": frame}, start=frame.index[signal_position], end=frame.index[-1]
     )
     row = _baseline_row(result)
-    assert result["strategy"] == "VWAP_RECOVERY"
+    assert result["strategy"] == "L"
     assert result["n_signals"] == 1
     assert result["params"] == STRATEGY_VWAP_RECOVERY_PARAMS.as_dict()
     assert row["param_vwap_window"] == 30
@@ -313,3 +318,11 @@ def test_runner_rejects_timezone_bound_mismatch() -> None:
 def test_reference_baseline_bounds_are_declared() -> None:
     assert str(BASELINE_START.date()) == "2020-08-03"
     assert str(BASELINE_END.date()) == "2026-08-27"
+
+
+def test_strategy_l_numbered_aliases_are_canonical() -> None:
+    assert STRATEGY_L_PARAMS is STRATEGY_VWAP_RECOVERY_PARAMS
+    assert compute_strategy_l is compute_vwap_recovery
+    assert strategy_l_signals is vwap_recovery_signals
+    assert run_strategy_l_backtest is run_vwap_recovery_backtest
+    validate_strategy_l_params(STRATEGY_L_PARAMS)

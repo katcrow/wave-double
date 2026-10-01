@@ -1,5 +1,5 @@
 ---
-title: 'VWAP 상향 회복 백테스트 후보 구현'
+title: '전략 L · VWAP 상향 회복 백테스트 구현'
 type: 'feature'
 created: '2026-10-01'
 status: 'done'
@@ -16,7 +16,7 @@ deferred: []
 
 ## Intent
 
-**Problem:** 문서에 추가된 `VWAP 상향 회복 AND 양봉 AND VWAP 재시험 AND 거래량 확인` 후보가 백테스트 코드에 없어, 명시된 30봉 rolling VWAP 진입 조건과 3%/4% 청산 규칙을 재현할 수 없다.
+**Problem:** 문서에 추가된 `전략 L · VWAP 상향 회복 AND 양봉 AND VWAP 재시험 AND 거래량 확인` 후보가 백테스트 코드에 없어, 명시된 30봉 rolling VWAP 진입 조건과 3%/4% 청산 규칙을 재현할 수 없다.
 
 **Approach:** 운영 A~I 태깅 계약과 분리된 전략 모듈에 고정 파라미터, 신호 마스크, 종가 진입 신호, 유니버스 백테스트 러너와 CLI를 추가하고, 합성 OHLCV 회귀 테스트로 조건·경계·청산·기간 필터를 검증한다.
 
@@ -100,7 +100,7 @@ deferred: []
 
 Status: done
 
-Summary: 운영 태깅과 분리된 VWAP 상향 회복 백테스트 모듈, 전략 전용 청산 루프, CLI와 20개 회귀 테스트를 추가했다.
+Summary: 운영 태깅과 분리된 전략 L(VWAP 상향 회복) 백테스트 모듈, 전략 전용 청산 루프, CLI와 회귀 테스트를 추가했다.
 
 Files changed:
 

@@ -1,6 +1,6 @@
-"""VWAP 상향 회복 전략의 신호와 유니버스 백테스트.
+"""전략 L · VWAP 상향 회복의 신호와 유니버스 백테스트.
 
-이 전략은 운영 A~I 태깅 계약과 분리된 재현용 백테스트 전용 모듈이다.
+이 전략은 운영 A~I 태깅 계약과 분리된 전략 L 재현용 백테스트 전용 모듈이다.
 진입은 당일 포함 30봉 rolling VWAP 상향 회복, 양봉, VWAP 재시험,
 직전 15봉 거래량 평균 대비 거래량 확인을 모두 만족하는 봉의 종가에 한다.
 청산은 다음 봉부터 3% 익절, 4% 손절을 평가하고, 둘 다 닿으면 익절을
@@ -40,7 +40,7 @@ EXIT_CLOSE_PROFIT = "close_profit"
 
 @dataclass(frozen=True)
 class StrategyVwapRecoveryParams:
-    """VWAP 상향 회복 전략의 고정 기본 파라미터."""
+    """전략 L(VWAP 상향 회복)의 고정 기본 파라미터."""
 
     vwap_window: int = 30
     volume_window: int = 15
@@ -59,6 +59,9 @@ STRATEGY_VWAP_RECOVERY_PARAMS = StrategyVwapRecoveryParams()
 VWAP_RECOVERY_PARAMS = STRATEGY_VWAP_RECOVERY_PARAMS
 VwapRecoveryParams = StrategyVwapRecoveryParams
 StrategyVWAPRecoveryParams = StrategyVwapRecoveryParams
+# 번호 체계를 사용하는 호출자를 위한 전략 L 공식 별칭이다.
+StrategyLParams = StrategyVwapRecoveryParams
+STRATEGY_L_PARAMS = STRATEGY_VWAP_RECOVERY_PARAMS
 
 
 def _validate_finite_real(name: str, value: object) -> float:
@@ -119,6 +122,9 @@ def validate_strategy_vwap_recovery_params(
     """전략 파라미터 계약을 외부 검증 코드에서도 사용할 수 있게 노출한다."""
 
     _validate_params(params)
+
+
+validate_strategy_l_params = validate_strategy_vwap_recovery_params
 
 
 def _validate_frame_layout(frame: pd.DataFrame) -> None:
@@ -221,6 +227,7 @@ def compute_vwap_recovery(
 
 
 compute_strategy_vwap_recovery = compute_vwap_recovery
+compute_strategy_l = compute_vwap_recovery
 
 
 def vwap_recovery_signals(
@@ -245,6 +252,7 @@ def vwap_recovery_signals(
 
 
 strategy_vwap_recovery_signals = vwap_recovery_signals
+strategy_l_signals = vwap_recovery_signals
 
 
 def _parse_bound(name: str, value: pd.Timestamp | str | None) -> pd.Timestamp | None:
@@ -379,6 +387,7 @@ def run_vwap_recovery(
 
 
 run_strategy_vwap_recovery = run_vwap_recovery
+run_strategy_l = run_vwap_recovery
 
 
 def run_vwap_recovery_backtest(
@@ -443,7 +452,7 @@ def run_vwap_recovery_backtest(
     all_trades.sort(key=lambda trade: (trade.entry_date, trade.ticker, trade.exit_date))
     performance = summarize(all_trades)
     return {
-        "strategy": "VWAP_RECOVERY",
+        "strategy": "L",
         "params": params.as_dict(),
         "data_window_start": str(start_ts.date()) if start_ts is not None else None,
         "data_window_end": str(end_ts.date()) if end_ts is not None else None,
@@ -458,6 +467,7 @@ def run_vwap_recovery_backtest(
 
 
 run_strategy_vwap_recovery_backtest = run_vwap_recovery_backtest
+run_strategy_l_backtest = run_vwap_recovery_backtest
 
 
 def _baseline_row(result: dict[str, object]) -> dict[str, object]:
@@ -473,7 +483,7 @@ def _baseline_row(result: dict[str, object]) -> dict[str, object]:
 
 def _format_result(result: dict[str, object]) -> str:
     return (
-        f"VWAP 상향 회복 | 시그널 {result['n_signals']} | 거래 {result['n_trades']} "
+        f"전략 L · VWAP 상향 회복 | 시그널 {result['n_signals']} | 거래 {result['n_trades']} "
         f"({result['n_win']}승/{result['n_loss']}패) | "
         f"승률 {result['win_rate'] * 100:.1f}% | PF {result['profit_factor']:.2f} | "
         f"평균 {result['avg_return']:+.3f}%"
@@ -481,17 +491,17 @@ def _format_result(result: dict[str, object]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="VWAP 상향 회복 백테스트")
+    parser = argparse.ArgumentParser(description="전략 L · VWAP 상향 회복 백테스트")
     parser.add_argument(
         "--output", type=Path,
-        default=RESULTS_DIR / "strategy_vwap_recovery_baseline.csv",
+        default=RESULTS_DIR / "strategy_l_baseline.csv",
         help="요약 CSV 출력 경로",
     )
     parser.add_argument("--start", default=BASELINE_START.date().isoformat())
     parser.add_argument("--end", default=BASELINE_END.date().isoformat())
     args = parser.parse_args()
     result = run_vwap_recovery_backtest(start=args.start, end=args.end)
-    print("=== VWAP 상향 회복 ===")
+    print("=== 전략 L · VWAP 상향 회복 ===")
     print(f"관측창: {result['data_window_start']} ~ {result['data_window_end']}")
     print(f"파라미터: {result['params']}")
     print(_format_result(result))
