@@ -505,6 +505,26 @@ def test_all_six_strategies_signal_on_same_ticker():
     assert result.tagged_candidates[0].strategies == ["A", "B", "C", "D", "E", "F"]
 
 
+def test_strategy_l_signal_is_persisted_by_tags_stage():
+    n = 3
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    signals = {key: pd.Series(False, index=idx) for key in ("A", "B", "C", "D", "E", "F", "G", "H", "L")}
+    signals["L"] = pd.Series([False, False, True], index=idx)
+    result_obj = StrategyResult(ticker="005930", status=OhlcvCacheStatus.READY, signals=signals, error=None)
+    frame = _frame(n)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": result_obj})
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "success"
+    assert {tag.strategy for tag in tags_repo.saved} == {"L"}
+    assert result.tagged_candidates[0].strategies == ["L"]
+
+
 def test_strategy_f_signal_compute_error_counts_as_error_not_silently_dropped():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])

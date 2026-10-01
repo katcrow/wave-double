@@ -23,6 +23,10 @@ test("전략 I는 정의된 라벨을 반환한다(운영 수동 확인 전용)"
   assert.equal(getStrategyLabel("I"), "전략 I · 음봉수급쌍끌이");
 });
 
+test("전략 L은 정의된 라벨을 반환한다(VWAP 상향 회복)", () => {
+  assert.equal(getStrategyLabel("L"), "전략 L · VWAP 상향 회복");
+});
+
 test("정의되지 않은 전략 코드는 undefined를 반환한다", () => {
   assert.equal(getStrategyLabel("Z"), undefined);
 });

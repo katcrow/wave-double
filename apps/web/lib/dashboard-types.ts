@@ -13,7 +13,7 @@ export type RunTrigger = "schedule" | "manual";
 export type Market = "KOSPI" | "KOSDAQ";
 export type SupplyHintStatus = "good" | "not_met" | "undetermined";
 export type OutcomeStatus = "TP" | "SL" | "TIMEOUT" | "OPEN" | "SUSPENDED" | "DELISTED";
-export type OutcomeStrategy = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
+export type OutcomeStrategy = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "L";
 export type TrackingSource = "t1859" | "t1852" | "t1856";
 
 /** get_outcome_tracking_rows()가 브라우저에 반환하는 제한된 행과 nullable 종목명 스냅샷. */

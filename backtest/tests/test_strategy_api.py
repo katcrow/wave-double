@@ -17,6 +17,7 @@ from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
 from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
 from backtest.indicator_opt.strategy_g import STRATEGY_G_PARAMS
 from backtest.indicator_opt.strategy_h import STRATEGY_H_PARAMS
+from backtest.indicator_opt.strategy_vwap_recovery import STRATEGY_L_PARAMS
 
 
 def _make_df(n: int = 200, *, close_nan: int | None = None) -> pd.DataFrame:
@@ -248,8 +249,8 @@ class TestNormalCompute:
         assert result.ticker == "T"
         assert result.status == "READY"
         assert result.error is None
-        assert set(result.signals) == {"A", "B", "C", "D", "E", "F", "G", "H"}
-        for key in ("A", "B", "C", "D", "E", "F", "G", "H"):
+        assert set(result.signals) == {"A", "B", "C", "D", "E", "F", "G", "H", "L"}
+        for key in ("A", "B", "C", "D", "E", "F", "G", "H", "L"):
             assert result.signals[key].index.equals(df.index)
             assert result.signals[key].dtype == bool
             assert len(result.signals[key]) == 200
@@ -261,7 +262,8 @@ class TestNormalCompute:
         assert result.params_meta["F"] == STRATEGY_F_PARAMS.as_dict()
         assert result.params_meta["G"] == STRATEGY_G_PARAMS.as_dict()
         assert result.params_meta["H"] == STRATEGY_H_PARAMS.as_dict()
-        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F", "G", "H"}
+        assert result.params_meta["L"] == STRATEGY_L_PARAMS.as_dict()
+        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F", "G", "H", "L"}
         for key in ("A", "B", "C"):
             assert result.params_meta[key] == {
                 "atr_window": 14,

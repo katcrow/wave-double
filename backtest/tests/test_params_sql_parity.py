@@ -12,6 +12,7 @@ SQL_RULES도 함께 갱신해야 한다.
 G/H는 2026-09-15에 추가됐다(story 없이 직접 적용, docs/양음돌파패턴.md,
 docs/240이평돌파_120이평우상향필터.md 참고). 원 설계는 분할청산이었으나
 운영 청산 규약(단일 TP%/SL%)에 맞춰 근사한 값이다.
+L은 2026-10-01에 추가됐으며 TP 3%/SL 4%/무기한 보유 규칙이다.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ SQL_RULES: dict[str, tuple[float, float, int]] = {
     "F": (3.0, 4.0, 999999),
     "G": (5.0, 5.0, 20),
     "H": (4.0, 5.0, 999999),
+    "L": (3.0, 4.0, 999999),
 }
 
 _SQL_UNBOUNDED_CUTOFF = 999999

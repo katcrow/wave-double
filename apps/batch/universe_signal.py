@@ -13,7 +13,7 @@
   (``scheduler.py``의 기존 두 호출)는 건드리지 않는다 -- 유니버스 백필은 별도 호출로만
   더한다(배선은 Story 5.4).
 - ``compute_universe_signals`` -- 실전 태깅과 **동일한** ``daily_ohlcv`` 로더에서 프레임을
-  받아 ``backtest.strategy_api.compute_abc``만으로 전략 A~H 시그널 종목 집합을 산출한다.
+  받아 ``backtest.strategy_api.compute_abc``만으로 전략 A~H/L 시그널 종목 집합을 산출한다.
   시그널 성립 봉은 운영 태깅과 같은 ``signals[key].iloc[-1]``(당일 확정봉, 2026-09-16 변경)다.
 
 한 종목의 실패가 나머지를 막지 않고, 종목별 상태(``READY``/

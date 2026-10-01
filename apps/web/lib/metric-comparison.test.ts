@@ -107,6 +107,7 @@ test("metric RPC row guard는 게이트·범위·기대치·threshold/cutoff 불
 
 test("metric 범위 query와 RPC 인자는 허용 전략만 유지한다", () => {
   assert.equal(normalizeMetricStrategy({ metric_strategy: " D " }), "D");
+  assert.equal(normalizeMetricStrategy({ metric_strategy: " L " }), "L");
   assert.equal(normalizeMetricStrategy({ metric_strategy: "I" }), "");
   assert.equal(normalizeMetricStrategy(new URLSearchParams("metric_strategy=C")), "C");
   assert.deepEqual(toMetricComparisonRpcParams(""), { p_strategy: undefined });

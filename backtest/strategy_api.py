@@ -28,10 +28,14 @@ from .indicator_opt.strategy_h import (
     STRATEGY_H_PARAMS,
     compute_strategy_h,
 )
+from .indicator_opt.strategy_vwap_recovery import (
+    STRATEGY_L_PARAMS,
+    compute_strategy_l,
+)
 from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS, OhlcvCacheStatus
 
 _OHLCV_COLS = ("Open", "High", "Low", "Close", "Volume")
-_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H")
+_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H", "L")
 _STRATEGY_PARAMS: dict[str, dict[str, int | float | bool | None]] = {
     "A": {
         "atr_window": 14,
@@ -56,6 +60,7 @@ _STRATEGY_PARAMS: dict[str, dict[str, int | float | bool | None]] = {
     "F": STRATEGY_F_PARAMS.as_dict(),
     "G": STRATEGY_G_PARAMS.as_dict(),
     "H": STRATEGY_H_PARAMS.as_dict(),
+    "L": STRATEGY_L_PARAMS.as_dict(),
 }
 
 # TP/SL SL-우선 규칙: 같은 봉에서 목표가·손절가가 동시에 도달되면
@@ -216,7 +221,7 @@ def _error_result(
 def compute_abc(
     frame: pd.DataFrame, *, ticker: str = "", exclude_terminal_bar: bool = True
 ) -> StrategyResult:
-    """전략 A-H 시그널을 계산한다.
+    """전략 A-H와 L 시그널을 계산한다.
 
     ``exclude_terminal_bar``(기본 True)는 각 유효 구간의 마지막 봉 시그널을 버린다
     (백테스트 엔진 원본 규칙 — 그 이후 청산을 시뮬레이션할 봉이 없어서다). 운영
@@ -288,6 +293,26 @@ def compute_abc(
                 ),
             )
         signals[key] = mask
+
+    l_mask = pd.Series(False, index=frame.index, dtype=bool)
+    try:
+        for segment in segments:
+            _merge_segment_mask(l_mask, segment, compute_strategy_l(segment))
+    except Exception as exc:
+        return StrategyResult(
+            ticker=ticker,
+            status=OhlcvCacheStatus.ERROR,
+            signals={},
+            error=StrategyError(
+                code=StrategyErrorCode.SIGNAL_COMPUTE_ERROR,
+                strategy="L",
+                message=str(exc),
+            ),
+        )
+    if exclude_terminal_bar:
+        terminal_indices = [segment.index[-1] for segment in segments if not segment.empty]
+        l_mask.loc[terminal_indices] = False
+    signals["L"] = l_mask
 
     try:
         signals.update(

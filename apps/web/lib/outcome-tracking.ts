@@ -12,7 +12,7 @@ export const OUTCOME_STATUS_OPTIONS = [
   "DELISTED",
 ] as const;
 
-export const OUTCOME_STRATEGY_OPTIONS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
+export const OUTCOME_STRATEGY_OPTIONS = ["A", "B", "C", "D", "E", "F", "G", "H", "L"] as const;
 
 export interface OutcomeTrackingFilters {
   status: OutcomeStatus | "";
