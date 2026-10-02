@@ -74,12 +74,16 @@ test("resolveWorkflowRef: 주변 공백을 제거한다", () => {
   assert.equal(resolveWorkflowRef("  master  "), "master");
 });
 
-test("자동 intraday는 KST 08:00 이상 20:00 미만만 허용한다", () => {
+test("자동 intraday는 KST 08:00 이상 19:30 미만만 허용한다", () => {
   assert.equal(isScheduledBatchInOperatingWindow("intraday:2026-10-02:08:10", new Date("2026-10-01T23:00:00Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("intraday:2026-10-02:19:10", new Date("2026-10-02T10:29:00Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("intraday:2026-10-02:19:10", new Date("2026-10-02T10:30:00Z")), false);
   assert.equal(isScheduledBatchInOperatingWindow("intraday:2026-10-02:08:10", new Date("2026-10-02T11:00:00Z")), false);
 });
 
-test("자동 close는 KST 19:30 이상 20:00 미만만 허용한다", () => {
+test("자동 close는 KST 19:30 이상 19:50 미만만 허용한다", () => {
   assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T10:30:00Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T10:49:00Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T10:50:00Z")), false);
   assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T11:00:00Z")), false);
 });

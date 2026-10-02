@@ -78,6 +78,6 @@ export function isScheduledBatchInOperatingWindow(logicalRunKey: string, now = n
   const minute = Number(parts.find((part) => part.type === "minute")?.value);
   const totalMinutes = hour * 60 + minute;
   return batchKind === "intraday"
-    ? totalMinutes >= 8 * 60 && totalMinutes < 20 * 60
-    : totalMinutes >= 19 * 60 + 30 && totalMinutes < 20 * 60;
+    ? totalMinutes >= 8 * 60 && totalMinutes < 19 * 60 + 30
+    : totalMinutes >= 19 * 60 + 30 && totalMinutes < 19 * 60 + 50;
 }

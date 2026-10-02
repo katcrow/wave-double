@@ -51,8 +51,11 @@ from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, r
 _STATUS_SEVERITY = {"success": 0, "partial": 1, "failed": 2}
 
 OPERATING_WINDOW_START = time(8, 0)
-OPERATING_WINDOW_END = time(20, 0)
+# 20:00 이후에는 어떤 예약 배치도 작업 중이면 안 된다. 시작 마감을 20:00보다 앞당겨
+# 최장 실행 시간(관측 최대 약 8분)을 흡수하고, workflow는 20:00에 프로세스를 강제 종료한다.
+INTRADAY_START_DEADLINE = time(19, 30)
 CLOSE_WINDOW_START = time(19, 30)
+CLOSE_START_DEADLINE = time(19, 50)
 KST = ZoneInfo("Asia/Seoul")
 
 
@@ -66,9 +69,9 @@ def is_scheduled_execution_allowed(batch_kind: BatchKind | str, now_kst: datetim
     kind = batch_kind if isinstance(batch_kind, BatchKind) else BatchKind(batch_kind)
     current = now_kst.astimezone(KST).time().replace(tzinfo=None) if now_kst.tzinfo else now_kst.time()
     if kind is BatchKind.INTRADAY:
-        return OPERATING_WINDOW_START <= current < OPERATING_WINDOW_END
+        return OPERATING_WINDOW_START <= current < INTRADAY_START_DEADLINE
     if kind is BatchKind.CLOSE:
-        return CLOSE_WINDOW_START <= current < OPERATING_WINDOW_END
+        return CLOSE_WINDOW_START <= current < CLOSE_START_DEADLINE
     return False
 
 

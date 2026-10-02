@@ -246,7 +246,11 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
     ("batch_kind", "moment", "allowed"),
     [
         ("intraday", datetime(2026, 10, 1, 8, 0), True),
-        ("intraday", datetime(2026, 10, 1, 19, 59), True),
+        ("intraday", datetime(2026, 10, 1, 19, 29), True),
+        ("intraday", datetime(2026, 10, 1, 19, 30), False),
+        ("intraday", datetime(2026, 10, 1, 19, 59), False),
+        ("close", datetime(2026, 10, 1, 19, 49), True),
+        ("close", datetime(2026, 10, 1, 19, 50), False),
         ("close", datetime(2026, 10, 1, 19, 40), True),
         ("close", datetime(2026, 10, 1, 1, 30), False),
         ("intraday", datetime(2026, 10, 1, 20, 0), False),
