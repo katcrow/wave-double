@@ -42,6 +42,7 @@ begin
       jsonb_build_object('candidate_id', signal_date_mismatch, 'ticker', '888888', 'name', '시그널일불일치', 'trading_value', 1000,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object('candidate_id', untagged, 'ticker', '777777', 'name', '무태그상위', 'trading_value', 1100,
+        'themes', jsonb_build_array(jsonb_build_object('theme_code', '001', 'theme_name', '반도체', 'average_change_pct', 4.8), jsonb_build_object('theme_code', '002', 'theme_name', '전고체', 'average_change_pct', 2.2)),
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
     ),
     jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 7,
@@ -116,6 +117,18 @@ begin
      or (result->0->>'major_sector_name') <> '테스트 섹터'
      or (result->0->>'program_buy_value')::numeric <> 2.5 then
     raise exception 'candidate detail fields are not calculated or preserved: %', result->0;
+  end if;
+  if jsonb_array_length(result->0->'themes') <> 2
+     or (result->0->'themes'->0->>'theme_code') <> '001'
+     or (result->0->'themes'->0->>'theme_name') <> '반도체'
+     or (result->0->'themes'->0->>'average_change_pct')::numeric <> 4.8
+     or (result->0->'themes'->1->>'theme_code') <> '002'
+     or (result->0->'themes'->1->>'theme_name') <> '전고체'
+     or (result->0->'themes'->1->>'average_change_pct')::numeric <> 2.2 then
+    raise exception 'candidate themes are not returned in strength order: %', result->0->'themes';
+  end if;
+  if not exists (select 1 from jsonb_array_elements(result) e where e->>'ticker' = '888888' and e->'themes' = '[]'::jsonb) then
+    raise exception 'candidate without themes must return an empty theme array';
   end if;
   if exists (select 1 from jsonb_array_elements(result) e where (e->>'attempt_run_id')::uuid <> run_id or (e->>'trading_day') <> '2099-09-30') then
     raise exception 'snapshot lineage is not preserved';

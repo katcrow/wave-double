@@ -209,6 +209,13 @@ export interface TodayCandidateCardRow {
   /** Story 2.8: 이전 attempt에서 active였으나 현재 attempt에서 재태깅되지 않은 전략(status=vanished). */
   vanished_strategies: string[];
   supply_partial_missing: boolean;
+  themes: CandidateThemeRpcRow[];
+}
+
+export interface CandidateThemeRpcRow {
+  theme_code: string;
+  theme_name: string;
+  average_change_pct: number;
 }
 
 /**
@@ -223,6 +230,8 @@ export interface TopTradingCandidateRpcRow {
   trading_day: string;
   trading_value: number;
   change_pct: number | null;
+  themes: CandidateThemeRpcRow[];
+  /** 기존 RPC 호환용. 신규 화면은 themes를 사용한다. */
   major_sector_name: string | null;
   program_buy_value: number | null;
 }

@@ -17,8 +17,10 @@ from uuid import uuid4
 from domain.candidate_selection import CandidateSelection, merge_candidate_sources
 from domain.run_state import LogicalRunKey, Stage, StageStatus, Trigger
 
+from .heartbeat import LeaseHeartbeat
 from .ls_client import LsResponse
 from .run_state import RunStateGateway, parse_attempt, safe_record_dispatch_receipt
+from .theme_enrichment import ThemeClient, enrich_candidate_themes
 
 PRIMARY_TR = "t1859"
 FALLBACK_TR = "t1856"
@@ -125,6 +127,8 @@ def _complete_stage(
     extra_metadata: dict[str, Any] | None = None,
     force_partial: bool = False,
     partial_result_code: str | None = None,
+    theme_client: ThemeClient | None = None,
+    lease_seconds: int = 300,
 ) -> CandidateStageResult:
     """단일 source 응답을 선별·저장하고 stage를 success/partial로 종결한다.
 
@@ -137,9 +141,34 @@ def _complete_stage(
     except Exception:
         gateway.write_stage(attempt.run_id, Stage.CANDIDATES, attempt.fence_token, attempt.lease_token, StageStatus.RUNNING, StageStatus.FAILED, result={"result_code": "INVALID_RESPONSE", "message": "LS response could not be normalized"}, fallback_used=fallback_used)
         return CandidateStageResult("failed", "INVALID_RESPONSE", 0, fallback_used=fallback_used, run_id=str(attempt.run_id))
+    theme_result = None
+    if theme_client is not None:
+        theme_heartbeat = LeaseHeartbeat(
+            gateway,
+            attempt.run_id,
+            attempt.fence_token,
+            attempt.lease_token,
+            lease_seconds=lease_seconds,
+            interval_seconds=max(1.0, min(60.0, lease_seconds / 3)),
+            logger=print,
+        )
+
+        theme_result = enrich_candidate_themes(
+            [candidate.ticker for candidate in selection.candidates],
+            theme_client,
+            on_progress=theme_heartbeat.beat,
+        )
     # 상한 밖 종목은 runs.truncated_count로만 보존한다. candidates에는 상위 150건만 남긴다.
     rows = [
-        {"candidate_id": str(uuid4()), **candidate.as_dict(), "truncated": False}
+        {
+            "candidate_id": str(uuid4()),
+            **candidate.as_dict(),
+            "themes": [
+                theme.as_dict()
+                for theme in (theme_result.themes_by_ticker.get(candidate.ticker, ()) if theme_result else ())
+            ],
+            "truncated": False,
+        }
         for candidate in selection.candidates
     ]
     try:
@@ -150,6 +179,14 @@ def _complete_stage(
 
     fallback_note = {"t1859_result_code": primary_failure_code} if fallback_used else {}
     extra = extra_metadata if extra_metadata is not None else {}
+    if theme_result is not None:
+        extra = {
+            **extra,
+            "theme_requested_count": theme_result.requested_count,
+            "theme_success_count": theme_result.success_count,
+            "theme_empty_count": theme_result.empty_count,
+            "theme_failed_count": theme_result.failed_count,
+        }
     if force_partial or unprocessed_count > 0:
         code = partial_result_code if force_partial else "UNPROCESSED_ITEMS"
         result = {"result_code": code, **selection.metadata, **extra, **fallback_note}
@@ -168,6 +205,8 @@ def _run_single_query(
     params: dict[str, Any] | None = None,
     query_index: str | None = None,
     fallback_params: dict[str, Any] | None = None,
+    theme_client: ThemeClient | None = None,
+    lease_seconds: int = 300,
 ) -> CandidateStageResult:
     """기존 단일 ``query_index`` 경로: t1859 실패 시 t1856 폴백(하위 호환)."""
     request_params = params if params is not None else {"t1859InBlock": {"query_index": query_index or ""}}
@@ -208,6 +247,8 @@ def _run_single_query(
         primary_failure_code=primary_failure_code,
         success_result_code=active_response.result_code,
         unprocessed_count=active_response.unprocessed_count,
+        theme_client=theme_client,
+        lease_seconds=lease_seconds,
     )
 
 
@@ -218,6 +259,8 @@ def _run_condition_bundle(
     condition_search_user_id: str,
     *,
     fallback_params: dict[str, Any] | None = None,
+    theme_client: ThemeClient | None = None,
+    lease_seconds: int = 300,
 ) -> CandidateStageResult:
     """t1866 조건 목록을 조회해 각 조건을 t1859로 직렬 실행하고 통합·선별한다.
 
@@ -275,6 +318,8 @@ def _run_condition_bundle(
                 force_partial=True,
                 partial_result_code=PARTIAL_CONDITION_FAILURE,
                 extra_metadata=meta,
+                theme_client=theme_client,
+                lease_seconds=lease_seconds,
             )
         return _complete_stage(
             gateway, attempt,
@@ -285,6 +330,8 @@ def _run_condition_bundle(
             success_result_code="OK",
             unprocessed_count=unprocessed_sum,
             extra_metadata=meta,
+            theme_client=theme_client,
+            lease_seconds=lease_seconds,
         )
 
     # 전부 실패 → 기존 유일한 폴백 경로(t1856)를 시도한다. 실패 원인이 된 각 조건의
@@ -303,6 +350,8 @@ def _run_condition_bundle(
             success_result_code=fallback_response.result_code,
             unprocessed_count=fallback_response.unprocessed_count,
             extra_metadata=meta,
+            theme_client=theme_client,
+            lease_seconds=lease_seconds,
         )
     unprocessed = max(
         unprocessed_sum,
@@ -331,6 +380,7 @@ def run_candidate_stage(
     lease_seconds: int = 300,
     dispatch_request_id: str | None = None,
     condition_search_user_id: str | None = None,
+    theme_client: ThemeClient | None = None,
 ) -> CandidateStageResult:
     """한 attempt의 candidates stage를 성공/실패로 종결한다.
 
@@ -365,6 +415,8 @@ def run_candidate_stage(
             attempt,
             condition_search_user_id,
             fallback_params=fallback_params,
+            theme_client=theme_client,
+            lease_seconds=lease_seconds,
         )
     return _run_single_query(
         gateway,
@@ -373,6 +425,8 @@ def run_candidate_stage(
         params=params,
         query_index=query_index,
         fallback_params=fallback_params,
+        theme_client=theme_client,
+        lease_seconds=lease_seconds,
     )
 
 

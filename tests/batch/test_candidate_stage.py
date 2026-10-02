@@ -91,6 +91,92 @@ def test_success_writes_candidates_and_completes_stage():
     assert all(row["sources"] == [{"source": "t1859", "weight": 1.0}] for row in rpc.calls[2][1]["p_candidates"])
 
 
+def test_theme_enrichment_is_written_without_changing_candidate_stage_status():
+    rpc = FakeRpc(attempt_payload())
+    ls = FakeLs(LsResponse(data=[{"ticker": "005930", "trading_value": 2}]))
+
+    class ThemeClient:
+        def request(self, tr_code, params):
+            assert tr_code == "t1532"
+            return LsResponse(data={"t1532OutBlock": [{"tmcode": "001", "tmname": "반도체", "avgdiff": "4.8"}]})
+
+    result = run_candidate_stage(
+        RunStateGateway(rpc),
+        ls,
+        LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE),
+        Trigger.MANUAL,
+        theme_client=ThemeClient(),
+    )
+
+    assert result.status == "success"
+    candidate_write = next(call for call in rpc.calls if call[0] == "write_candidates")
+    candidate = candidate_write[1]["p_candidates"][0]
+    assert candidate["themes"] == [{"theme_code": "001", "theme_name": "반도체", "average_change_pct": 4.8}]
+    assert rpc.calls[-1][1]["p_result"]["theme_success_count"] == 1
+
+
+def test_partial_theme_failure_keeps_successful_themes_and_candidate_stage_success():
+    rpc = FakeRpc(attempt_payload())
+    ls = FakeLs(LsResponse(data=[
+        {"ticker": "005930", "trading_value": 2},
+        {"ticker": "000660", "trading_value": 1},
+    ]))
+
+    class PartialThemeClient:
+        def request(self, tr_code, params):
+            if params["t1532InBlock"]["shcode"] == "000660":
+                raise RuntimeError("one ticker failed")
+            return LsResponse(data={"t1532OutBlock": [{"tmcode": "001", "tmname": "반도체", "avgdiff": 4.8}]})
+
+    result = run_candidate_stage(
+        RunStateGateway(rpc),
+        ls,
+        LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE),
+        Trigger.MANUAL,
+        theme_client=PartialThemeClient(),
+    )
+
+    assert result.status == "success"
+    candidate_write = next(call for call in rpc.calls if call[0] == "write_candidates")
+    rows = {row["ticker"]: row for row in candidate_write[1]["p_candidates"]}
+    assert rows["005930"]["themes"][0]["theme_name"] == "반도체"
+    assert rows["000660"]["themes"] == []
+    assert rpc.calls[-1][1]["p_result"]["theme_failed_count"] == 1
+
+
+def test_theme_enrichment_uses_lease_heartbeat_callback(monkeypatch):
+    from apps.batch import candidate_stage
+
+    heartbeat_state = {"beats": 0, "interval_seconds": None}
+
+    class FakeHeartbeat:
+        def __init__(self, *args, **kwargs):
+            heartbeat_state["interval_seconds"] = kwargs["interval_seconds"]
+
+        def beat(self):
+            heartbeat_state["beats"] += 1
+
+    monkeypatch.setattr(candidate_stage, "LeaseHeartbeat", FakeHeartbeat)
+    rpc = FakeRpc(attempt_payload())
+    ls = FakeLs(LsResponse(data=[
+        {"ticker": "005930", "trading_value": 2},
+        {"ticker": "000660", "trading_value": 1},
+    ]))
+
+    class ThemeClient:
+        def request(self, tr_code, params):
+            return LsResponse(data={"t1532OutBlock": [{"tmcode": "001", "tmname": "반도체", "avgdiff": 4.8}]})
+
+    result = run_candidate_stage(
+        RunStateGateway(rpc), ls, LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE), Trigger.MANUAL,
+        theme_client=ThemeClient(), lease_seconds=90,
+    )
+
+    assert result.status == "success"
+    assert heartbeat_state["beats"] == 2
+    assert heartbeat_state["interval_seconds"] == 30
+
+
 def test_empty_success_is_not_failed():
     rpc = FakeRpc(attempt_payload())
     result = run_candidate_stage(RunStateGateway(rpc), FakeLs(LsResponse(data=[])), LogicalRunKey(date(2026, 9, 1), BatchKind.CLOSE), Trigger.SCHEDULE)

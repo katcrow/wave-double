@@ -61,6 +61,7 @@ def test_caller_can_select_api_path_and_optional_mac_address():
         ("t1702", "/stock/frgr-itt"),
         ("t8410", "/stock/chart"),
         ("t1637", "/stock/program"),
+        ("t1532", "/stock/sector"),
     ],
 )
 def test_known_tr_codes_use_their_official_api_path(tr_code, path):

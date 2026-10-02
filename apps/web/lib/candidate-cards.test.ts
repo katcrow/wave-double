@@ -15,6 +15,7 @@ function row(overrides: Partial<TodayCandidateCardRow> = {}): TodayCandidateCard
     strategies: ["A"],
     vanished_strategies: [],
     supply_partial_missing: false,
+    themes: [],
     ...overrides,
   };
 }
@@ -102,6 +103,18 @@ test("카드 RPC 행 가드는 필수 shape를 확인하고 malformed 행을 거
   assert.equal(isTodayCandidateCardRow(valid), true);
   assert.equal(isTodayCandidateCardRow({ ...valid, strategies: ["A", 1] }), false);
   assert.equal(isTodayCandidateCardRow({ ...valid, supply_partial_missing: "false" }), false);
+  assert.equal(isTodayCandidateCardRow({ ...valid, themes: [{ theme_code: "", theme_name: "반도체", average_change_pct: 1 }] }), false);
+});
+
+test("테마는 등락률 내림차순으로 보존되고 카드 뷰모델에 표시용 값이 담긴다", () => {
+  const [vm] = buildCandidateCardViewModels([row({
+    themes: [
+      { theme_code: "002", theme_name: "전고체", average_change_pct: 2.2 },
+      { theme_code: "001", theme_name: "반도체", average_change_pct: 4.8 },
+    ],
+  })]);
+  assert.deepEqual(vm.themes.map((theme) => theme.themeName), ["반도체", "전고체"]);
+  assert.equal(vm.themes[0].formattedAverageChangePct, "+4.80%");
 });
 
 // I/O 매트릭스: 부분 재태깅 -- active(A) + vanished(B)가 함께 표시되고 카드는 정상 노출된다.

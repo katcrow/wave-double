@@ -37,6 +37,9 @@ test("기본 시나리오: 활성 카드가 소멸/미수집 문구 없이 렌�
   const card = page.locator(".candidate-card").first();
   await expect(card).toContainText("조정후보");
   await expect(card).toContainText("시그널 활성");
+  await expect(card).toContainText("반도체");
+  await expect(card.locator(".candidate-card__theme")).toHaveCount(3);
+  await expect(card.locator(".candidate-card__theme-more")).toHaveText("+1");
   await expect(card.locator(".candidate-card__notice--vanished")).toHaveCount(0);
   await expect(card).not.toContainText("수급 일부 미수집");
   await expect(page.locator(".disappeared-candidates")).toHaveCount(0);
@@ -118,6 +121,15 @@ test("전략 F: 카드에 전략 F 배지가 렌더되고 F 라우트가 열린�
 
   await page.goto("/strategies/F");
   await expect(page.getByRole("heading", { name: "전략 F" })).toBeVisible();
+});
+
+test("테마 미수집: 두 카드가 테마 라벨을 유지하고 미확인으로 표시한다", async ({ page, request }) => {
+  await setScenario(request, "theme-empty");
+  await login(page);
+
+  await expect(page.locator(".candidate-card__themes")).toContainText("테마");
+  await expect(page.locator(".candidate-card__themes")).toContainText("미확인");
+  await expect(page.locator(".top-trading-candidates__metric--themes dd").first()).toHaveText("미확인");
 });
 
 test("전략 G: 정의되지 않은 전략 라우트는 not-found로 떨어진다", async ({ page }) => {

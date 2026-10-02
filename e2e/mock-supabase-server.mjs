@@ -71,6 +71,7 @@ const SCENARIOS = new Set([
   "top-malformed",
   "intraday",
   "strategy-f",
+  "theme-empty",
   "tracking-empty",
   "tracking-error",
   "tracking-malformed",
@@ -150,8 +151,9 @@ function rpcPayload(name, body = {}) {
     };
   }
   if (name === "get_today_candidate_cards") {
+    if (body?.p_run_id !== RUN_ID) return null;
     if (activeScenario === "card-error") return null;
-    const base = { candidate_id: "00000000-0000-4000-8000-000000000401", ticker: "005930", name: "조정후보", strategies: ["A"], vanished_strategies: [], supply_partial_missing: false };
+    const base = { candidate_id: "00000000-0000-4000-8000-000000000401", ticker: "005930", name: "조정후보", strategies: ["A"], vanished_strategies: [], supply_partial_missing: false, themes: activeScenario === "theme-empty" ? [] : [{ theme_code: "151", theme_name: "반도체", average_change_pct: 4.8 }, { theme_code: "152", theme_name: "전고체", average_change_pct: 3.2 }, { theme_code: "153", theme_name: "AI", average_change_pct: 1.5 }, { theme_code: "154", theme_name: "로봇", average_change_pct: 0.8 }] };
     if (activeScenario === "partial-vanish") {
       // active 태그와 vanished 태그가 함께 있는 상태 -> 카드는 남고 "소멸: 전략 B" 문구가 붙는다.
       return [{ ...base, strategies: ["A"], vanished_strategies: ["B"] }];
@@ -169,6 +171,7 @@ function rpcPayload(name, body = {}) {
     return [base];
   }
   if (name === "get_top_tagged_candidates") {
+    if (body?.p_run_id !== RUN_ID) return null;
     if (activeScenario === "top-error") return null;
     const base = {
       candidate_id: "00000000-0000-4000-8000-000000000401",
@@ -178,6 +181,7 @@ function rpcPayload(name, body = {}) {
       trading_day: TRADING_DAY,
       trading_value: 123456789,
       change_pct: 2.9,
+      themes: activeScenario === "theme-empty" ? [] : [{ theme_code: "151", theme_name: "반도체", average_change_pct: 4.8 }, { theme_code: "152", theme_name: "전고체", average_change_pct: 3.2 }, { theme_code: "153", theme_name: "AI", average_change_pct: 1.5 }, { theme_code: "154", theme_name: "로봇", average_change_pct: 0.8 }],
       major_sector_name: "반도체",
       program_buy_value: 12.4,
     };

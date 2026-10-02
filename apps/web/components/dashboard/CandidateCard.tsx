@@ -7,6 +7,7 @@ import { HINT_STATUS_LABEL, SIGNAL_STATUS_LABEL } from "@/lib/candidate-filters"
 import { getStrategyLabel } from "@/lib/strategy-labels";
 import CandidateEvidencePanel from "./CandidateEvidencePanel";
 import StrategyTagList from "./StrategyTagList";
+import { MAX_VISIBLE_THEMES } from "@/lib/candidate-themes";
 
 /**
  * UX-DR4/UX-DR16: 카드 1개 -- 종목명·코드, 전략 태그, (있다면) 수급 부분결측 단서.
@@ -77,8 +78,28 @@ export default function CandidateCard({
       <p id={`${panelId}-description`} className="sr-only">
         종목 코드: {candidate.ticker}. 전략: {[...candidate.strategies, ...candidate.vanishedStrategies]
           .map((strategy) => getStrategyLabel(strategy) ?? `전략 ${strategy}`)
-          .join(", ") || "없음"}. 시그널 상태: {SIGNAL_STATUS_LABEL[candidate.signalStatus]}. 수급 힌트: {HINT_STATUS_LABEL[hintStatus]}.
+          .join(", ") || "없음"}. 테마: {candidate.themes.map((theme) => `${theme.themeName} ${theme.formattedAverageChangePct}`)
+            .join(", ") || "미확인"}. 시그널 상태: {SIGNAL_STATUS_LABEL[candidate.signalStatus]}. 수급 힌트: {HINT_STATUS_LABEL[hintStatus]}.
       </p>
+      <dl className="candidate-card__themes">
+        <dt>테마</dt>
+        <dd>
+          {candidate.themes.length === 0 ? (
+            "미확인"
+          ) : (
+            <span className="candidate-card__theme-list">
+              {candidate.themes.slice(0, MAX_VISIBLE_THEMES).map((theme) => (
+                <span className="candidate-card__theme" key={theme.themeCode}>
+                  {theme.themeName} <span className="candidate-card__theme-change">{theme.formattedAverageChangePct}</span>
+                </span>
+              ))}
+              {candidate.themes.length > MAX_VISIBLE_THEMES && (
+                <span className="candidate-card__theme-more">+{candidate.themes.length - MAX_VISIBLE_THEMES}</span>
+              )}
+            </span>
+          )}
+        </dd>
+      </dl>
       <p
         className={`candidate-card__signal-badge candidate-card__signal-badge--${candidate.signalStatus}`}
       >

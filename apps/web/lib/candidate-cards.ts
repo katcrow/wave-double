@@ -1,4 +1,5 @@
-import type { TodayCandidateCardRow } from "./dashboard-types.ts";
+import type { CandidateThemeRpcRow, TodayCandidateCardRow } from "./dashboard-types.ts";
+import { buildCandidateThemeViewModels, isCandidateThemeRpcRows, type CandidateThemeViewModel } from "./candidate-themes.ts";
 
 export type CandidateSignalStatus = "active" | "vanished" | "mixed";
 
@@ -23,7 +24,8 @@ export function isTodayCandidateCardRow(value: unknown): value is TodayCandidate
     (row.name === null || typeof row.name === "string") &&
     isStringArray(row.strategies) &&
     isStringArray(row.vanished_strategies) &&
-    typeof row.supply_partial_missing === "boolean"
+    typeof row.supply_partial_missing === "boolean" &&
+    isCandidateThemeRpcRows(row.themes)
   );
 }
 
@@ -47,6 +49,7 @@ export interface CandidateCardViewModel {
   isFullyVanished: boolean;
   /** active/vanished 태그 배열의 조합을 나타내는 시그널 상태. */
   signalStatus: CandidateSignalStatus;
+  themes: CandidateThemeViewModel[];
 }
 
 function getSignalStatus(
@@ -79,5 +82,6 @@ export function buildCandidateCardViewModels(
     vanishedStrategies: [...row.vanished_strategies],
     isFullyVanished: row.strategies.length === 0 && row.vanished_strategies.length > 0,
     signalStatus: getSignalStatus(row.strategies, row.vanished_strategies),
+    themes: buildCandidateThemeViewModels(row.themes as CandidateThemeRpcRow[]),
   }));
 }

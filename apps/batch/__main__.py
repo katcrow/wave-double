@@ -126,6 +126,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             condition_search_user_id=condition_search_user_id,
             bias_repository=bias_repository,
             strategy_i_supply_provider=supply_provider,
+            theme_client=ls_client,
             trigger=Trigger(args.trigger),
             dispatch_request_id=args.dispatch_request_id,
         )

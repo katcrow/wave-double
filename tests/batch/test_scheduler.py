@@ -965,6 +965,86 @@ def test_failed_candidates_stage_does_not_run_ohlcv_or_tags_pipeline():
     assert deps["ohlcv_repository"].existing_tickers_calls == []
 
 
+def test_open_day_forwards_theme_client_to_candidate_stage(monkeypatch):
+    from apps.batch import scheduler
+
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(9), time(15, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload())
+    captured = {}
+    theme_client = object()
+
+    def fake_candidate_stage(*args, **kwargs):
+        captured["theme_client"] = kwargs.get("theme_client")
+        return scheduler.CandidateStageResult("failed", "THEME_TEST", 0, run_id=str(uuid4()))
+
+    monkeypatch.setattr(scheduler, "run_candidate_stage", fake_candidate_stage)
+    deps = tags_deps()
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        repo,
+        FakeProvider(),
+        RunStateGateway(rpc),
+        FakeCandidateClient(),
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"],
+        deps["supply_provider"],
+        deps["program_supply_provider"],
+        deps["supply_repository"],
+        theme_client=theme_client,
+    )
+
+    assert captured["theme_client"] is theme_client
+    assert result.status == "failed"
+    assert result.result_code == "THEME_TEST"
+
+
+def test_partial_theme_failure_still_reaches_tags_and_publish():
+    rpc = FakeRpc(attempt=attempt_payload())
+    deps = tags_deps()
+    candidate_client = FakeCandidateClient(LsResponse(data=[
+        {"ticker": "005930", "trading_value": 2},
+        {"ticker": "000660", "trading_value": 1},
+    ]))
+
+    class PartialThemeClient:
+        def request(self, tr_code, params):
+            if params["t1532InBlock"]["shcode"] == "000660":
+                raise RuntimeError("one ticker failed")
+            return LsResponse(data={"t1532OutBlock": [{"tmcode": "001", "tmname": "반도체", "avgdiff": 4.8}]})
+
+    result = run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 9, 1, 16, 0),
+        FakeRepository(),
+        FakeProvider(),
+        RunStateGateway(rpc),
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"],
+        deps["supply_provider"],
+        deps["program_supply_provider"],
+        deps["supply_repository"],
+        theme_client=PartialThemeClient(),
+    )
+
+    assert result.status == "success"
+    assert result.published is True
+    assert any(call[0] == "publish_attempt" for call in rpc.calls)
+    candidate_stage_result = [call for call in rpc.calls if call[0] == "write_stage" and call[1].get("p_stage") == "candidates"][-1]
+    assert candidate_stage_result[1]["p_result"]["theme_failed_count"] == 1
+
+
 def test_daily_bar_provider_failure_does_not_affect_weekday_decision():
     """캘린더 판정은 요일만으로 이뤄지므로(2026-09-15 임시 조치) provider 오류는 무관하다."""
     repo = FakeRepository()

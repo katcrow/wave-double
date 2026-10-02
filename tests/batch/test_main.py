@@ -131,7 +131,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None, strategy_i_supply_provider=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None, strategy_i_supply_provider=None, theme_client=None):
         captured["bias_repository"] = bias_repository
         captured["batch_kind"] = batch_kind
         captured["ls_client"] = ls_client
@@ -142,6 +142,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
         captured["dispatch_request_id"] = dispatch_request_id
         captured["condition_search_user_id"] = condition_search_user_id
         captured["strategy_i_supply_provider"] = strategy_i_supply_provider
+        captured["theme_client"] = theme_client
         return SchedulerResult("success", "OK")
 
     monkeypatch.setattr(batch_main, "run_scheduled_batch", _fake_run_scheduled_batch)
@@ -160,6 +161,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
     assert captured["dispatch_request_id"] == "req-1"
     assert captured["condition_search_user_id"] == "katcrow"
     assert captured["strategy_i_supply_provider"] is captured["supply_provider"]
+    assert captured["theme_client"] is captured["ls_client"]
 
 
 def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatch):
@@ -176,7 +178,7 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None, strategy_i_supply_provider=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None, strategy_i_supply_provider=None, theme_client=None):
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
         captured["condition_search_user_id"] = condition_search_user_id

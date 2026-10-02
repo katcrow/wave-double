@@ -25,6 +25,7 @@ const candidateRows: TodayCandidateCardRow[] = [
     strategies: ["A"],
     vanished_strategies: [],
     supply_partial_missing: false,
+    themes: [],
   },
   {
     candidate_id: "candidate-missing",
@@ -33,6 +34,7 @@ const candidateRows: TodayCandidateCardRow[] = [
     strategies: ["B"],
     vanished_strategies: ["C"],
     supply_partial_missing: false,
+    themes: [],
   },
   {
     candidate_id: "candidate-partial",
@@ -41,6 +43,7 @@ const candidateRows: TodayCandidateCardRow[] = [
     strategies: [],
     vanished_strategies: ["D"],
     supply_partial_missing: true,
+    themes: [],
   },
 ];
 

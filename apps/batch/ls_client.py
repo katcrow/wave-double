@@ -28,6 +28,7 @@ DEFAULT_PATH_BY_TR = {
     "t1856": "/stock/item-search",
     "t1859": "/stock/item-search",
     "t1866": "/stock/item-search",
+    "t1532": "/stock/sector",
     "t8410": "/stock/chart",
 }
 

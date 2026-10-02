@@ -21,6 +21,7 @@ function row(overrides: Partial<TopTradingCandidateRpcRow> = {}): TopTradingCand
     trading_day: TRADING_DAY,
     trading_value: 100000000,
     change_pct: null,
+    themes: [],
     major_sector_name: null,
     program_buy_value: null,
     ...overrides,
@@ -92,6 +93,15 @@ test("RPC shape guard는 유한 숫자와 날짜를 강제한다", () => {
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: Number.MAX_SAFE_INTEGER + 1 }), false);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_value: Number.POSITIVE_INFINITY }), false);
   assert.equal(isTopTradingCandidateRpcRow({ ...row(), trading_day: "2026-02-30" }), false);
+  assert.equal(isTopTradingCandidateRpcRow({ ...row(), themes: [{ theme_code: "1", theme_name: "", average_change_pct: 1 }] }), false);
+});
+
+test("상위 후보 뷰모델은 종목별 테마와 평균등락률을 전달한다", () => {
+  const [candidate] = buildTopTradingCandidateViewModels([
+    row({ themes: [{ theme_code: "1", theme_name: "반도체", average_change_pct: 4.8 }] }),
+  ], RUN_ID, TRADING_DAY);
+  assert.equal(candidate.themes[0].themeName, "반도체");
+  assert.equal(candidate.themes[0].formattedAverageChangePct, "+4.80%");
 });
 
 test("이름이 공백이면 ticker를 표시 이름으로 사용하고 유효한 이름은 trim한다", () => {

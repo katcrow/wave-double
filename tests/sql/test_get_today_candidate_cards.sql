@@ -26,6 +26,7 @@ begin
     jsonb_build_array(
       jsonb_build_object(
         'candidate_id', tagged_dup_id, 'ticker', '000010', 'name', '중복테스트', 'trading_value', 100,
+        'themes', jsonb_build_array(jsonb_build_object('theme_code', '001', 'theme_name', '반도체', 'average_change_pct', 4.8)),
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object(
         'candidate_id', untagged_id, 'ticker', '000020', 'name', '태그없음', 'trading_value', 100,
@@ -93,6 +94,12 @@ begin
   if (dup_cards->0->>'supply_partial_missing')::boolean <> false then
     raise exception 'expected supply_partial_missing=false from the latest (confirmed) D0 row, got %', dup_cards->0->>'supply_partial_missing';
   end if;
+  if jsonb_array_length(dup_cards->0->'themes') <> 1
+     or (dup_cards->0->'themes'->0->>'theme_code') <> '001'
+     or (dup_cards->0->'themes'->0->>'theme_name') <> '반도체'
+     or (dup_cards->0->'themes'->0->>'average_change_pct')::numeric <> 4.8 then
+    raise exception 'candidate themes are missing from today card: %', dup_cards->0->'themes';
+  end if;
 
   -- D0 행이 아예 없는 후보(no_d0_id)는 카드가 존재하되 supply_partial_missing=false.
   if not exists (
@@ -101,6 +108,13 @@ begin
       and (e->>'supply_partial_missing')::boolean = false
   ) then
     raise exception 'candidate with no D0 row at all must get supply_partial_missing=false';
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(result) e
+    where (e->>'candidate_id')::uuid = no_d0_id
+      and e->'themes' = '[]'::jsonb
+  ) then
+    raise exception 'candidate without themes must return an empty theme array';
   end if;
 
   -- active 태그만 있는 후보(tagged_dup_id, no_d0_id)는 vanished_strategies가 빈 배열이어야 한다.

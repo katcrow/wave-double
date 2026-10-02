@@ -43,6 +43,7 @@ from .strategy_i_stage import (
     is_strategy_i_window,
     run_strategy_i_stage,
 )
+from .theme_enrichment import ThemeClient
 from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, run_tags_stage
 
 # status를 "얼마나 나쁜가"로 정렬한다 -- candidates/tags 결과를 합칠 때 더 나쁜 쪽이 이긴다.
@@ -184,6 +185,7 @@ def run_scheduled_batch(
     strategy_client: TagsClient | None = None,
     bias_repository: BiasRepositoryProtocol | None = None,
     strategy_i_supply_provider: StrategyISupplyProviderProtocol | None = None,
+    theme_client: ThemeClient | None = None,
 ) -> SchedulerResult:
     """휴장이면 attempt를 시작한 뒤 즉시 skip 처리하고, 개장일이면 candidate stage로 위임한다.
 
@@ -236,6 +238,7 @@ def run_scheduled_batch(
         condition_search_user_id=condition_search_user_id,
         lease_seconds=lease_seconds,
         dispatch_request_id=dispatch_request_id,
+        theme_client=theme_client,
     )
 
     # candidates가 success/partial이고 REPLAYED가 아닐 때만(fence_token 확정) 이어서

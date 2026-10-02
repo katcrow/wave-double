@@ -1249,10 +1249,14 @@ a {
   overflow-wrap: anywhere;
 }
 
-.top-trading-candidates__metric--sector dd {
+.top-trading-candidates__metric--themes dd {
   color: var(--color-ink-primary);
   font-family: var(--font-family-base);
   font-size: var(--font-size-label);
+}
+
+.top-trading-candidates__theme {
+  overflow-wrap: anywhere;
 }
 
 .candidate-card {
@@ -1263,6 +1267,41 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.candidate-card__themes {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.candidate-card__themes dt {
+  font-weight: var(--font-weight-label);
+}
+
+.candidate-card__themes dd {
+  margin: 0;
+  color: var(--color-ink-primary);
+  overflow-wrap: anywhere;
+}
+
+.candidate-card__theme-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.candidate-card__theme-change {
+  color: var(--color-accent-strong);
+  font-family: var(--font-family-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.candidate-card__theme-more {
+  color: var(--color-ink-muted);
 }
 
 .candidate-card--expanded {

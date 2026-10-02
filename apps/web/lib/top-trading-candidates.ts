@@ -1,4 +1,5 @@
 import type { TopTradingCandidateRpcRow } from "./dashboard-types";
+import { buildCandidateThemeViewModels, isCandidateThemeRpcRows, type CandidateThemeViewModel } from "./candidate-themes.ts";
 
 export const TOP_TRADING_CANDIDATE_LIMIT = 3;
 
@@ -12,6 +13,8 @@ export interface TopTradingCandidateViewModel {
   formattedTradingValue: string;
   changePct: number | null;
   formattedChangePct: string;
+  themes: CandidateThemeViewModel[];
+  /** 기존 API 호환용. 화면 표시는 themes를 사용한다. */
   majorSectorName: string | null;
   programBuyValue: number | null;
   formattedProgramBuyValue: string;
@@ -58,6 +61,7 @@ export function isTopTradingCandidateRpcRow(value: unknown): value is TopTrading
     isIsoDate(row.trading_day) &&
     isSafeNonNegativeNumber(row.trading_value) &&
     isFiniteNumberOrNull(row.change_pct) &&
+    isCandidateThemeRpcRows(row.themes) &&
     (row.major_sector_name === null || typeof row.major_sector_name === "string") &&
     isFiniteNumberOrNull(row.program_buy_value)
   );
@@ -90,6 +94,7 @@ export function buildTopTradingCandidateViewModels(
       formattedTradingValue: formatTradingValue(row.trading_value),
       changePct: row.change_pct,
       formattedChangePct: formatChangePct(row.change_pct),
+      themes: buildCandidateThemeViewModels(row.themes),
       majorSectorName: row.major_sector_name?.trim() || null,
       programBuyValue: row.program_buy_value,
       formattedProgramBuyValue: formatEokValue(row.program_buy_value),

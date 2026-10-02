@@ -38,7 +38,8 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(topCandidate).toContainText("조정후보");
   await expect(topCandidate.locator("dt").filter({ hasText: "거래대금" }).locator("..").locator("dd")).toHaveText("1억원");
   await expect(topCandidate.locator("dt").filter({ hasText: "당일 상승률" }).locator("..").locator("dd")).toHaveText("+2.90%");
-  await expect(topCandidate.locator("dt").filter({ hasText: "주요 섹터" }).locator("..").locator("dd")).toHaveText("반도체");
+  await expect(topCandidate.locator("dt").filter({ hasText: "테마" }).locator("..").locator("dd")).toContainText("반도체 +4.80% · 전고체 +3.20%");
+  await expect(topCandidate.locator("dt").filter({ hasText: "테마" }).locator("..").locator("dd")).toContainText("+1");
   await expect(topCandidate.locator("dt").filter({ hasText: "프로그램 순매수금액" }).locator("..").locator("dd")).toHaveText("12억원");
   await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("SK하이닉스");
   await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("000660");

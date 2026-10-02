@@ -39,6 +39,8 @@ begin
   perform public.write_stage(purge_run_id, 'candidates', purge_fence, purge_lease, 'running', 'success');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (v_candidate_id, purge_run_id, 'A', date '2099-02-01');
+  insert into public.candidate_themes(candidate_id, attempt_run_id, theme_code, theme_name, average_change_pct)
+    values (v_candidate_id, purge_run_id, '001', '퍼지테마', 1.5);
   insert into public.market_supply(attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net)
     values (purge_run_id, 'KOSPI', date '2099-02-01', 1, 2, 3, 4);
   update public.runs set started_at = now() - interval '30 days' where run_id = purge_run_id;
@@ -80,6 +82,9 @@ begin
   end if;
   if exists (select 1 from public.candidates where attempt_run_id = purge_run_id) then
     raise exception 'purge fixture: candidates for purged run survived';
+  end if;
+  if exists (select 1 from public.candidate_themes where attempt_run_id = purge_run_id) then
+    raise exception 'purge fixture: candidate_themes for purged run survived';
   end if;
   if exists (select 1 from public.logical_runs where logical_run_key = purge_key and active_attempt_run_id is not null) then
     raise exception 'purge fixture: active_attempt_run_id pointer to purged run was not cleared';

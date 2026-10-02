@@ -1,4 +1,5 @@
 import type { TopTradingCandidateViewModel } from "@/lib/top-trading-candidates";
+import { MAX_VISIBLE_THEMES } from "@/lib/candidate-themes";
 
 export default function TopTradingCandidates({
   candidates,
@@ -35,9 +36,18 @@ export default function TopTradingCandidates({
                 <dt>당일 상승률</dt>
                 <dd>{candidate.formattedChangePct}</dd>
               </div>
-              <div className="top-trading-candidates__metric top-trading-candidates__metric--sector">
-                <dt>주요 섹터</dt>
-                <dd>{candidate.majorSectorName ?? "미확인"}</dd>
+              <div className="top-trading-candidates__metric top-trading-candidates__metric--themes">
+                <dt>테마</dt>
+                <dd>
+                  {candidate.themes.length === 0
+                    ? "미확인"
+                    : candidate.themes.slice(0, MAX_VISIBLE_THEMES).map((theme, index) => (
+                        <span className="top-trading-candidates__theme" key={theme.themeCode}>
+                          {index > 0 && " · "}{theme.themeName} {theme.formattedAverageChangePct}
+                        </span>
+                      ))}
+                  {candidate.themes.length > MAX_VISIBLE_THEMES && ` +${candidate.themes.length - MAX_VISIBLE_THEMES}`}
+                </dd>
               </div>
               <div className="top-trading-candidates__metric">
                 <dt>프로그램 순매수금액</dt>
