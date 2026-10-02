@@ -1,9 +1,10 @@
 """수급 수집 대상 후보를 조회하는 fetcher.
 
 ``candidate_tags``(``status='active'``)로 이번 attempt에 태깅된 ``candidate_id``
-목록을 얻고 거래대금 상위 3개 후보를 추가해 ``candidates``에서 ticker를 조회한다.
-active 후보 수급 수집은 유지하면서 거래대금 상위 참고 영역에 필요한 프로그램 수급도
-태그 상태와 무관하게 수집한다.
+목록을 얻고 거래대금 상위 3개 후보와 대형주(``EXCLUDED_TOP_TICKERS``) 제외 후 상위
+3개 후보를 추가해 ``candidates``에서 ticker를 조회한다. active 후보 수급 수집은 유지하면서
+거래대금 상위 참고 영역('전체'/'제외' 두 모드)에 필요한 프로그램 수급도 태그 상태와
+무관하게 수집한다.
 
 실패를 흡수하지 않고 그대로 전파한다(``supply_stage``가 잡아 stage를 명시적으로
 ``failed``로 기록한다 -- ``candidate_fetcher.py``와 동일한 원칙, AD-5).
@@ -15,6 +16,11 @@ from dataclasses import dataclass
 
 import httpx
 
+# 거래대금 상위 참고 영역의 기본 '제외' 모드에서 빼는 대형주(삼성전자, SK하이닉스).
+# web의 apps/web/lib/top-trading-candidates.ts TOP_TRADING_EXCLUDED_TICKERS와 같은 값을 유지한다.
+EXCLUDED_TOP_TICKERS: tuple[str, ...] = ("005930", "000660")
+TOP_CANDIDATE_LIMIT = 3
+
 
 @dataclass(frozen=True)
 class TaggedCandidateRow:
@@ -25,7 +31,7 @@ class TaggedCandidateRow:
 
 
 class TaggedCandidateFetcher:
-    """active 태그 후보와 거래대금 상위 3개 후보의 합집합을 조회한다."""
+    """active 태그 후보, 거래대금 상위 3개, 대형주 제외 후 상위 3개 후보의 합집합을 조회한다."""
 
     def __init__(
         self,
@@ -52,7 +58,7 @@ class TaggedCandidateFetcher:
         self.close()
 
     def fetch(self, run_id: str) -> list[TaggedCandidateRow]:
-        """active 태그 후보와 거래대금 상위 3개 후보를 중복 없이 반환한다.
+        """active 태그 후보, 거래대금 상위 3개, 대형주 제외 후 상위 3개 후보를 중복 없이 반환한다.
 
         실패 시 예외를 그대로 전파한다(흡수하지 않음).
         """
@@ -94,8 +100,12 @@ class TaggedCandidateFetcher:
             for row in rows
         ):
             raise RuntimeError("Supabase candidates response malformed: invalid candidate row")
-        top_candidate_ids = {str(row["candidate_id"]) for row in rows[:3]}
-        selected_ids = active_candidate_ids | top_candidate_ids
+        top_candidate_ids = {str(row["candidate_id"]) for row in rows[:TOP_CANDIDATE_LIMIT]}
+        excluded_top_candidate_ids = {
+            str(row["candidate_id"])
+            for row in [r for r in rows if str(r["ticker"]) not in EXCLUDED_TOP_TICKERS][:TOP_CANDIDATE_LIMIT]
+        }
+        selected_ids = active_candidate_ids | top_candidate_ids | excluded_top_candidate_ids
         return [
             TaggedCandidateRow(str(row["candidate_id"]), str(row["ticker"]))
             for row in rows
@@ -110,4 +120,4 @@ class TaggedCandidateFetcher:
         }
 
 
-__all__ = ["TaggedCandidateRow", "TaggedCandidateFetcher"]
+__all__ = ["EXCLUDED_TOP_TICKERS", "TaggedCandidateRow", "TaggedCandidateFetcher"]

@@ -6,6 +6,7 @@ import {
   formatEokValue,
   formatTradingValue,
   isTopTradingCandidateRpcRow,
+  TOP_TRADING_EXCLUDED_TICKERS,
 } from "./top-trading-candidates.ts";
 import type { TopTradingCandidateRpcRow } from "./dashboard-types.ts";
 
@@ -120,4 +121,8 @@ test("이름이 공백이면 ticker를 표시 이름으로 사용하고 유효�
   assert.equal(fallback.displayName, "005930");
   assert.equal(trimmed.name, "삼성전자");
   assert.equal(trimmed.displayName, "삼성전자");
+});
+
+test("TOP_TRADING_EXCLUDED_TICKERS는 삼성전자와 SK하이닉스만 제외 대상으로 둔다", () => {
+  assert.deepEqual([...TOP_TRADING_EXCLUDED_TICKERS], ["005930", "000660"]);
 });

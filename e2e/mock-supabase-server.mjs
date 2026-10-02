@@ -68,6 +68,7 @@ const SCENARIOS = new Set([
   "collection-failure",
   "card-error",
   "top-error",
+  "top-excluded-error",
   "top-malformed",
   "intraday",
   "strategy-f",
@@ -180,6 +181,7 @@ function rpcPayload(name, body = {}) {
   if (name === "get_top_tagged_candidates") {
     if (body?.p_run_id !== RUN_ID) return null;
     if (activeScenario === "top-error") return null;
+    if (activeScenario === "top-excluded-error" && Array.isArray(body?.p_exclude_tickers) && body.p_exclude_tickers.length > 0) return null;
     const base = {
       candidate_id: "00000000-0000-4000-8000-000000000401",
       attempt_run_id: RUN_ID,
@@ -196,9 +198,12 @@ function rpcPayload(name, body = {}) {
       { ...base, candidate_id: "00000000-0000-4000-8000-000000000402", ticker: "000660", name: "SK하이닉스", trading_value: 100000000, change_pct: 1.2, major_sector_name: "반도체", program_buy_value: 8.6 },
       { ...base, candidate_id: "00000000-0000-4000-8000-000000000403", ticker: "035420", name: "NAVER", trading_value: 100000000, change_pct: -0.8, major_sector_name: "인터넷", program_buy_value: -2.1 },
       { ...base, candidate_id: "00000000-0000-4000-8000-000000000404", ticker: "051910", name: "LG화학", trading_value: 90000000, change_pct: 0, major_sector_name: "2차전지", program_buy_value: 0 },
+      { ...base, candidate_id: "00000000-0000-4000-8000-000000000407", ticker: "068270", name: "셀트리온", trading_value: 80000000, change_pct: 0.5, major_sector_name: "바이오", program_buy_value: 3.1 },
     ];
     if (activeScenario === "top-malformed") return [{ ...base, trading_value: "not-a-number" }];
-    return [base, ...additional];
+    // 실제 RPC처럼 p_exclude_tickers를 limit 3 전에 적용한다.
+    const excluded = new Set(Array.isArray(body?.p_exclude_tickers) ? body.p_exclude_tickers : []);
+    return [base, ...additional].filter((row) => !excluded.has(row.ticker)).slice(0, 3);
   }
   if (name === "get_candidate_evidence") {
     return [{

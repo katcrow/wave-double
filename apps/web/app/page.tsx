@@ -21,6 +21,7 @@ import { deriveTrustBarState } from "@/lib/trust-bar";
 import {
   buildTopTradingCandidateViewModels,
   isTopTradingCandidateRpcRow,
+  TOP_TRADING_EXCLUDED_TICKERS,
   type TopTradingCandidateViewModel,
 } from "@/lib/top-trading-candidates";
 import type { TopTradingCandidateRpcRow } from "@/lib/dashboard-types";
@@ -57,7 +58,8 @@ export default async function HomePage() {
   let marketSupplyFetchFailed = false;
   let candidateSupplyHintRows: CandidateSupplyHintRpcRow[] = [];
   let candidateSupplyHintsFetchFailed = false;
-  let topTradingCandidates: TopTradingCandidateViewModel[] = [];
+  let excludedTopTradingCandidates: TopTradingCandidateViewModel[] = [];
+  let allTopTradingCandidates: TopTradingCandidateViewModel[] = [];
   if (snapshot.complete_snapshot) {
     const { data: cardRows, error: cardError } = await supabase.rpc("get_today_candidate_cards", {
       p_run_id: snapshot.complete_snapshot.run_id,
@@ -73,26 +75,40 @@ export default async function HomePage() {
     }
 
     // 상단 요약은 기존 카드 RPC와 독립적으로 조회한다. 카드 조회가 실패해도
-    // complete snapshot의 거래대금 상위 참고 영역은 계속 보여준다.
-    try {
-      const { data: topTradingData, error: topTradingError } = await supabase.rpc(
-        "get_top_tagged_candidates",
-        { p_run_id: snapshot.complete_snapshot.run_id },
-      );
-      if (topTradingError) {
-        console.error("get_top_tagged_candidates failed", topTradingError);
-      } else if (Array.isArray(topTradingData) && topTradingData.every(isTopTradingCandidateRpcRow)) {
-        topTradingCandidates = buildTopTradingCandidateViewModels(
-          topTradingData as unknown as TopTradingCandidateRpcRow[],
-          snapshot.complete_snapshot.run_id,
-          snapshot.complete_snapshot.trading_day,
+    // complete snapshot의 거래대금 상위 참고 영역은 계속 보여준다. 토글할 때 다시 조회하지
+    // 않도록 '제외'/'전체' 두 목록을 병렬로 받고, 모드별로 독립 검증한다(한쪽 실패는 로그만).
+    const completeSnapshot = snapshot.complete_snapshot;
+    const fetchTopTradingCandidates = async (
+      mode: "excluded" | "all",
+    ): Promise<TopTradingCandidateViewModel[]> => {
+      try {
+        const { data: topTradingData, error: topTradingError } = await supabase.rpc(
+          "get_top_tagged_candidates",
+          {
+            p_run_id: completeSnapshot.run_id,
+            p_exclude_tickers: mode === "excluded" ? [...TOP_TRADING_EXCLUDED_TICKERS] : [],
+          },
         );
-      } else {
-        console.error("unexpected get_top_tagged_candidates shape", topTradingData);
+        if (topTradingError) {
+          console.error(`get_top_tagged_candidates (${mode}) failed`, topTradingError);
+        } else if (Array.isArray(topTradingData) && topTradingData.every(isTopTradingCandidateRpcRow)) {
+          return buildTopTradingCandidateViewModels(
+            topTradingData as unknown as TopTradingCandidateRpcRow[],
+            completeSnapshot.run_id,
+            completeSnapshot.trading_day,
+          );
+        } else {
+          console.error(`unexpected get_top_tagged_candidates (${mode}) shape`, topTradingData);
+        }
+      } catch (topTradingError) {
+        console.error(`get_top_tagged_candidates (${mode}) threw`, topTradingError);
       }
-    } catch (topTradingError) {
-      console.error("get_top_tagged_candidates threw", topTradingError);
-    }
+      return [];
+    };
+    [excludedTopTradingCandidates, allTopTradingCandidates] = await Promise.all([
+      fetchTopTradingCandidates("excluded"),
+      fetchTopTradingCandidates("all"),
+    ]);
 
     const { data: evidenceRows, error: evidenceError } = await supabase.rpc("get_candidate_evidence", {
       p_run_id: snapshot.complete_snapshot.run_id,
@@ -190,7 +206,10 @@ export default async function HomePage() {
         <NoticeBanner message="수급 힌트를 불러오지 못했습니다. 힌트는 판정 불가로 표시합니다." />
       )}
 
-      <TopTradingCandidates candidates={topTradingCandidates} />
+      <TopTradingCandidates
+        excludedCandidates={excludedTopTradingCandidates}
+        allCandidates={allTopTradingCandidates}
+      />
 
       <CandidateList
         candidates={candidateCards}

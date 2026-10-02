@@ -1,5 +1,5 @@
 -- get_top_tagged_candidates()의 published snapshot lineage, 태그 상태 독립성,
--- 거래대금 상위 3개와 ticker tie-break fixture.
+-- 거래대금 상위 3개와 ticker tie-break, p_exclude_tickers 제외 후 상위 3개 채움 fixture.
 begin;
 
 do $$
@@ -182,6 +182,88 @@ begin
      or (result->0->>'ticker') <> '000010'
      or (result->1->>'ticker') <> '000011' then
     raise exception 'no-active-tag snapshot must return both candidates, got %', result;
+  end if;
+
+  -- 제외 대상이 후보에 없으면 두 모드의 결과가 같다.
+  if public.get_top_tagged_candidates(run_id, array['005930', '000660']) <> result then
+    raise exception 'exclusion of absent tickers must not change result, got %',
+      public.get_top_tagged_candidates(run_id, array['005930', '000660']);
+  end if;
+end $$;
+
+do $$
+declare
+  key text := 'intraday:2099-10-02:09:00';
+  started jsonb;
+  run_id uuid;
+  test_run_id uuid;
+  fence bigint;
+  lease uuid;
+  result jsonb;
+begin
+  started := public.start_attempt(key, date '2099-10-02', 'intraday', 'manual', 300);
+  run_id := (started->>'run_id')::uuid;
+  test_run_id := run_id;
+  fence := (started->>'fence_token')::bigint;
+  lease := (started->>'lease_token')::uuid;
+  perform public.write_stage(run_id, 'candidates', fence, lease, 'pending', 'running');
+  perform public.write_candidates(run_id, fence, lease,
+    jsonb_build_array(
+      jsonb_build_object('candidate_id', gen_random_uuid(), 'ticker', '005930', 'name', '삼성전자', 'trading_value', 500,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', gen_random_uuid(), 'ticker', '000660', 'name', 'SK하이닉스', 'trading_value', 400,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', gen_random_uuid(), 'ticker', '035420', 'name', 'NAVER', 'trading_value', 300,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', gen_random_uuid(), 'ticker', '051910', 'name', 'LG화학', 'trading_value', 200,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', gen_random_uuid(), 'ticker', '068270', 'name', '셀트리온', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
+    ),
+    jsonb_build_object('selection_input_hash', repeat('c', 64), 'original_count', 5,
+      'candidate_count', 5, 'excluded_count', 0, 'truncated_count', 0));
+  perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
+  update public.runs
+     set status = 'published', finished_at = now()
+   where public.runs.run_id = test_run_id;
+  update public.logical_runs
+     set current_complete_run_id = test_run_id, published_at = now()
+   where logical_run_key = key;
+
+  -- p_run_id만 넘기는 기존 호출은 제외 없이 상위 3개를 반환한다.
+  result := public.get_top_tagged_candidates(run_id);
+  if jsonb_array_length(result) <> 3
+     or (result->0->>'ticker') <> '005930'
+     or (result->1->>'ticker') <> '000660'
+     or (result->2->>'ticker') <> '035420' then
+    raise exception 'default call must keep previous top 3, got %', result;
+  end if;
+
+  -- 제외 대상은 limit 3 전에 빠져 다음 순위가 채워진다.
+  result := public.get_top_tagged_candidates(run_id, array['005930', '000660']);
+  if jsonb_array_length(result) <> 3
+     or (result->0->>'ticker') <> '035420'
+     or (result->1->>'ticker') <> '051910'
+     or (result->2->>'ticker') <> '068270' then
+    raise exception 'excluded tickers must be removed before limit 3, got %', result;
+  end if;
+
+  -- NULL 배열은 빈 배열과 같게 취급한다.
+  result := public.get_top_tagged_candidates(run_id, null);
+  if jsonb_array_length(result) <> 3 or (result->0->>'ticker') <> '005930' then
+    raise exception 'null exclude array must behave like empty array, got %', result;
+  end if;
+
+  -- 배열 안의 NULL 원소는 무시하고 나머지 제외만 적용한다.
+  result := public.get_top_tagged_candidates(run_id, array['005930', null]);
+  if jsonb_array_length(result) <> 3 or (result->0->>'ticker') <> '000660' then
+    raise exception 'null element must not empty the result, got %', result;
+  end if;
+
+  -- 제외 후 남은 후보가 3개 미만이면 남은 후보만 반환한다.
+  result := public.get_top_tagged_candidates(run_id, array['005930', '000660', '035420', '051910']);
+  if jsonb_array_length(result) <> 1 or (result->0->>'ticker') <> '068270' then
+    raise exception 'few remaining candidates must be returned as-is, got %', result;
   end if;
 end $$;
 

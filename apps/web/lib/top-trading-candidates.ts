@@ -3,6 +3,12 @@ import { buildCandidateThemeViewModels, isCandidateThemeRpcRows, type CandidateT
 
 export const TOP_TRADING_CANDIDATE_LIMIT = 3;
 
+/**
+ * 거래대금 상위 참고 영역의 기본 '제외' 모드에서 빼는 대형주(삼성전자, SK하이닉스).
+ * batch의 apps/batch/tagged_candidate_fetcher.py EXCLUDED_TOP_TICKERS와 같은 값을 유지한다.
+ */
+export const TOP_TRADING_EXCLUDED_TICKERS = ["005930", "000660"] as const;
+
 export interface TopTradingCandidateViewModel {
   rank: number;
   candidateId: string;

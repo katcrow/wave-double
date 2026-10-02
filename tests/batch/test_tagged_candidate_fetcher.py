@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from apps.batch.tagged_candidate_fetcher import TaggedCandidateFetcher, TaggedCandidateRow
+from apps.batch.tagged_candidate_fetcher import EXCLUDED_TOP_TICKERS, TaggedCandidateFetcher, TaggedCandidateRow
 
 
 def make_fetcher(handler):
@@ -100,6 +100,35 @@ def test_fetch_includes_active_candidates_outside_top_three():
     ]
 
 
+def test_fetch_includes_top_three_after_excluding_mega_caps():
+    def handler(request):
+        if request.url.path == "/rest/v1/candidate_tags":
+            return httpx.Response(200, json=[])
+        return httpx.Response(
+            200,
+            json=[
+                {"candidate_id": "c1", "ticker": "005930", "trading_value": 500},
+                {"candidate_id": "c2", "ticker": "000660", "trading_value": 400},
+                {"candidate_id": "c3", "ticker": "035420", "trading_value": 300},
+                {"candidate_id": "c4", "ticker": "051910", "trading_value": 200},
+                {"candidate_id": "c5", "ticker": "068270", "trading_value": 100},
+                {"candidate_id": "c6", "ticker": "105560", "trading_value": 50},
+            ],
+        )
+
+    fetcher = make_fetcher(handler)
+    rows = fetcher.fetch("run-1")
+
+    assert EXCLUDED_TOP_TICKERS == ("005930", "000660")
+    assert rows == [
+        TaggedCandidateRow("c1", "005930"),
+        TaggedCandidateRow("c2", "000660"),
+        TaggedCandidateRow("c3", "035420"),
+        TaggedCandidateRow("c4", "051910"),
+        TaggedCandidateRow("c5", "068270"),
+    ]
+
+
 def test_fetch_returns_empty_list_when_no_candidates_exist():
     calls = []
 
@@ -145,3 +174,17 @@ def test_fetch_propagates_transport_error():
     fetcher = make_fetcher(handler)
     with pytest.raises(httpx.ConnectError):
         fetcher.fetch("run-1")
+
+
+def test_excluded_top_tickers_match_web_constant():
+    # 배치 수급 수집 대상과 web '제외' 모드가 같은 종목을 빼야 프로그램 수급이 미확인으로 남지 않는다.
+    import re
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[2] / "apps" / "web" / "lib" / "top-trading-candidates.ts"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"TOP_TRADING_EXCLUDED_TICKERS\s*=\s*\[([^\]]*)\]", source)
+    assert match, "TOP_TRADING_EXCLUDED_TICKERS 정의를 찾지 못했다"
+    web_tickers = tuple(re.findall(r'"([^"]+)"', match.group(1)))
+    assert web_tickers == EXCLUDED_TOP_TICKERS
