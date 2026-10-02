@@ -12,6 +12,7 @@ function row(overrides: Partial<TodayCandidateCardRow> = {}): TodayCandidateCard
     candidate_id: "11111111-1111-1111-1111-111111111111",
     ticker: "005930",
     name: "삼성전자",
+    trading_value: 123_456_789_000,
     strategies: ["A"],
     vanished_strategies: [],
     supply_partial_missing: false,
@@ -163,4 +164,17 @@ test("SQL이 정렬한 다중 전략 우선 순서를 클라이언트가 보존�
     row({ candidate_id: "value", ticker: "000010", strategies: ["A"] }),
   ]);
   assert.deepEqual(vms.map((candidate) => candidate.candidateId), ["multi", "value"]);
+});
+
+test("거래대금: 억원 단위로 포맷하고 값이 없거나 음수면 미확인", () => {
+  const [vm] = buildCandidateCardViewModels([row()]);
+  assert.equal(vm.tradingValue, 123_456_789_000);
+  assert.equal(vm.formattedTradingValue, "1,235억원");
+  const [missing] = buildCandidateCardViewModels([row({ trading_value: undefined })]);
+  assert.equal(missing.tradingValue, null);
+  assert.equal(missing.formattedTradingValue, "미확인");
+  const [negative] = buildCandidateCardViewModels([row({ trading_value: -1 })]);
+  assert.equal(negative.formattedTradingValue, "미확인");
+  assert.equal(isTodayCandidateCardRow({ ...row(), trading_value: "100" }), false);
+  assert.equal(isTodayCandidateCardRow({ ...row(), trading_value: null }), true);
 });

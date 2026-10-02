@@ -98,6 +98,9 @@ begin
      or (result->3->>'candidate_id')::uuid <> tie_id then
     raise exception 'same active-count candidates must use trading_value DESC then ticker ASC: %', result;
   end if;
+  if (result->1->>'trading_value')::numeric <> 200 then
+    raise exception 'card must expose candidates.trading_value: %', result->1;
+  end if;
   if result->0->'strategies' <> '["A", "B", "C"]'::jsonb then
     raise exception 'multi-strategy candidate must expose all active strategies: %', result->0->'strategies';
   end if;

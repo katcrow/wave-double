@@ -158,3 +158,12 @@ test("전략 G: 정의되지 않은 전략 라우트는 not-found로 떨어진�
   await expect(page.getByRole("heading", { name: "전략 G" })).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("설명/성과 준비 중입니다");
 });
+
+test("태깅 후보 카드에 거래대금을 억원 단위로 표시한다", async ({ page, request }) => {
+  await setScenario(request, "default");
+  await login(page);
+
+  const card = page.locator(".candidate-card").first();
+  await expect(card.locator("dt").filter({ hasText: "거래대금" })).toBeVisible();
+  await expect(card.locator(".candidate-card__trading-value")).toHaveText("1,235억원");
+});

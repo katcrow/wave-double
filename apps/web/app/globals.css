@@ -1332,6 +1332,11 @@ a {
   overflow-wrap: anywhere;
 }
 
+.candidate-card__trading-value {
+  font-family: var(--font-family-data);
+  font-variant-numeric: tabular-nums;
+}
+
 .candidate-card__theme-list {
   display: flex;
   flex-wrap: wrap;

@@ -1,4 +1,5 @@
 import type { CandidateThemeRpcRow, TodayCandidateCardRow } from "./dashboard-types.ts";
+import { formatTradingValue } from "./top-trading-candidates.ts";
 import { buildCandidateThemeViewModels, isCandidateThemeRpcRows, type CandidateThemeViewModel } from "./candidate-themes.ts";
 
 export type CandidateSignalStatus = "active" | "vanished" | "mixed";
@@ -22,6 +23,7 @@ export function isTodayCandidateCardRow(value: unknown): value is TodayCandidate
     typeof row.candidate_id === "string" && row.candidate_id.length > 0 &&
     typeof row.ticker === "string" && row.ticker.length > 0 &&
     (row.name === null || typeof row.name === "string") &&
+    (row.trading_value === undefined || row.trading_value === null || typeof row.trading_value === "number") &&
     isStringArray(row.strategies) &&
     isStringArray(row.vanished_strategies) &&
     typeof row.supply_partial_missing === "boolean" &&
@@ -35,6 +37,10 @@ export interface CandidateCardViewModel {
   name: string | null;
   /** 렌더링용 표시 이름. name이 null이면 ticker로 대체(row.name ?? row.ticker). */
   displayName: string;
+  /** 거래대금(원). RPC가 값을 주지 않으면 null. */
+  tradingValue: number | null;
+  /** 억원 단위 표시 문자열("1,234억원"). 값이 없으면 "미확인". */
+  formattedTradingValue: string;
   /** 정렬된(A~E, 가변 개수) 태그 중 MAX_VISIBLE_TAGS개까지. */
   visibleStrategies: string[];
   /** 필터와 카드 메타데이터에 사용하는 전체 active 전략 태그. */
@@ -61,6 +67,12 @@ function getSignalStatus(
   return "active";
 }
 
+function formatCardTradingValue(value: number | null | undefined): string {
+  if (typeof value !== "number") return "미확인";
+  const formatted = formatTradingValue(value);
+  return formatted === "미확인" ? formatted : `${formatted}억원`;
+}
+
 /**
  * get_today_candidate_cards() 원시 행 배열을 카드 렌더링용 뷰모델로 변환하는 순수 함수.
  * RPC가 이미 태그 없는 후보는 INNER JOIN으로 제외했고 `strategies`도
@@ -75,6 +87,8 @@ export function buildCandidateCardViewModels(
     ticker: row.ticker,
     name: row.name,
     displayName: row.name ?? row.ticker,
+    tradingValue: row.trading_value ?? null,
+    formattedTradingValue: formatCardTradingValue(row.trading_value),
     strategies: [...row.strategies],
     visibleStrategies: row.strategies.slice(0, MAX_VISIBLE_TAGS),
     hiddenStrategyCount: Math.max(0, row.strategies.length - MAX_VISIBLE_TAGS),

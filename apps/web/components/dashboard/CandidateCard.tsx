@@ -76,12 +76,14 @@ export default function CandidateCard({
         </span>
       </button>
       <p id={`${panelId}-description`} className="sr-only">
-        종목 코드: {candidate.ticker}. 전략: {[...candidate.strategies, ...candidate.vanishedStrategies]
+        종목 코드: {candidate.ticker}. 거래대금: {candidate.formattedTradingValue}. 전략: {[...candidate.strategies, ...candidate.vanishedStrategies]
           .map((strategy) => getStrategyLabel(strategy) ?? `전략 ${strategy}`)
           .join(", ") || "없음"}. 테마: {candidate.themes.map((theme) => `${theme.themeName} ${theme.formattedAverageChangePct}`)
             .join(", ") || "미확인"}. 시그널 상태: {SIGNAL_STATUS_LABEL[candidate.signalStatus]}. 수급 힌트: {HINT_STATUS_LABEL[hintStatus]}.
       </p>
       <dl className="candidate-card__themes">
+        <dt>거래대금</dt>
+        <dd className="candidate-card__trading-value">{candidate.formattedTradingValue}</dd>
         <dt>테마</dt>
         <dd>
           {candidate.themes.length === 0 ? (

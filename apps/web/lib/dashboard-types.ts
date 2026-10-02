@@ -205,6 +205,8 @@ export interface TodayCandidateCardRow {
   candidate_id: string;
   ticker: string;
   name: string | null;
+  /** candidates.trading_value(원). 202610021800 migration 이전 응답에는 없을 수 있다. */
+  trading_value?: number | null;
   strategies: string[];
   /** Story 2.8: 이전 attempt에서 active였으나 현재 attempt에서 재태깅되지 않은 전략(status=vanished). */
   vanished_strategies: string[];
