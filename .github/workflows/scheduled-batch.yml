@@ -110,24 +110,4 @@ jobs:
           if [ -n "$LOGICAL_RUN_KEY" ]; then
             args+=(--logical-run-key "$LOGICAL_RUN_KEY")
           fi
-          # 예약 배치는 KST 20:00 이후 작업 중이면 안 된다. 시작 guard(intraday 19:30,
-          # close 19:50 마감)를 통과했더라도 20:00에 프로세스를 강제 종료한다.
-          # manual은 기존 수동 실행 계약을 유지한다(job timeout만 적용).
-          if [ "${{ steps.trigger.outputs.value }}" = "schedule" ]; then
-            # KST(UTC+9, DST 없음)의 오늘 20:00 = UTC 11:00. tz 데이터베이스에 의존하지 않는다.
-            kst_today=$(date -u -d '+9 hours' +%F)
-            remaining=$(( $(date -u -d "${kst_today} 11:00" +%s) - $(date -u +%s) ))
-            if [ "$remaining" -le 0 ]; then
-              echo "batch_kind=${{ steps.batch-kind.outputs.value }} status=skipped result_code=SCHEDULE_PAST_HARD_DEADLINE"
-              exit 0
-            fi
-            set +e
-            timeout --kill-after=20s "${remaining}s" uv run --with httpx python -m apps.batch "${args[@]}"
-            status=$?
-            set -e
-            if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
-              echo "::error::scheduled batch terminated at KST 20:00 hard deadline"
-            fi
-            exit "$status"
-          fi
           uv run --with httpx python -m apps.batch "${args[@]}"

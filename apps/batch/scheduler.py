@@ -51,8 +51,8 @@ from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, r
 _STATUS_SEVERITY = {"success": 0, "partial": 1, "failed": 2}
 
 OPERATING_WINDOW_START = time(8, 0)
-# 20:00 이후에는 어떤 예약 배치도 작업 중이면 안 된다. 시작 마감을 20:00보다 앞당겨
-# 최장 실행 시간(관측 최대 약 8분)을 흡수하고, workflow는 20:00에 프로세스를 강제 종료한다.
+# 예약 배치는 20:00 이후 새로 진입하지 않는다. 시작 마감을 20:00보다 앞당겨 최장 실행
+# 시간(관측 최대 약 8분)이 20:00 전에 끝나도록 하고, 이미 진행 중인 실행은 끝까지 마무리한다.
 INTRADAY_START_DEADLINE = time(19, 30)
 CLOSE_WINDOW_START = time(19, 30)
 CLOSE_START_DEADLINE = time(19, 50)
