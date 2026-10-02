@@ -156,3 +156,11 @@ test("여러 후보를 순서대로 각각 변환한다", () => {
   assert.equal(vms[0].candidateId, "1");
   assert.equal(vms[1].hiddenStrategyCount, 1);
 });
+
+test("SQL이 정렬한 다중 전략 우선 순서를 클라이언트가 보존한다", () => {
+  const vms = buildCandidateCardViewModels([
+    row({ candidate_id: "multi", ticker: "000020", strategies: ["A", "B", "C"] }),
+    row({ candidate_id: "value", ticker: "000010", strategies: ["A"] }),
+  ]);
+  assert.deepEqual(vms.map((candidate) => candidate.candidateId), ["multi", "value"]);
+});

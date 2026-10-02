@@ -1,5 +1,5 @@
 -- Supabase SQL fixture for Story 2.7 코드 리뷰 발견(high) 수정 커버리지.
--- 실행 전 202609022200_fix_get_today_candidate_cards_d0_dedupe.sql까지의 모든 migration을 적용한다.
+-- 실행 전 현재 migration(202610021100_sort_candidate_cards_by_strategy_count.sql)까지 적용한다.
 -- psql 또는 CI의 local Supabase DB에서 실행하며, 실패 시 DO 블록이 예외를 낸다.
 --
 -- 커버리지:
@@ -8,6 +8,7 @@
 --     카드로만 반환한다(202609022200 LATERAL dedup 회귀 방지).
 --  2) 태그가 없는 후보는 INNER JOIN으로 제외된다.
 --  3) D0 행이 아예 없는 후보는 supply_partial_missing=false로 반환된다.
+--  4) active 전략 수 DESC, 거래대금 DESC, ticker ASC 정렬을 검증한다.
 begin;
 
 do $$
@@ -16,6 +17,8 @@ declare
   tagged_dup_id uuid := gen_random_uuid();   -- D0 2건, 태그 있음 -- dedup 검증 대상
   untagged_id uuid := gen_random_uuid();      -- 태그 없음 -- INNER JOIN 제외 검증 대상
   no_d0_id uuid := gen_random_uuid();         -- D0 없음, 태그 있음 -- supply_partial_missing=false 검증 대상
+  multi_strategy_id uuid := gen_random_uuid(); -- active 전략 3개, 거래대금은 더 작음 -- 다중 전략 우선 검증 대상
+  tie_id uuid := gen_random_uuid();           -- active 전략 1개, 거래대금 동률 -- ticker tie-break 검증 대상
   result jsonb;
   dup_cards jsonb;
 begin
@@ -32,19 +35,32 @@ begin
         'candidate_id', untagged_id, 'ticker', '000020', 'name', '태그없음', 'trading_value', 100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object(
-        'candidate_id', no_d0_id, 'ticker', '000030', 'name', 'D0없음', 'trading_value', 100,
+        'candidate_id', no_d0_id, 'ticker', '000030', 'name', 'D0없음', 'trading_value', 200,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object(
+        'candidate_id', multi_strategy_id, 'ticker', '000025', 'name', '다중전략', 'trading_value', 50,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object(
+        'candidate_id', tie_id, 'ticker', '000040', 'name', '동률테스트', 'trading_value', 100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
     ),
-    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 3, 'candidate_count', 3, 'excluded_count', 0, 'truncated_count', 0));
+    jsonb_build_object('selection_input_hash', repeat('a', 64), 'original_count', 5, 'candidate_count', 5, 'excluded_count', 0, 'truncated_count', 0));
   perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
 
-  -- 태그: tagged_dup_id와 no_d0_id만 active 태그를 받는다. untagged_id는 태그 없음.
+  -- 태그: tagged_dup_id/no_d0_id/tie_id는 active 1개, multi_strategy_id는 active 3개를 받는다. untagged_id는 태그 없음.
   perform public.write_stage(run_id, 'tags', fence, lease, 'pending', 'running');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (tagged_dup_id, run_id, 'A', date '2099-06-01');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
     values (no_d0_id, run_id, 'B', date '2099-06-01');
-  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 2));
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values
+      (multi_strategy_id, run_id, 'A', date '2099-06-01'),
+      (multi_strategy_id, run_id, 'B', date '2099-06-01'),
+      (multi_strategy_id, run_id, 'C', date '2099-06-01');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
+    values (tie_id, run_id, 'A', date '2099-06-01');
+  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 6));
 
   -- tagged_dup_id: 같은 (candidate_id, attempt_run_id)에 D0 행 2건, 서로 다른 trading_day/investor_net_status.
   insert into public.supply_3day(
@@ -70,8 +86,20 @@ begin
   result := public.get_today_candidate_cards(run_id);
 
   -- 태그 없는 후보(untagged_id)는 결과에 없어야 한다(INNER JOIN).
-  if jsonb_array_length(result) <> 2 then
-    raise exception 'expected exactly 2 cards (tagged_dup_id + no_d0_id), got %', jsonb_array_length(result);
+  if jsonb_array_length(result) <> 4 then
+    raise exception 'expected exactly 4 cards (tagged_dup_id + no_d0_id + multi_strategy_id + tie_id), got %', jsonb_array_length(result);
+  end if;
+
+  if (result->0->>'candidate_id')::uuid <> multi_strategy_id then
+    raise exception 'multi-strategy candidate must be first even with lower trading value, got %', result->0->>'candidate_id';
+  end if;
+  if (result->1->>'candidate_id')::uuid <> no_d0_id
+     or (result->2->>'candidate_id')::uuid <> tagged_dup_id
+     or (result->3->>'candidate_id')::uuid <> tie_id then
+    raise exception 'same active-count candidates must use trading_value DESC then ticker ASC: %', result;
+  end if;
+  if result->0->'strategies' <> '["A", "B", "C"]'::jsonb then
+    raise exception 'multi-strategy candidate must expose all active strategies: %', result->0->'strategies';
   end if;
 
   if exists (
@@ -135,6 +163,7 @@ declare
   key text := 'close:2099-06-02'; started jsonb; run_id uuid; fence bigint; lease uuid;
   partial_id uuid := gen_random_uuid();  -- A active, B vanished
   fully_vanished_id uuid := gen_random_uuid(); -- vanished만 존재
+  active_two_id uuid := gen_random_uuid(); -- A/B active, partial보다 active 수가 많음
   result jsonb;
   partial_card jsonb;
   vanished_card jsonb;
@@ -147,24 +176,38 @@ begin
       jsonb_build_object('candidate_id', partial_id, 'ticker', '000040', 'name', '부분재태깅', 'trading_value', 100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
       jsonb_build_object('candidate_id', fully_vanished_id, 'ticker', '000050', 'name', '완전소멸', 'trading_value', 100,
+        'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1))),
+      jsonb_build_object('candidate_id', active_two_id, 'ticker', '000030', 'name', '다중활성', 'trading_value', 100,
         'sources', jsonb_build_array(jsonb_build_object('source', 't1859', 'weight', 1)))
     ),
-    jsonb_build_object('selection_input_hash', repeat('d', 64), 'original_count', 2, 'candidate_count', 2, 'excluded_count', 0, 'truncated_count', 0));
+    jsonb_build_object('selection_input_hash', repeat('d', 64), 'original_count', 3, 'candidate_count', 3, 'excluded_count', 0, 'truncated_count', 0));
   perform public.write_stage(run_id, 'candidates', fence, lease, 'running', 'success');
 
   perform public.write_stage(run_id, 'tags', fence, lease, 'pending', 'running');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
     values (partial_id, run_id, 'A', date '2099-06-02', 'active');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
-    values (partial_id, run_id, 'B', date '2099-06-02', 'vanished');
+    values
+      (partial_id, run_id, 'B', date '2099-06-02', 'vanished'),
+      (partial_id, run_id, 'C', date '2099-06-02', 'vanished');
   insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
-    values (fully_vanished_id, run_id, 'C', date '2099-06-02', 'vanished');
-  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 3));
+    values (fully_vanished_id, run_id, 'D', date '2099-06-02', 'vanished');
+  insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date, status)
+    values
+      (active_two_id, run_id, 'A', date '2099-06-02', 'active'),
+      (active_two_id, run_id, 'B', date '2099-06-02', 'active');
+  perform public.write_stage(run_id, 'tags', fence, lease, 'running', 'success', jsonb_build_object('tagged_count', 6));
 
   result := public.get_today_candidate_cards(run_id);
 
-  if jsonb_array_length(result) <> 2 then
-    raise exception 'expected exactly 2 cards (partial_id + fully_vanished_id), got %', jsonb_array_length(result);
+  if jsonb_array_length(result) <> 3 then
+    raise exception 'expected exactly 3 cards (partial_id + fully_vanished_id + active_two_id), got %', jsonb_array_length(result);
+  end if;
+
+  if (result->0->>'candidate_id')::uuid <> active_two_id
+     or (result->1->>'candidate_id')::uuid <> partial_id
+     or (result->2->>'candidate_id')::uuid <> fully_vanished_id then
+    raise exception 'active strategy count must exclude vanished strategies: %', result;
   end if;
 
   select e into partial_card from jsonb_array_elements(result) e where (e->>'candidate_id')::uuid = partial_id;

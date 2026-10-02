@@ -71,6 +71,7 @@ const SCENARIOS = new Set([
   "top-malformed",
   "intraday",
   "strategy-f",
+  "multi-strategy-order",
   "theme-empty",
   "tracking-empty",
   "tracking-error",
@@ -167,6 +168,12 @@ function rpcPayload(name, body = {}) {
     }
     if (activeScenario === "strategy-f") {
       return [{ ...base, name: "F후보", strategies: ["F"], vanished_strategies: [] }];
+    }
+    if (activeScenario === "multi-strategy-order") {
+      return [
+        { ...base, candidate_id: "00000000-0000-4000-8000-000000000405", ticker: "000020", name: "다중전략후보", strategies: ["A", "B", "C"], vanished_strategies: [] },
+        { ...base, candidate_id: "00000000-0000-4000-8000-000000000406", ticker: "000010", name: "단일전략후보", strategies: ["A"], vanished_strategies: [] },
+      ];
     }
     return [base];
   }

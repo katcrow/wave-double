@@ -34,3 +34,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-top-trading-candidate-details.md`
   summary: top RPC 조회 실패와 상세 지표 결측을 화면 상태로 구분해 안내한다.
   evidence: 기존 오류 경계는 콘솔 로깅 후 상단 영역을 숨기고 상세 결측은 미확인으로 표시한다.
+- source_spec: `_bmad-output/implementation-artifacts/spec-multi-strategy-candidate-card-sorting.md`
+  summary: 운영 Supabase에 후보 카드 정렬 migration과 SQL fixture를 적용하고 실제 RPC/catalog/grant 결과를 확인한다.
+  evidence: 현재 세션에는 Supabase MCP와 psql/Docker가 노출되지 않아 로컬 웹 검증만 완료했으며 운영 DB 실행 결과를 확보하지 못했다.

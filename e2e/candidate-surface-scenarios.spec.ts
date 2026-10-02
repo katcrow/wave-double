@@ -123,6 +123,18 @@ test("전략 F: 카드에 전략 F 배지가 렌더되고 F 라우트가 열린�
   await expect(page.getByRole("heading", { name: "전략 F" })).toBeVisible();
 });
 
+test("다중 전략 후보가 거래대금 우선 후보보다 먼저 렌더된다", async ({ page, request }) => {
+  await setScenario(request, "multi-strategy-order");
+  await login(page);
+
+  const cards = page.locator(".candidate-card");
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toContainText("다중전략후보");
+  await expect(cards.nth(0)).toContainText("전략 A");
+  await expect(cards.nth(0)).toContainText("+1");
+  await expect(cards.nth(1)).toContainText("단일전략후보");
+});
+
 test("테마 미수집: 두 카드가 테마 라벨을 유지하고 미확인으로 표시한다", async ({ page, request }) => {
   await setScenario(request, "theme-empty");
   await login(page);
