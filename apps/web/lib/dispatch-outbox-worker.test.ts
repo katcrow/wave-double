@@ -7,6 +7,7 @@ import {
   MAX_RECEIPT_ATTEMPTS,
   DEFAULT_WORKFLOW_REF,
   resolveWorkflowRef,
+  isScheduledBatchInOperatingWindow,
 } from "./dispatch-outbox-worker.ts";
 
 test("queued 상태, attempts가 상한 이내면 dispatch를 시도한다", () => {
@@ -71,4 +72,14 @@ test("resolveWorkflowRef: 빈 문자열/공백만 있는 환경변수는 기본�
 
 test("resolveWorkflowRef: 주변 공백을 제거한다", () => {
   assert.equal(resolveWorkflowRef("  master  "), "master");
+});
+
+test("자동 intraday는 KST 08:00 이상 20:00 미만만 허용한다", () => {
+  assert.equal(isScheduledBatchInOperatingWindow("intraday:2026-10-02:08:10", new Date("2026-10-01T23:00:00Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("intraday:2026-10-02:08:10", new Date("2026-10-02T11:00:00Z")), false);
+});
+
+test("자동 close는 KST 19:30 이상 20:00 미만만 허용한다", () => {
+  assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T10:30:00Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T11:00:00Z")), false);
 });

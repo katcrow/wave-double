@@ -6,7 +6,7 @@ begin;
 do $$
  declare key text := 'close:2099-02-01'; started jsonb; attempt_id uuid; fence bigint; lease uuid; before_stage_status jsonb;
 begin
-  started := public.start_attempt(key, date '2099-02-01', 'close', 'schedule', 300);
+  started := public.start_attempt(key, date '2099-02-01', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
   before_stage_status := (select stage_status from public.runs where run_id = attempt_id);
   perform public.skip_attempt(attempt_id, fence, lease, 'holiday');
@@ -19,7 +19,7 @@ end $$;
 do $$
 declare key text := 'close:2099-02-02'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
 begin
-  started := public.start_attempt(key, date '2099-02-02', 'close', 'schedule', 300);
+  started := public.start_attempt(key, date '2099-02-02', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
   begin
     perform public.skip_attempt(attempt_id, fence + 1, lease, 'holiday');
@@ -32,7 +32,7 @@ end $$;
 do $$
 declare key text := 'close:2099-02-03'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
 begin
-  started := public.start_attempt(key, date '2099-02-03', 'close', 'schedule', 300);
+  started := public.start_attempt(key, date '2099-02-03', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
   begin
     perform public.skip_attempt(attempt_id, fence, lease, '');
@@ -44,7 +44,7 @@ end $$;
 do $$
 declare key text := 'close:2099-02-04'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
 begin
-  started := public.start_attempt(key, date '2099-02-04', 'close', 'schedule', 300);
+  started := public.start_attempt(key, date '2099-02-04', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
   perform public.skip_attempt(attempt_id, fence, lease, 'holiday');
   begin

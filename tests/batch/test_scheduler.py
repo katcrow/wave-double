@@ -1135,10 +1135,10 @@ def test_replayed_success_attempt_does_not_run_ohlcv_or_tags_pipeline():
 
 
 def test_intraday_slot_uses_floor_to_intraday_slot():
-    """08:30 시작 60분 간격(매시 30분) 스케줄(Neo 확인, 2026-09-16): 09:07은 08:30 슬롯."""
+    """08:10 시작 60분 간격(매시 10분) 스케줄: 09:07은 08:10 슬롯."""
     cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(8, 30), time(19, 30))
     repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
-    rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:08:30"))
+    rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:08:10"))
     gateway = RunStateGateway(rpc)
     candidate_client = FakeCandidateClient(LsResponse(data=[]))
     deps = tags_deps()
@@ -1160,7 +1160,35 @@ def test_intraday_slot_uses_floor_to_intraday_slot():
     )
 
     start_params = rpc.calls[0][1]
-    assert start_params["p_logical_run_key"] == "intraday:2026-09-01:08:30"
+    assert start_params["p_logical_run_key"] == "intraday:2026-09-01:08:10"
+
+
+def test_outbox_logical_run_key_is_preserved_instead_of_recomputed_from_execution_time():
+    cached_open = TradingCalendarEntry(date(2026, 9, 1), True, time(8, 10), time(19, 30))
+    repo = FakeRepository(cached={date(2026, 9, 1): cached_open})
+    rpc = FakeRpc(attempt=attempt_payload("close:2026-09-01"))
+    gateway = RunStateGateway(rpc)
+    candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
+
+    run_scheduled_batch(
+        BatchKind.CLOSE,
+        datetime(2026, 10, 2, 1, 30),
+        repo,
+        FakeProvider(),
+        gateway,
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+        logical_run_key="close:2026-09-01",
+    )
+
+    assert rpc.calls[0][1]["p_logical_run_key"] == "close:2026-09-01"
 
 
 def test_manual_trigger_is_passed_through_to_start_attempt():

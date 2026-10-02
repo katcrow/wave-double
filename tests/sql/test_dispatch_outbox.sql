@@ -76,7 +76,7 @@ end $$;
 do $$
 declare started jsonb; attempt_id uuid; res jsonb;
 begin
-  started := public.start_attempt('close:2099-03-05', date '2099-03-05', 'close', 'schedule', 300);
+  started := public.start_attempt('close:2099-03-05', date '2099-03-05', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid;
   res := public.request_manual_dispatch('idem-active', 'hash-active', 'neo@example.com', 'close:2099-03-05', date '2099-03-05', 'close');
   if res->>'status' <> 'conflict' or res->>'reason' <> 'ACTIVE_ATTEMPT' then raise exception 'expected active-attempt conflict, got %', res; end if;
@@ -92,7 +92,7 @@ end $$;
 do $$
 declare started jsonb; attempt_id uuid; res jsonb;
 begin
-  started := public.start_attempt('close:2099-03-12', date '2099-03-12', 'close', 'schedule', 300);
+  started := public.start_attempt('close:2099-03-12', date '2099-03-12', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid;
   perform public.skip_attempt(attempt_id, (started->>'fence_token')::bigint, (started->>'lease_token')::uuid, 'holiday');
   res := public.request_manual_dispatch('idem-active-skipped', 'hash-active-skipped', 'neo@example.com', 'close:2099-03-12', date '2099-03-12', 'close');

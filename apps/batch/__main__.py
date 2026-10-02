@@ -29,8 +29,8 @@ from .ls_market_supply_provider import LsMarketSupplyProvider
 from .market_supply_repository import SupabaseMarketSupplyRepository
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
 from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
-from .run_state import RunStateGateway
-from .scheduler import SchedulerResult, run_scheduled_batch
+from .run_state import RunStateError, RunStateGateway
+from .scheduler import SchedulerResult, is_scheduled_execution_allowed, run_scheduled_batch
 from .strategy_i_stage import StrategyISupplyProviderProtocol
 from .supabase_client import SupabaseCalendarRepository, SupabaseRpcClient
 from .supply_3day_repository import SupabaseSupply3DayRepository
@@ -51,16 +51,35 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--batch-kind", required=True, choices=["premarket", "intraday", "close"])
     parser.add_argument("--trigger", default="schedule", choices=["schedule", "manual"])
     parser.add_argument("--dispatch-request-id", default=None)
+    parser.add_argument("--logical-run-key", default=None)
     return parser.parse_args(argv)
 
 
 def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> SchedulerResult:
+    mac_address = os.environ.get("LS_MAC_ADDRESS")
+    moment = now_kst if now_kst is not None else datetime.now(KST)
+    trigger = Trigger(args.trigger)
+
+    if trigger is Trigger.SCHEDULE and not is_scheduled_execution_allowed(args.batch_kind, moment):
+        if args.dispatch_request_id:
+            supabase_url = _require_env("SUPABASE_URL")
+            service_role_key = _require_env("SUPABASE_SERVICE_ROLE_KEY")
+            with contextlib.closing(SupabaseRpcClient(supabase_url, service_role_key)) as rpc_client:
+                RunStateGateway(rpc_client).reject_scheduled_dispatch(
+                    args.dispatch_request_id,
+                    "SCHEDULE_OUTSIDE_OPERATING_WINDOW",
+                )
+        return SchedulerResult(
+            "skipped",
+            "SCHEDULE_OUTSIDE_OPERATING_WINDOW",
+            skip_reason="outside_operating_window",
+        )
+
     supabase_url = _require_env("SUPABASE_URL")
     service_role_key = _require_env("SUPABASE_SERVICE_ROLE_KEY")
     ls_app_key = _require_env("LS_APP_KEY")
     ls_app_secret = _require_env("LS_APP_SECRET")
     condition_search_user_id = _require_env("LS_CONDITION_SEARCH_USER_ID")
-    mac_address = os.environ.get("LS_MAC_ADDRESS")
 
     with contextlib.ExitStack() as stack:
         rpc_client = stack.enter_context(contextlib.closing(SupabaseRpcClient(supabase_url, service_role_key)))
@@ -102,8 +121,6 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             contextlib.closing(SupabaseMarketSupplyRepository(supabase_url, service_role_key))
         )
 
-        moment = now_kst if now_kst is not None else datetime.now(KST)
-
         return run_scheduled_batch(
             args.batch_kind,
             moment,
@@ -127,8 +144,9 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             bias_repository=bias_repository,
             strategy_i_supply_provider=supply_provider,
             theme_client=ls_client,
-            trigger=Trigger(args.trigger),
+            trigger=trigger,
             dispatch_request_id=args.dispatch_request_id,
+            logical_run_key=args.logical_run_key,
         )
 
 
@@ -138,6 +156,15 @@ def main(argv: list[str] | None = None) -> int:
         result = run(args)
     except SystemExit:
         raise
+    except RunStateError as exc:
+        if "SCHEDULE_OUTSIDE_OPERATING_WINDOW" in str(exc):
+            print(
+                f"batch_kind={args.batch_kind} status=skipped "
+                "result_code=SCHEDULE_OUTSIDE_OPERATING_WINDOW"
+            )
+            return 0
+        print(f"batch_kind={args.batch_kind} status=failed result_code={exc.code} message={exc.message}")
+        return 1
     except Exception as exc:  # noqa: BLE001 - CLI 최상위 경계에서 구조화 로그로 변환
         print(f"batch_kind={args.batch_kind} status=failed result_code=UNHANDLED_EXCEPTION message={exc}")
         return 1

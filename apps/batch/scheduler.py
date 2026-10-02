@@ -8,7 +8,8 @@ GitHub Actions cron이 호출하는 orchestrator 진입점의 핵심 로직. 휴
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 from domain.calendar import CalendarStatus, floor_to_intraday_slot
 from domain.run_state import BatchKind, LogicalRunKey, Stage, StageStatus, Trigger
@@ -49,6 +50,27 @@ from .tags_stage import CandidateFetcherProtocol, TagsClient, TagsStageResult, r
 # status를 "얼마나 나쁜가"로 정렬한다 -- candidates/tags 결과를 합칠 때 더 나쁜 쪽이 이긴다.
 _STATUS_SEVERITY = {"success": 0, "partial": 1, "failed": 2}
 
+OPERATING_WINDOW_START = time(8, 0)
+OPERATING_WINDOW_END = time(20, 0)
+CLOSE_WINDOW_START = time(19, 30)
+KST = ZoneInfo("Asia/Seoul")
+
+
+def is_scheduled_execution_allowed(batch_kind: BatchKind | str, now_kst: datetime) -> bool:
+    """예약 실행이 KST 운영시간 안에 있는지 확인한다.
+
+    GitHub Actions schedule는 예약 시각보다 수시간 늦게 실행될 수 있으므로,
+    cron 문자열만 믿지 않고 실제 실행 시각을 다시 검사한다. manual 실행은
+    호출부에서 이 정책을 적용하지 않아 기존 수동 테스트 계약을 보존한다.
+    """
+    kind = batch_kind if isinstance(batch_kind, BatchKind) else BatchKind(batch_kind)
+    current = now_kst.astimezone(KST).time().replace(tzinfo=None) if now_kst.tzinfo else now_kst.time()
+    if kind is BatchKind.INTRADAY:
+        return OPERATING_WINDOW_START <= current < OPERATING_WINDOW_END
+    if kind is BatchKind.CLOSE:
+        return CLOSE_WINDOW_START <= current < OPERATING_WINDOW_END
+    return False
+
 
 @dataclass(frozen=True)
 class SchedulerResult:
@@ -76,10 +98,23 @@ class SchedulerResult:
 def _build_logical_run_key(batch_kind: BatchKind, now_kst: datetime) -> LogicalRunKey:
     trading_day = now_kst.date()
     if batch_kind is BatchKind.INTRADAY:
-        # 08:30 시작, 60분 간격(매시 30분), 19:30은 close 배치가 담당한다(Neo 확인, 2026-09-16).
-        slot = floor_to_intraday_slot(now_kst, interval_minutes=60, offset_minutes=30).time()
+        # 08:10 시작, 60분 간격(매시 10분), close는 19:40이다(운영 DB, 2026-09-21).
+        slot = floor_to_intraday_slot(now_kst, interval_minutes=60, offset_minutes=10).time()
         return LogicalRunKey(trading_day, batch_kind, slot)
     return LogicalRunKey(trading_day, batch_kind)
+
+
+def _resolve_logical_run_key(
+    batch_kind: BatchKind,
+    now_kst: datetime,
+    logical_run_key: str | None,
+) -> LogicalRunKey:
+    if not logical_run_key:
+        return _build_logical_run_key(batch_kind, now_kst)
+    key = LogicalRunKey.parse(logical_run_key)
+    if key.batch_kind is not batch_kind:
+        raise ValueError("logical_run_key batch kind does not match batch_kind")
+    return key
 
 
 def _from_candidate_result(
@@ -182,6 +217,7 @@ def run_scheduled_batch(
     lease_seconds: int = 300,
     trigger: Trigger = Trigger.SCHEDULE,
     dispatch_request_id: str | None = None,
+    logical_run_key: str | None = None,
     strategy_client: TagsClient | None = None,
     bias_repository: BiasRepositoryProtocol | None = None,
     strategy_i_supply_provider: StrategyISupplyProviderProtocol | None = None,
@@ -201,7 +237,7 @@ def run_scheduled_batch(
     ``safe_record_dispatch_receipt``가 흡수하므로 이 함수의 반환 결과에는 영향이 없다.
     """
     kind = batch_kind if isinstance(batch_kind, BatchKind) else BatchKind(batch_kind)
-    key = _build_logical_run_key(kind, now_kst)
+    key = _resolve_logical_run_key(kind, now_kst, logical_run_key)
 
     decision = resolve_for_schedule(key.trading_day, daily_bar_provider, calendar_repository)
 

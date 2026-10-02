@@ -56,7 +56,7 @@ STAGES: tuple[Stage, ...] = tuple(Stage)
 # 성공만을 요구하지 않되, 아직 수집 중인 pending/running 상태에서는 발행하지 않는다.
 REQUIRED_STAGES: tuple[Stage, ...] = (Stage.CANDIDATES, Stage.TAGS)
 REFERENCE_STAGES: tuple[Stage, ...] = (Stage.SUPPLY_3DAY, Stage.MARKET_SUPPLY)
-_SLOT_RE = re.compile(r"^(?:[01]\d|2[0-3]):(?:00|20|30|40)$")
+_SLOT_RE = re.compile(r"^(?:[01]\d|2[0-3]):(?:00|10|20|30|40)$")
 
 
 @dataclass(frozen=True)
@@ -73,11 +73,11 @@ class LogicalRunKey:
         if self.batch_kind is not BatchKind.INTRADAY and self.slot is not None:
             raise ValueError("only intraday logical keys may have a slot")
         if self.slot and (
-            self.slot.second or self.slot.microsecond or self.slot.minute not in (0, 20, 30, 40)
+            self.slot.second or self.slot.microsecond or self.slot.minute not in (0, 10, 20, 30, 40)
         ):
-            # 2026-09-16부터 신규 슬롯은 :30(60분 간격, Neo 확인)이며, :00/:20/:40은
-            # 이전 20분 간격 스케줄의 과거 이력(logical_runs 등)과의 호환을 위해 남긴다.
-            raise ValueError("intraday slot must be a KST :00/:20/:30/:40 boundary")
+            # 2026-09-21부터 신규 슬롯은 :10(08:10 시작, 60분 간격)이며, :00/:20/:30/:40은
+            # 이전 스케줄의 과거 이력(logical_runs 등)과의 호환을 위해 남긴다.
+            raise ValueError("intraday slot must be a KST :00/:10/:20/:30/:40 boundary")
 
     @property
     def value(self) -> str:

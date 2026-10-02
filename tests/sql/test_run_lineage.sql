@@ -56,7 +56,7 @@ end $$;
 do $$
  declare key text := 'intraday:2099-01-02:14:20'; started jsonb; attempt_id uuid; fence bigint; lease uuid; caught boolean := false;
 begin
-  started := public.start_attempt(key, date '2099-01-02', 'intraday', 'schedule', 300);
+  started := public.start_attempt(key, date '2099-01-02', 'intraday', 'manual', 300);
    attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
    perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
    perform public.write_stage(attempt_id, 'candidates', fence, lease, 'running', 'partial', '{}'::jsonb, 1);
@@ -75,7 +75,7 @@ end $$;
 do $$
 declare key text := 'close:2099-01-03'; first_run uuid; second_run uuid; first_fence bigint; first_lease uuid; started jsonb; caught boolean := false;
 begin
-  started := public.start_attempt(key, date '2099-01-03', 'close', 'schedule', 300);
+  started := public.start_attempt(key, date '2099-01-03', 'close', 'manual', 300);
   first_run := (started->>'run_id')::uuid; first_fence := (started->>'fence_token')::bigint; first_lease := (started->>'lease_token')::uuid;
   started := public.start_attempt(key, date '2099-01-03', 'close', 'manual', 300);
   second_run := (started->>'run_id')::uuid;

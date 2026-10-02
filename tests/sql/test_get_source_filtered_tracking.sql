@@ -33,7 +33,7 @@ values
 
 insert into public.runs(run_id, logical_run_key, attempt_no, fence_token, lease_expires_at, trigger, status)
 values
-  ('50000000-0000-0000-0000-000000000001', 'close:2099-10-01', 1, 1, now() + interval '1 hour', 'schedule', 'published');
+  ('50000000-0000-0000-0000-000000000001', 'close:2099-10-01', 1, 1, now() + interval '1 hour', 'manual', 'published');
 
 update public.logical_runs
 set canonical_success_run_id = '50000000-0000-0000-0000-000000000001'

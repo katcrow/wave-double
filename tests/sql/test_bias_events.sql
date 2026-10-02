@@ -504,7 +504,7 @@ begin
   insert into public.runs(
     run_id, logical_run_key, attempt_no, fence_token, lease_expires_at, trigger, status
   ) values (
-    v_run, 'close:2099-08-10', 1, 1, now() + interval '1 hour', 'schedule', 'published'
+    v_run, 'close:2099-08-10', 1, 1, now() + interval '1 hour', 'manual', 'published'
   );
 
   -- 후보 2건이 t1859로 기여하고 t1856으로는 아무도 기여하지 않는다.

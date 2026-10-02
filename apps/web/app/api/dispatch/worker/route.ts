@@ -4,6 +4,7 @@ import { timingSafeEqualStrings } from "@/lib/dispatch";
 import { getSupabaseServiceClient } from "@/lib/supabase-service";
 import {
   decideOutboxAction,
+  isScheduledBatchInOperatingWindow,
   resolveWorkflowRef,
   shouldDeadLetterAfterDispatchFailure,
 } from "@/lib/dispatch-outbox-worker";
@@ -82,6 +83,18 @@ export async function POST(request: NextRequest) {
 }
 
 async function processRow(supabase: SupabaseClient, row: ClaimedOutboxRow): Promise<Record<string, unknown>> {
+  if (
+    row.status === "queued" &&
+    row.requested_by === AUTO_SCHEDULE_REQUESTER &&
+    !isScheduledBatchInOperatingWindow(row.logical_run_key)
+  ) {
+    await deadLetter(supabase, row, "SCHEDULE_OUTSIDE_OPERATING_WINDOW");
+    return {
+      outbox_id: row.outbox_id,
+      result: "dead_letter",
+      reason: "SCHEDULE_OUTSIDE_OPERATING_WINDOW",
+    };
+  }
   const decision = decideOutboxAction(row);
 
   if (decision.action === "dead_letter") {
@@ -211,6 +224,7 @@ async function callGithubWorkflowDispatch(row: ClaimedOutboxRow): Promise<{ ok: 
             batch_kind: batchKind,
             dispatch_request_id: row.dispatch_request_id,
             dispatch_trigger: row.requested_by === AUTO_SCHEDULE_REQUESTER ? "schedule" : "manual",
+            logical_run_key: row.logical_run_key,
           },
         }),
       }

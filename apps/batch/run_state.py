@@ -225,6 +225,17 @@ class RunStateGateway:
             {"p_dispatch_request_id": str(dispatch_request_id), "p_run_id": str(run_id)},
         )
 
+    def reject_scheduled_dispatch(self, dispatch_request_id: Any, reason: str) -> Any:
+        """장외에서 시작된 자동 dispatch를 attempt 없이 terminal failed로 닫는다."""
+        if not dispatch_request_id:
+            raise ValueError("dispatch_request_id must be non-empty")
+        if not reason or not reason.strip():
+            raise ValueError("reason must be non-empty")
+        return self._call(
+            "reject_scheduled_dispatch",
+            {"p_dispatch_request_id": str(dispatch_request_id), "p_reason": reason},
+        )
+
     def skip(self, run_id: UUID, fence_token: int, lease_token: UUID, skip_reason: str) -> Any:
         if fence_token <= 0:
             raise ValueError("fence_token must be positive")

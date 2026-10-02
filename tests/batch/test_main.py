@@ -1,14 +1,20 @@
 import argparse
+from datetime import datetime, timezone
 
 import pytest
 
 from apps.batch import __main__ as batch_main
-from apps.batch.scheduler import SchedulerResult
+from apps.batch.scheduler import SchedulerResult, is_scheduled_execution_allowed
 from domain.run_state import Trigger
 
 
-def _args(batch_kind="close"):
-    return argparse.Namespace(batch_kind=batch_kind)
+def _args(batch_kind="close", *, trigger="schedule", dispatch_request_id=None, logical_run_key=None):
+    return argparse.Namespace(
+        batch_kind=batch_kind,
+        trigger=trigger,
+        dispatch_request_id=dispatch_request_id,
+        logical_run_key=logical_run_key,
+    )
 
 
 def test_require_env_raises_system_exit_when_missing(monkeypatch):
@@ -23,7 +29,7 @@ def test_run_raises_system_exit_when_required_env_missing(monkeypatch):
     monkeypatch.setenv("LS_APP_KEY", "app-key")
     monkeypatch.setenv("LS_APP_SECRET", "app-secret")
     with pytest.raises(SystemExit):
-        batch_main.run(_args())
+        batch_main.run(_args(), now_kst=datetime(2026, 10, 1, 19, 40))
 
 
 def test_run_raises_system_exit_when_condition_search_user_id_missing(monkeypatch):
@@ -33,7 +39,7 @@ def test_run_raises_system_exit_when_condition_search_user_id_missing(monkeypatc
     monkeypatch.setenv("LS_APP_SECRET", "app-secret")
     monkeypatch.delenv("LS_CONDITION_SEARCH_USER_ID", raising=False)
     with pytest.raises(SystemExit):
-        batch_main.run(_args())
+        batch_main.run(_args(), now_kst=datetime(2026, 10, 1, 19, 40))
 
 
 @pytest.mark.parametrize("status", ["success", "skipped", "partial"])
@@ -94,14 +100,16 @@ def test_parse_args_defaults_trigger_to_schedule_with_no_dispatch_request_id():
     args = batch_main._parse_args(["--batch-kind", "close"])
     assert args.trigger == "schedule"
     assert args.dispatch_request_id is None
+    assert args.logical_run_key is None
 
 
 def test_parse_args_accepts_trigger_and_dispatch_request_id():
     args = batch_main._parse_args(
-        ["--batch-kind", "close", "--trigger", "manual", "--dispatch-request-id", "abc-123"]
+        ["--batch-kind", "close", "--trigger", "manual", "--dispatch-request-id", "abc-123", "--logical-run-key", "close:2026-10-02"]
     )
     assert args.trigger == "manual"
     assert args.dispatch_request_id == "abc-123"
+    assert args.logical_run_key == "close:2026-10-02"
 
 
 class _FakeCloseable:
@@ -112,6 +120,41 @@ class _FakeCloseable:
 
     def close(self):
         pass
+
+
+class _FakeRpcClient(_FakeCloseable):
+    def __init__(self, *args, **kwargs):
+        self.calls = []
+
+    def rpc(self, function, params):
+        self.calls.append((function, params))
+        return {"data": {"status": "failed"}}
+
+
+def test_run_rejects_out_of_window_scheduled_dispatch_without_ls_clients(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
+    monkeypatch.delenv("LS_APP_KEY", raising=False)
+    monkeypatch.delenv("LS_APP_SECRET", raising=False)
+    monkeypatch.delenv("LS_CONDITION_SEARCH_USER_ID", raising=False)
+    rpc_client = _FakeRpcClient()
+    monkeypatch.setattr(batch_main, "SupabaseRpcClient", lambda *args, **kwargs: rpc_client)
+
+    args = batch_main._parse_args(
+        [
+            "--batch-kind", "close", "--dispatch-request-id", "dispatch-1",
+            "--logical-run-key", "close:2026-10-01",
+        ]
+    )
+    result = batch_main.run(args, now_kst=datetime(2026, 10, 1, 1, 30))
+
+    assert result.result_code == "SCHEDULE_OUTSIDE_OPERATING_WINDOW"
+    assert rpc_client.calls == [
+        (
+            "reject_scheduled_dispatch",
+            {"p_dispatch_request_id": "dispatch-1", "p_reason": "SCHEDULE_OUTSIDE_OPERATING_WINDOW"},
+        )
+    ]
 
 
 def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(monkeypatch):
@@ -131,7 +174,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None, strategy_i_supply_provider=None, theme_client=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, logical_run_key=None, bias_repository=None, strategy_i_supply_provider=None, theme_client=None):
         captured["bias_repository"] = bias_repository
         captured["batch_kind"] = batch_kind
         captured["ls_client"] = ls_client
@@ -140,6 +183,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
         captured["market_supply_provider"] = market_supply_provider
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
+        captured["logical_run_key"] = logical_run_key
         captured["condition_search_user_id"] = condition_search_user_id
         captured["strategy_i_supply_provider"] = strategy_i_supply_provider
         captured["theme_client"] = theme_client
@@ -159,6 +203,7 @@ def test_run_forwards_trigger_and_dispatch_request_id_to_run_scheduled_batch(mon
     assert captured["program_supply_provider"]._client is captured["ls_client"]
     assert captured["trigger"] == Trigger.MANUAL
     assert captured["dispatch_request_id"] == "req-1"
+    assert captured["logical_run_key"] is None
     assert captured["condition_search_user_id"] == "katcrow"
     assert captured["strategy_i_supply_provider"] is captured["supply_provider"]
     assert captured["theme_client"] is captured["ls_client"]
@@ -178,9 +223,10 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
 
     captured: dict[str, object] = {}
 
-    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, bias_repository=None, strategy_i_supply_provider=None, theme_client=None):
+    def _fake_run_scheduled_batch(batch_kind, moment, calendar_repository, daily_bar_provider, gateway, ls_client, ohlcv_provider, ohlcv_repository, candidate_fetcher, ohlcv_loader, tags_repository, tagged_candidate_fetcher, supply_provider, program_supply_provider, supply_repository, market_supply_provider, market_program_supply_provider, market_supply_repository, *, condition_search_user_id=None, trigger=None, dispatch_request_id=None, logical_run_key=None, bias_repository=None, strategy_i_supply_provider=None, theme_client=None):
         captured["trigger"] = trigger
         captured["dispatch_request_id"] = dispatch_request_id
+        captured["logical_run_key"] = logical_run_key
         captured["condition_search_user_id"] = condition_search_user_id
         captured["strategy_i_supply_provider"] = strategy_i_supply_provider
         return SchedulerResult("success", "OK")
@@ -188,8 +234,46 @@ def test_run_defaults_to_schedule_trigger_with_no_dispatch_request_id(monkeypatc
     monkeypatch.setattr(batch_main, "run_scheduled_batch", _fake_run_scheduled_batch)
 
     args = batch_main._parse_args(["--batch-kind", "close"])
-    batch_main.run(args)
+    batch_main.run(args, now_kst=datetime(2026, 10, 1, 19, 40))
 
     assert captured["trigger"] == Trigger.SCHEDULE
     assert captured["dispatch_request_id"] is None
+    assert captured["logical_run_key"] is None
     assert captured["condition_search_user_id"] == "katcrow"
+
+
+@pytest.mark.parametrize(
+    ("batch_kind", "moment", "allowed"),
+    [
+        ("intraday", datetime(2026, 10, 1, 8, 0), True),
+        ("intraday", datetime(2026, 10, 1, 19, 59), True),
+        ("close", datetime(2026, 10, 1, 19, 40), True),
+        ("close", datetime(2026, 10, 1, 1, 30), False),
+        ("intraday", datetime(2026, 10, 1, 20, 0), False),
+        ("premarket", datetime(2026, 10, 1, 9, 0), False),
+        ("close", datetime(2026, 10, 1, 10, 30, tzinfo=timezone.utc), True),
+        ("close", datetime(2026, 10, 1, 11, 0, tzinfo=timezone.utc), False),
+    ],
+)
+def test_scheduled_execution_window_policy(batch_kind, moment, allowed):
+    assert is_scheduled_execution_allowed(batch_kind, moment) is allowed
+
+
+def test_run_skips_out_of_window_schedule_before_constructing_clients(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
+    monkeypatch.setenv("LS_APP_KEY", "app-key")
+    monkeypatch.setenv("LS_APP_SECRET", "app-secret")
+    monkeypatch.setenv("LS_CONDITION_SEARCH_USER_ID", "katcrow")
+
+    def _unexpected_client(*args, **kwargs):
+        raise AssertionError("장외 예약 실행은 외부 클라이언트를 만들면 안 된다")
+
+    monkeypatch.setattr(batch_main, "SupabaseRpcClient", _unexpected_client)
+    args = batch_main._parse_args(["--batch-kind", "close"])
+
+    result = batch_main.run(args, now_kst=datetime(2026, 10, 1, 1, 30))
+
+    assert result.status == "skipped"
+    assert result.result_code == "SCHEDULE_OUTSIDE_OPERATING_WINDOW"
+    assert result.skip_reason == "outside_operating_window"

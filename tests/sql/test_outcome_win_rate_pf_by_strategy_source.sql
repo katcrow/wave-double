@@ -15,10 +15,10 @@ insert into public.logical_runs(logical_run_key, trading_day, batch_kind) values
 
 -- runs: 4 published runs (one per close day)
 insert into public.runs(run_id, logical_run_key, attempt_no, fence_token, lease_expires_at, trigger, status) values
-('10000000-0000-0000-0000-000000000001', 'close:2098-05-01', 1, 1, now() + interval '1 hour', 'schedule', 'published'),
-('10000000-0000-0000-0000-000000000002', 'close:2098-05-02', 1, 2, now() + interval '1 hour', 'schedule', 'published'),
-('10000000-0000-0000-0000-000000000003', 'close:2098-05-03', 1, 3, now() + interval '1 hour', 'schedule', 'published'),
-('10000000-0000-0000-0000-000000000004', 'close:2098-05-04', 1, 4, now() + interval '1 hour', 'schedule', 'published');
+('10000000-0000-0000-0000-000000000001', 'close:2098-05-01', 1, 1, now() + interval '1 hour', 'manual', 'published'),
+('10000000-0000-0000-0000-000000000002', 'close:2098-05-02', 1, 2, now() + interval '1 hour', 'manual', 'published'),
+('10000000-0000-0000-0000-000000000003', 'close:2098-05-03', 1, 3, now() + interval '1 hour', 'manual', 'published'),
+('10000000-0000-0000-0000-000000000004', 'close:2098-05-04', 1, 4, now() + interval '1 hour', 'manual', 'published');
 
 -- canonical runs: set canonical_success_run_id on each close logical_run
 update public.logical_runs set canonical_success_run_id = '10000000-0000-0000-0000-000000000001' where logical_run_key = 'close:2098-05-01';

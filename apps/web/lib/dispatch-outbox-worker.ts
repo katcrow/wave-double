@@ -20,7 +20,10 @@ export interface OutboxAttemptState {
 }
 
 export type OutboxDecision =
-  | { action: "dead_letter"; reasonCode: "ATTEMPTS_EXHAUSTED" | "RECEIPT_TIMEOUT" }
+  | {
+      action: "dead_letter";
+      reasonCode: "ATTEMPTS_EXHAUSTED" | "RECEIPT_TIMEOUT" | "SCHEDULE_OUTSIDE_OPERATING_WINDOW";
+    }
   | { action: "dispatch" }
   | { action: "await_receipt" }
   | { action: "noop" };
@@ -60,4 +63,21 @@ export const DEFAULT_WORKFLOW_REF = "master";
 export function resolveWorkflowRef(ref: string | undefined): string {
   const trimmed = ref?.trim();
   return trimmed ? trimmed : DEFAULT_WORKFLOW_REF;
+}
+
+export function isScheduledBatchInOperatingWindow(logicalRunKey: string, now = new Date()): boolean {
+  const batchKind = logicalRunKey.split(":", 1)[0];
+  if (batchKind !== "intraday" && batchKind !== "close") return false;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  const totalMinutes = hour * 60 + minute;
+  return batchKind === "intraday"
+    ? totalMinutes >= 8 * 60 && totalMinutes < 20 * 60
+    : totalMinutes >= 19 * 60 + 30 && totalMinutes < 20 * 60;
 }
