@@ -214,8 +214,8 @@ begin
   if partial_card->'strategies' <> '["A"]'::jsonb then
     raise exception 'expected strategies=[A] for partially retagged candidate, got %', partial_card->'strategies';
   end if;
-  if partial_card->'vanished_strategies' <> '["B"]'::jsonb then
-    raise exception 'expected vanished_strategies=[B] for partially retagged candidate, got %', partial_card->'vanished_strategies';
+  if partial_card->'vanished_strategies' <> '["B", "C"]'::jsonb then
+    raise exception 'expected vanished_strategies=[B,C] for partially retagged candidate, got %', partial_card->'vanished_strategies';
   end if;
 
   select e into vanished_card from jsonb_array_elements(result) e where (e->>'candidate_id')::uuid = fully_vanished_id;
@@ -225,8 +225,8 @@ begin
   if vanished_card->'strategies' <> '[]'::jsonb then
     raise exception 'expected strategies=[] for a fully vanished candidate, got %', vanished_card->'strategies';
   end if;
-  if vanished_card->'vanished_strategies' <> '["C"]'::jsonb then
-    raise exception 'expected vanished_strategies=[C] for a fully vanished candidate, got %', vanished_card->'vanished_strategies';
+  if vanished_card->'vanished_strategies' <> '["D"]'::jsonb then
+    raise exception 'expected vanished_strategies=[D] for a fully vanished candidate, got %', vanished_card->'vanished_strategies';
   end if;
 end $$;
 
