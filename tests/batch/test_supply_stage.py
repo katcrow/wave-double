@@ -766,3 +766,56 @@ def test_supply_persist_failure_records_failed_stage():
     assert result.result_code == "SUPPLY_PERSIST_FAILED"
     write_stage_calls = [c for c in rpc.calls if c[0] == "write_stage"]
     assert write_stage_calls[-1][1]["p_status"] == "failed"
+
+
+def test_calendar_open_day_without_data_is_skipped_and_previous_trading_days_are_used():
+    """캘린더가 개장으로 잘못 기록한 임시휴장일(D0 자리)은 어느 응답에도 행이 없으므로
+    빠지고, 응답에 실제로 존재하는 최근 3거래일이 D-2/D-1/D0이 된다."""
+    d_minus_3 = date(2026, 8, 27)
+    unannounced_closure = date(2026, 9, 2)
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
+    calendar = FakeCalendarClient([unannounced_closure, D0, D1, D2, d_minus_3])
+    older = SupplyBar(d_minus_3, 99.0, 0.5, 900.0, -9.0, 19.0, 29.0)
+    provider = FakeSupplyProvider({
+        "005930": [older, *_bars("005930")],
+        "000660": [older, *_bars("000660")],
+    })
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    gateway = RunStateGateway(rpc)
+    result = run_supply_stage(
+        gateway, fetcher, calendar, provider,
+        FakeProgramSupplyProvider({"005930": _program_bars(), "000660": _program_bars()}),
+        repo, uuid4(), 1, uuid4(), unannounced_closure,
+    )
+
+    assert result.status == "success"
+    assert result.error_count == 0
+    assert len(repo.saved) == 6
+    slots = {row.slot: row.trading_day for row in repo.saved if row.candidate_id == "c1"}
+    assert slots == {"D-2": D2, "D-1": D1, "D0": D0}
+    assert provider.calls == [
+        ("005930", d_minus_3, unannounced_closure),
+        ("000660", d_minus_3, unannounced_closure),
+    ]
+
+
+def test_ticker_missing_latest_day_is_error_while_market_days_come_from_other_tickers():
+    """거래정지 등으로 한 종목만 D0 행이 없으면 기준일은 다른 종목 응답으로 정해지고,
+    그 종목만 error로 집계된다(D0를 과거일로 조용히 당기지 않는다)."""
+    fetcher = FakeTaggedFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])
+    calendar = FakeCalendarClient([D0, D1, D2])
+    provider = FakeSupplyProvider({
+        "005930": _bars("005930", missing_day=D0),
+        "000660": _bars("000660"),
+    })
+    repo = FakeSupplyRepo()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, calendar, provider, repo)
+
+    assert result.status == "partial"
+    assert result.unprocessed_tickers == ("005930",)
+    assert {row.slot: row.trading_day for row in repo.saved} == {"D-2": D2, "D-1": D1, "D0": D0}
+    assert all(row.candidate_id == "c2" for row in repo.saved)

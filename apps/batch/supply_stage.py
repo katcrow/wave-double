@@ -1,8 +1,13 @@
 """후보의 3일치(D-2/D-1/D0) 가격·수급 수집 stage.
 
 candidates/tags stage 뒤에 배선되어, active 태그 후보와 거래대금 상위 3개 후보의
-합집합에 대해 LS ``t1702``를 후보당 1콜(fromdt=D-2 거래일, todt=D0) 호출하고,
-``trading_calendar`` 기준 정확한 3거래일에 매핑해 ``supply_3day``에 저장한다.
+합집합에 대해 LS ``t1702``를 후보당 1콜 호출하고, 응답에 실제로 존재하는 최근
+3거래일을 D-2/D-1/D0에 매핑해 ``supply_3day``에 저장한다.
+
+``trading_calendar``는 조회 창(최근 개장일 ``_LOOKBACK_OPEN_DAY_COUNT``건)만 정한다.
+캘린더가 개장으로 잘못 기록한 날(임시휴장·누락된 공휴일)은 어느 종목 응답에도
+행이 없으므로 자연스럽게 빠지고, 창 안에서 응답에 등장한 날짜의 합집합 중 최신
+3일을 run 전체 기준일로 쓴다.
 
 한 종목의 실패(비-ok 응답, 예상 3거래일 중 누락된 날짜)가 나머지 후보 처리를
 막지 않고 error로 집계한다(``tags_stage.py`` 패턴). 태깅된 후보가 없으면 0행
@@ -24,6 +29,8 @@ from .run_state import RunStateGateway
 from .supply_3day_repository import Supply3DayRepositoryProtocol, SupplyRow
 
 _EXPECTED_TRADING_DAY_COUNT = 3
+# 캘린더가 개장으로 오기록한 날이 섞여도 실제 3거래일을 확보할 수 있도록 넉넉히 조회한다.
+_LOOKBACK_OPEN_DAY_COUNT = 10
 _SEMANTIC_RETRY_COUNT = 1
 
 
@@ -115,7 +122,7 @@ def run_supply_stage(
         return SupplyStageResult("success", "OK", row_count=0, candidate_count=0, run_id=run_id_str)
 
     try:
-        recent_days = calendar_client.recent_open_days(trading_day, _EXPECTED_TRADING_DAY_COUNT)
+        recent_days = calendar_client.recent_open_days(trading_day, _LOOKBACK_OPEN_DAY_COUNT)
     except Exception as exc:
         return _fail(
             gateway, run_uuid, fence_int, lease_uuid,
@@ -123,8 +130,8 @@ def run_supply_stage(
         )
 
     if (
-        len(recent_days) != _EXPECTED_TRADING_DAY_COUNT
-        or len(set(recent_days)) != _EXPECTED_TRADING_DAY_COUNT
+        len(recent_days) < _EXPECTED_TRADING_DAY_COUNT
+        or len(set(recent_days)) != len(recent_days)
     ):
         return _fail(
             gateway, run_uuid, fence_int, lease_uuid,
@@ -134,11 +141,7 @@ def run_supply_stage(
             run_id_str,
         )
 
-    # recent_open_days는 내림차순(최신일 먼저)을 반환한다 -- 오름차순으로 재정렬해
-    # D-2/D-1/D0에 정확히 대응시킨다.
-    ordered_days = sorted(recent_days)
-    d_minus_2, d_minus_1, d0 = ordered_days
-    slot_by_day = {d_minus_2: "D-2", d_minus_1: "D-1", d0: "D0"}
+    window_start = min(recent_days)
 
     all_rows: list[SupplyRow] = []
     error_count = 0
@@ -151,17 +154,40 @@ def run_supply_stage(
         unprocessed_tickers.append(ticker)
         error_details.append({"ticker": ticker, "message": reason})
 
+    # 1차: 후보별 t1702를 창 전체로 조회하고, 응답 날짜 합집합에서 기준 3거래일을 정한다.
+    # 거래정지 종목처럼 최근 행이 빠진 응답은 합집합으로 흡수되고 아래 개별 검증에서 걸러진다.
+    fetched: list[tuple[Any, list[Any]]] = []
+    observed_days: set[date] = set()
     for cand in candidates:
         try:
-            bars = supply_provider.fetch(cand.ticker, d_minus_2, d0)
+            bars = supply_provider.fetch(cand.ticker, window_start, trading_day)
         except Exception as exc:
             record_candidate_error(cand.ticker, f"t1702: {exc}")
             continue
+        fetched.append((cand, bars))
+        observed_days.update(
+            bar.trading_day for bar in bars if window_start <= bar.trading_day <= trading_day
+        )
 
+    ordered_days = sorted(observed_days)[-_EXPECTED_TRADING_DAY_COUNT:]
+    if len(ordered_days) < _EXPECTED_TRADING_DAY_COUNT:
+        for cand, _ in fetched:
+            record_candidate_error(
+                cand.ticker,
+                f"t1702: fewer than {_EXPECTED_TRADING_DAY_COUNT} trading days observed "
+                f"between {window_start.isoformat()} and {trading_day.isoformat()}",
+            )
+        fetched = []
+        ordered_days = []
+    else:
+        d_minus_2, d_minus_1, d0 = ordered_days
+        slot_by_day = {d_minus_2: "D-2", d_minus_1: "D-1", d0: "D0"}
+
+    for cand, bars in fetched:
         try:
             by_day = _index_bars(bars, ordered_days, "t1702")
-        except ValueError:
-            record_candidate_error(cand.ticker, "t1702: expected exactly three unique trading days")
+        except ValueError as exc:
+            record_candidate_error(cand.ticker, str(exc))
             continue
 
         try:
@@ -313,12 +339,20 @@ __all__ = [
 
 
 def _index_bars(bars: list[Any], ordered_days: list[date], source: str) -> dict[date, Any]:
-    """응답 날짜를 엄격히 검증해 조용한 중복/누락/범위 밖 저장을 막는다."""
+    """응답 날짜를 엄격히 검증해 조용한 중복/누락 저장을 막는다.
+
+    조회 창이 기준 3거래일보다 넓으므로 창 안의 더 오래된 행은 무시하되, 기준일
+    사이·이후에 끼어든 날짜(기준일로 채택되지 않은 날짜)는 응답 손상으로 본다.
+    """
     if len(bars) != len({bar.trading_day for bar in bars}):
         raise ValueError(f"{source}: duplicate trading day")
-    by_day = {bar.trading_day: bar for bar in bars}
-    if set(by_day) != set(ordered_days):
-        raise ValueError(f"{source}: expected exactly three unique trading days")
+    by_day = {bar.trading_day: bar for bar in bars if bar.trading_day >= ordered_days[0]}
+    missing = set(ordered_days) - set(by_day)
+    if missing:
+        raise ValueError(f"{source}: missing trading days {sorted(d.isoformat() for d in missing)}")
+    unexpected = set(by_day) - set(ordered_days)
+    if unexpected:
+        raise ValueError(f"{source}: unexpected trading days {sorted(d.isoformat() for d in unexpected)}")
     return by_day
 
 
