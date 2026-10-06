@@ -3,6 +3,7 @@ from datetime import date, datetime, time
 import pytest
 
 from domain.calendar import (
+    KRX_HOLIDAYS,
     CalendarStatus,
     TradingCalendarEntry,
     decide_from_daily_bar,
@@ -43,6 +44,24 @@ def test_decide_from_weekday_marks_weekend_closed():
         decision = decide_from_weekday(weekend_day)
         assert decision.status is CalendarStatus.CLOSED
         assert decision.entry and not decision.entry.is_open
+
+
+def test_decide_from_weekday_marks_krx_holidays_closed():
+    # 추석(목/금), 개천절 대체공휴일(월), 한글날(금), 연말 휴장(목).
+    for holiday in (
+        date(2026, 9, 24),
+        date(2026, 9, 25),
+        date(2026, 10, 5),
+        date(2026, 10, 9),
+        date(2026, 12, 31),
+    ):
+        decision = decide_from_weekday(holiday)
+        assert decision.status is CalendarStatus.CLOSED
+        assert decision.entry == TradingCalendarEntry(holiday, False)
+
+
+def test_krx_holidays_are_all_weekdays():
+    assert all(day.weekday() < 5 for day in KRX_HOLIDAYS)
 
 
 def test_half_day_uses_stored_session_range():
