@@ -380,12 +380,13 @@ begin
   if direct_result->>'reason' <> 'INVALID_DAILY_OHLCV' then raise exception 'expected reason INVALID_DAILY_OHLCV'; end if;
 end $$;
 
--- Story 3.3: emit_open_command 실패(종가 데이터 없음)는 publish_attempt 전체를 rollback한다(AD-20).
+-- 2026-10-06: 당일 종가가 없는 태그(종일 거래정지 등)는 그 종목의 진입만 건너뛰고 publish는 성공한다.
+-- (이전 Story 3.3/AD-20 계약: emit_open_command 실패로 publish_attempt 전체를 rollback -- 폐기)
 do $$
 declare
   key text := 'close:2099-01-08'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
   candidate_c uuid := gen_random_uuid();
-  caught boolean := false;
+  published jsonb;
 begin
   -- 의도적으로 daily_ohlcv에 ZZLIN3의 2099-01-08 종가를 넣지 않는다.
   started := public.start_attempt(key, date '2099-01-08', 'close', 'manual', 300);
@@ -405,37 +406,32 @@ begin
   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
-  begin
-    perform public.__fixture_seed_market_supply(attempt_id);
-    perform public.publish_attempt(attempt_id, fence, lease);
-  exception when others then
-    if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then caught := true; else raise; end if;
-  end;
-  if not caught then raise exception 'publish_attempt did not propagate emit_open_command failure'; end if;
+  perform public.__fixture_seed_market_supply(attempt_id);
+  published := public.publish_attempt(attempt_id, fence, lease);
 
-  if (select status from public.runs where run_id = attempt_id) = 'published' then
-    raise exception 'candidate/tag publish was not rolled back after outcome generation failure';
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'publish should succeed when only a tag without close is skipped';
   end if;
-  if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) is not null then
-    raise exception 'canonical_success_run_id was set despite outcome generation failure';
+  if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) is distinct from attempt_id then
+    raise exception 'canonical_success_run_id should be set after skipping the tag without close';
   end if;
-  if exists (select 1 from public.outcome_events where logical_run_key = key) then
-    raise exception 'outcome_events row leaked despite rollback';
+  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN3') then
+    raise exception 'no OPEN event should be emitted for a tag without close';
   end if;
   if exists (select 1 from public.candidate_outcome where ticker = 'ZZLIN3' and strategy = 'C') then
-    raise exception 'candidate_outcome row leaked despite rollback';
+    raise exception 'no candidate_outcome should be created for a tag without close';
+  end if;
+  if not (published->'skipped_open_commands' @> jsonb_build_array(jsonb_build_object('ticker', 'ZZLIN3', 'strategy', 'C', 'reason', 'MISSING_DAILY_OHLCV_CLOSE'))) then
+    raise exception 'skipped tag should be reported in skipped_open_commands: %', published;
   end if;
 end $$;
 
--- Story 3.3 review patch: 2개 이상의 활성 태그 중 하나는 emit_open_command가 성공할 수 있는 상태(종가 존재)이고
--- 다른 하나는 실패하는 상태(종가 없음)일 때, 먼저 처리되어 성공했을 수도 있는 태그의 outcome 행도
--- 함께 rollback되는지 검증한다 -- 단일 태그 실패만으로는 이 "부분 루프" unwind를 증명하지 못하기 때문이다(AD-20).
+-- 2026-10-06: 종가가 있는 태그와 없는 태그가 섞이면, 종가가 있는 태그만 진입하고 없는 태그는 건너뛴다.
 do $$
 declare
   key text := 'close:2099-01-09'; started jsonb; attempt_id uuid; fence bigint; lease uuid;
   candidate_d uuid := gen_random_uuid();
   candidate_e uuid := gen_random_uuid();
-  caught boolean := false;
 begin
   -- ZZLIN4는 종가가 존재해 emit_open_command가 성공할 수 있는 태그, ZZLIN5는 의도적으로 종가를 넣지 않아
   -- emit_open_command가 실패하는 태그다. 루프의 실제 순회 순서와 무관하게, 예외 발생 후에는
@@ -464,28 +460,17 @@ begin
   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'pending', 'running');
   perform public.write_stage(attempt_id, 'market_supply', fence, lease, 'running', 'success');
 
-  begin
-    perform public.__fixture_seed_market_supply(attempt_id);
-    perform public.publish_attempt(attempt_id, fence, lease);
-  exception when others then
-    if sqlerrm = 'MISSING_DAILY_OHLCV_CLOSE' then caught := true; else raise; end if;
-  end;
-  if not caught then raise exception 'publish_attempt did not propagate emit_open_command failure for the second active tag'; end if;
+  perform public.__fixture_seed_market_supply(attempt_id);
+  perform public.publish_attempt(attempt_id, fence, lease);
 
-  if (select status from public.runs where run_id = attempt_id) = 'published' then
-    raise exception 'partial-loop failure did not roll back candidate/tag publish';
+  if (select status from public.runs where run_id = attempt_id) <> 'published' then
+    raise exception 'publish should succeed when one of two tags lacks a close';
   end if;
-  if (select canonical_success_run_id from public.logical_runs where logical_run_key = key) is not null then
-    raise exception 'canonical_success_run_id was set despite partial-loop outcome generation failure';
+  if not exists (select 1 from public.candidate_outcome where ticker = 'ZZLIN4' and strategy = 'A' and entry_date = date '2099-01-09') then
+    raise exception 'the tag with a close should still open its outcome';
   end if;
-  if exists (select 1 from public.outcome_events where logical_run_key = key) then
-    raise exception 'outcome_events row leaked for any tag despite partial-loop rollback';
-  end if;
-  if exists (select 1 from public.outcome_events where logical_run_key = key and ticker = 'ZZLIN4') then
-    raise exception 'the first (would-have-succeeded) tag''s outcome_events row leaked despite rollback';
-  end if;
-  if exists (select 1 from public.candidate_outcome where (ticker, strategy) in (('ZZLIN4', 'A'), ('ZZLIN5', 'B'))) then
-    raise exception 'candidate_outcome rows leaked for the partial loop despite rollback';
+  if exists (select 1 from public.candidate_outcome where ticker = 'ZZLIN5' and strategy = 'B') then
+    raise exception 'the tag without a close should be skipped';
   end if;
 end $$;
 
