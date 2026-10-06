@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.batch.ls_market_index_provider import MarketIndexBar
 from apps.batch.ls_market_program_supply_provider import MarketProgramSupplyBar
 from apps.batch.ls_market_supply_provider import MarketSupplyBar
 from apps.batch.market_supply_repository import MarketSupplyRow
@@ -68,7 +69,14 @@ def _programs():
     return {"KOSPI": MarketProgramSupplyBar("KOSPI", 40), "KOSDAQ": MarketProgramSupplyBar("KOSDAQ", -50)}
 
 
-def _run(investors=None, programs=None, repo=None, kind=BatchKind.INTRADAY):
+def _indexes():
+    return {
+        "KOSPI": MarketIndexBar("KOSPI", 6943.9, -0.85, 402, 76, 466),
+        "KOSDAQ": MarketIndexBar("KOSDAQ", 914.7, 2.4, 954, 145, 726),
+    }
+
+
+def _run(investors=None, programs=None, repo=None, kind=BatchKind.INTRADAY, indexes=None):
     rpc = FakeRpc()
     run_id = uuid4()
     result = run_market_supply_stage(
@@ -76,6 +84,7 @@ def _run(investors=None, programs=None, repo=None, kind=BatchKind.INTRADAY):
         FakeInvestorProvider(_investors() if investors is None else investors),
         FakeProgramProvider(_programs() if programs is None else programs),
         repo or FakeRepository(), run_id, 1, uuid4(), DAY, kind,
+        market_index_provider=None if indexes is None else FakeProgramProvider(indexes),
     )
     return result, rpc
 
@@ -149,3 +158,61 @@ def test_market_supply_row_rejects_non_finite_values_and_unknown_market():
         MarketSupplyRow(str(uuid4()), "OTHER", DAY, 1, 2, 3, 4)
     with pytest.raises(ValueError):
         MarketSupplyRow(str(uuid4()), "KOSPI", DAY, float("nan"), 2, 3, 4)
+
+
+def test_index_provider_fills_index_fields_per_market():
+    repo = FakeRepository()
+    result, _ = _run(repo=repo, indexes=_indexes())
+
+    assert result.status == "success"
+    assert {
+        row.market: (
+            row.index_price, row.index_change_rate,
+            row.advancing_count, row.unchanged_count, row.declining_count,
+        )
+        for row in repo.saved
+    } == {
+        "KOSPI": (6943.9, -0.85, 402, 76, 466),
+        "KOSDAQ": (914.7, 2.4, 954, 145, 726),
+    }
+
+
+def test_index_failure_keeps_supply_row_and_success_status():
+    repo = FakeRepository()
+    result, rpc = _run(
+        repo=repo,
+        indexes={"KOSPI": RuntimeError("t1511 unavailable"), "KOSDAQ": _indexes()["KOSDAQ"]},
+    )
+
+    assert result.status == "success"
+    by_market = {row.market: row for row in repo.saved}
+    assert by_market["KOSPI"].foreign_net == 100.0
+    assert by_market["KOSPI"].index_change_rate is None
+    assert by_market["KOSPI"].advancing_count is None
+    assert by_market["KOSDAQ"].index_change_rate == 2.4
+    final = [call for call in rpc.calls if call[0] == "write_stage"][-1]
+    assert final[1]["p_status"] == "success"
+    assert final[1]["p_result"]["index_errors"] == [{"market": "KOSPI", "message": "t1511 unavailable"}]
+
+
+def test_index_provider_returning_other_market_is_treated_as_index_failure():
+    repo = FakeRepository()
+    result, rpc = _run(repo=repo, indexes={"KOSPI": _indexes()["KOSDAQ"], "KOSDAQ": _indexes()["KOSDAQ"]})
+
+    assert result.status == "success"
+    assert {row.market: row.index_change_rate for row in repo.saved} == {"KOSPI": None, "KOSDAQ": 2.4}
+
+
+def test_market_supply_row_db_payload_includes_nullable_index_fields():
+    row = MarketSupplyRow(str(uuid4()), "KOSPI", DAY, 1, 2, 3, 4)
+    payload = row.as_db_row()
+
+    assert {key: payload[key] for key in (
+        "index_price", "index_change_rate", "advancing_count", "unchanged_count", "declining_count",
+    )} == dict.fromkeys(
+        ("index_price", "index_change_rate", "advancing_count", "unchanged_count", "declining_count"), None,
+    )
+    with pytest.raises(ValueError):
+        MarketSupplyRow(str(uuid4()), "KOSPI", DAY, 1, 2, 3, 4, index_change_rate=float("inf"))
+    with pytest.raises(ValueError):
+        MarketSupplyRow(str(uuid4()), "KOSPI", DAY, 1, 2, 3, 4, advancing_count=-1)

@@ -155,6 +155,12 @@ export interface MarketSupplyRpcRow {
   institution_net: number;
   individual_net: number;
   program_net: number;
+  /** t1511 지수 등락. 조회 실패 행과 컬럼 추가 이전 행은 null(또는 누락)이다. */
+  index_price?: number | null;
+  index_change_rate?: number | null;
+  advancing_count?: number | null;
+  unchanged_count?: number | null;
+  declining_count?: number | null;
   collected_at: string;
 }
 

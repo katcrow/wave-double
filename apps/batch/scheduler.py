@@ -33,6 +33,7 @@ from .supply_stage import (
 )
 from .market_supply_repository import MarketSupplyRepositoryProtocol
 from .market_supply_stage import (
+    MarketIndexProviderProtocol,
     MarketProgramSupplyProviderProtocol,
     MarketSupplyProviderProtocol,
     MarketSupplyStageResult,
@@ -238,6 +239,7 @@ def run_scheduled_batch(
     bias_repository: BiasRepositoryProtocol | None = None,
     strategy_i_supply_provider: StrategyISupplyProviderProtocol | None = None,
     theme_client: ThemeClient | None = None,
+    market_index_provider: MarketIndexProviderProtocol | None = None,
 ) -> SchedulerResult:
     """휴장이면 attempt를 시작한 뒤 즉시 skip 처리하고, 개장일이면 candidate stage로 위임한다.
 
@@ -410,6 +412,7 @@ def run_scheduled_batch(
                     result.lease_token,
                     key.trading_day,
                     batch_kind=kind,
+                    market_index_provider=market_index_provider,
                 )
             else:
                 # 기존 외부 호출자의 시그니처 호환성. 실제 CLI는 항상 세 adapter를

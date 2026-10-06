@@ -24,6 +24,7 @@ from .ls_client import LsClient, LsClientConfig
 from .ls_daily_bar import LsDailyBarProvider
 from .ls_program_supply_provider import LsProgramSupplyProvider
 from .ls_supply_provider import LsSupplyProvider
+from .ls_market_index_provider import LsMarketIndexProvider
 from .ls_market_program_supply_provider import LsMarketProgramSupplyProvider
 from .ls_market_supply_provider import LsMarketSupplyProvider
 from .market_supply_repository import SupabaseMarketSupplyRepository
@@ -144,6 +145,7 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
             bias_repository=bias_repository,
             strategy_i_supply_provider=supply_provider,
             theme_client=ls_client,
+            market_index_provider=LsMarketIndexProvider(ls_client),
             trigger=trigger,
             dispatch_request_id=args.dispatch_request_id,
             logical_run_key=args.logical_run_key,

@@ -26,11 +26,29 @@ export interface MarketSupplyMetricViewModel {
   barWidth: number;
 }
 
+export interface MarketIndexViewModel {
+  price: number;
+  changeRate: number;
+  direction: MarketSupplyMetricDirection;
+}
+
+export interface MarketBreadthViewModel {
+  advancing: number;
+  unchanged: number;
+  declining: number;
+  /** 상승·보합·하락 비율 막대용 %(합계 100). */
+  advancingShare: number;
+  unchangedShare: number;
+  decliningShare: number;
+}
+
 export interface MarketSupplyViewModel {
   market: Market;
   row: MarketSupplyRpcRow | null;
   available: boolean;
   metrics: MarketSupplyMetricViewModel[];
+  index: MarketIndexViewModel | null;
+  breadth: MarketBreadthViewModel | null;
 }
 
 const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", {
@@ -43,6 +61,14 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isMarket(value: unknown): value is Market {
   return value === "KOSPI" || value === "KOSDAQ";
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return value === undefined || value === null || isFiniteNumber(value);
+}
+
+function isOptionalCount(value: unknown): boolean {
+  return value === undefined || value === null || (Number.isInteger(value) && (value as number) >= 0);
 }
 
 function isIsoDate(value: unknown): value is string {
@@ -69,6 +95,11 @@ export function isMarketSupplyRpcRow(value: unknown): value is MarketSupplyRpcRo
     isFiniteNumber(row.institution_net) &&
     isFiniteNumber(row.individual_net) &&
     isFiniteNumber(row.program_net) &&
+    isOptionalFiniteNumber(row.index_price) &&
+    isOptionalFiniteNumber(row.index_change_rate) &&
+    isOptionalCount(row.advancing_count) &&
+    isOptionalCount(row.unchanged_count) &&
+    isOptionalCount(row.declining_count) &&
     isIsoDateTime(row.collected_at)
   );
 }
@@ -95,7 +126,7 @@ export function buildMarketSupplyViewModel(
 ): MarketSupplyViewModel {
   const matchingRows = (rows ?? []).filter((row) => row.market === market);
   const row = matchingRows.length === 1 ? matchingRows[0] : null;
-  if (!row) return { market, row: null, available: false, metrics: [] };
+  if (!row) return { market, row: null, available: false, metrics: [], index: null, breadth: null };
 
   const values = MARKET_SUPPLY_METRICS.map(({ key }) => formatZero(row[key]));
   const maxAbsoluteValue = Math.max(...values.map((value) => Math.abs(value)), Number.EPSILON);
@@ -110,7 +141,52 @@ export function buildMarketSupplyViewModel(
     };
   });
 
-  return { market, row, available: true, metrics };
+  return { market, row, available: true, metrics, index: buildIndex(row), breadth: buildBreadth(row) };
+}
+
+function buildIndex(row: MarketSupplyRpcRow): MarketIndexViewModel | null {
+  if (!isFiniteNumber(row.index_price) || !isFiniteNumber(row.index_change_rate)) return null;
+  const changeRate = formatZero(row.index_change_rate);
+  return { price: row.index_price, changeRate, direction: metricDirection(changeRate).direction };
+}
+
+/** 세 종목수가 모두 있을 때만 구성한다. 일부만 있으면 비율이 왜곡되므로 숨긴다. */
+function buildBreadth(row: MarketSupplyRpcRow): MarketBreadthViewModel | null {
+  const { advancing_count: advancing, unchanged_count: unchanged, declining_count: declining } = row;
+  if (!isFiniteNumber(advancing) || !isFiniteNumber(unchanged) || !isFiniteNumber(declining)) return null;
+  const total = advancing + unchanged + declining;
+  if (total <= 0) return null;
+  const share = (count: number) => (count / total) * 100;
+  return {
+    advancing,
+    unchanged,
+    declining,
+    advancingShare: share(advancing),
+    unchangedShare: share(unchanged),
+    decliningShare: share(declining),
+  };
+}
+
+const INDEX_FORMATTER = new Intl.NumberFormat("ko-KR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function formatMarketIndexPrice(value: number): string {
+  return INDEX_FORMATTER.format(value);
+}
+
+/** 등락률은 부호를 항상 붙인다(+0.85% / -0.85% / 0.00%). */
+export function formatMarketIndexChangeRate(value: number): string {
+  const rate = formatZero(value);
+  const sign = rate > 0 ? "+" : "";
+  return `${sign}${INDEX_FORMATTER.format(rate)}%`;
+}
+
+const COUNT_FORMATTER = new Intl.NumberFormat("ko-KR");
+
+export function formatMarketBreadthCount(value: number): string {
+  return COUNT_FORMATTER.format(value);
 }
 
 export function formatMarketSupplyNumber(value: number): string {

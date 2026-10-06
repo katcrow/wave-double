@@ -1924,9 +1924,7 @@ a {
 
 .market-supply-panel__title-group,
 .market-supply-panel__eyebrow,
-.market-supply-panel__freshness,
-.market-supply-panel__metric h3,
-.market-supply-panel__value {
+.market-supply-panel__freshness {
   margin: 0;
 }
 
@@ -1958,86 +1956,173 @@ a {
   font-weight: var(--font-weight-label);
 }
 
-.market-supply-panel__tabs {
-  display: inline-flex;
-  max-width: 100%;
+.market-supply-panel__markets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
   margin-top: var(--space-5);
-  padding: 3px;
+}
+
+.market-supply-panel__market {
+  min-width: 0;
+  padding: var(--space-4);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
-.market-supply-panel__tab {
-  min-width: 96px;
-  padding: var(--space-2) var(--space-4);
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-ink-muted);
-  font: inherit;
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-label);
-  cursor: pointer;
+.market-supply-panel__market-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
 }
 
-.market-supply-panel__tab:hover {
-  color: var(--color-ink-primary);
-}
-
-.market-supply-panel__tab--active {
-  background: var(--color-surface-elevated);
+.market-supply-panel__market-header h3 {
+  margin: 0;
   color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-border);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-label);
 }
 
-.market-supply-panel__tab:focus-visible {
-  outline-offset: 2px;
+.market-supply-panel__index {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-family-data);
+  font-variant-numeric: tabular-nums;
 }
 
-.market-supply-panel__content {
+.market-supply-panel__index-price {
+  color: var(--color-ink-primary);
+  font-size: var(--font-size-data);
+  font-weight: var(--font-weight-data);
+}
+
+.market-supply-panel__index-rate {
+  font-size: var(--font-size-data);
+  font-weight: var(--font-weight-data);
+}
+
+.market-supply-panel__index-rate--positive {
+  color: var(--color-value-up);
+}
+
+.market-supply-panel__index-rate--negative {
+  color: var(--color-value-down);
+}
+
+.market-supply-panel__index-rate--neutral {
+  color: var(--color-ink-muted);
+}
+
+.market-supply-panel__breadth {
+  margin-bottom: var(--space-3);
+}
+
+/* 상승 · 보합 · 하락 종목 비율 막대 */
+.market-supply-panel__breadth-bar {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  gap: 2px;
+  border-radius: var(--radius-full);
+}
+
+.market-supply-panel__breadth-segment {
+  display: block;
+  flex: var(--market-breadth-share) 1 0;
   min-width: 0;
-  margin-top: var(--space-4);
 }
 
-.market-supply-panel__content:focus-visible {
-  outline-offset: 4px;
-  border-radius: var(--radius-sm);
+.market-supply-panel__breadth-segment--advancing {
+  background: var(--color-value-up);
+}
+
+.market-supply-panel__breadth-segment--unchanged {
+  background: var(--color-ink-muted);
+  opacity: 0.6;
+}
+
+.market-supply-panel__breadth-segment--declining {
+  background: var(--color-value-down);
+}
+
+.market-supply-panel__breadth-counts {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+}
+
+.market-supply-panel__breadth-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.market-supply-panel__breadth-count dt {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
+.market-supply-panel__breadth-count dd {
+  margin: 0;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-supply-panel__breadth-count--advancing dd {
+  color: var(--color-value-up);
+}
+
+.market-supply-panel__breadth-count--unchanged dd {
+  color: var(--color-ink-secondary);
+}
+
+.market-supply-panel__breadth-count--declining dd {
+  color: var(--color-value-down);
 }
 
 .market-supply-panel__day-meta {
-  margin-bottom: var(--space-3);
+  margin: var(--space-3) 0 0;
   font-family: var(--font-family-data);
 }
 
 .market-supply-panel__metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: auto auto minmax(48px, 1fr) auto;
+  column-gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
+/* 라벨 · 방향 · 막대 · 금액을 한 줄에 정렬해 두 시장을 나란히 비교한다. */
 .market-supply-panel__metric {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
   min-width: 0;
-  padding: var(--space-3);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
 }
 
-.market-supply-panel__metric-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-width: 0;
+.market-supply-panel__metric:first-child {
+  border-top: 0;
 }
 
-.market-supply-panel__metric h3 {
+.market-supply-panel__metric-label {
   min-width: 0;
   color: var(--color-ink-secondary);
   font-size: var(--font-size-label);
   font-weight: var(--font-weight-label);
-  overflow-wrap: anywhere;
 }
 
 .market-supply-panel__direction {
@@ -2059,13 +2144,13 @@ a {
 }
 
 .market-supply-panel__value {
-  margin-top: var(--space-2);
   color: var(--color-ink-primary);
   font-family: var(--font-family-data);
   font-size: var(--font-size-data);
   font-weight: var(--font-weight-data);
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .market-supply-panel__value--positive {
@@ -2088,7 +2173,6 @@ a {
   position: relative;
   display: block;
   height: 6px;
-  margin-top: var(--space-3);
   overflow: hidden;
   background: var(--color-surface-elevated);
   border-radius: var(--radius-full);
@@ -2152,22 +2236,7 @@ a {
     padding: var(--space-4);
   }
 
-  .market-supply-panel__tabs {
-    display: flex;
-  }
-
-  .market-supply-panel__tab {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .market-supply-panel__metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 420px) {
-  .market-supply-panel__metrics {
+  .market-supply-panel__markets {
     grid-template-columns: minmax(0, 1fr);
   }
 }

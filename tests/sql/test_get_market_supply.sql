@@ -44,13 +44,25 @@ begin
   perform public.write_stage(published_run, 'market_supply', fence, lease, 'pending', 'running');
   perform public.write_stage(published_run, 'market_supply', fence, lease, 'running', 'success');
   insert into public.market_supply(
-    attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net
+    attempt_run_id, market, trading_day, foreign_net, institution_net, individual_net, program_net,
+    index_price, index_change_rate, advancing_count, unchanged_count, declining_count
   ) values
-    (published_run, 'KOSPI', date '2099-07-08', 100, -20, 0, 50),
-    (published_run, 'KOSDAQ', date '2099-07-08', -10, 30, 40, -5);
+    (published_run, 'KOSPI', date '2099-07-08', 100, -20, 0, 50, 6943.90, -0.85, 402, 76, 466),
+    (published_run, 'KOSDAQ', date '2099-07-08', -10, 30, 40, -5, null, null, null, null, null);
   perform public.publish_attempt(published_run, fence, lease);
 
   result := public.get_market_supply(published_run);
+  -- 지수 등락(t1511)은 nullable 보조 필드다: 값이 있으면 그대로, 없으면 JSON null로 반환한다.
+  if (result->0->>'index_price')::numeric <> 6943.90
+     or (result->0->>'index_change_rate')::numeric <> -0.85
+     or (result->0->>'advancing_count')::integer <> 402
+     or (result->0->>'unchanged_count')::integer <> 76
+     or (result->0->>'declining_count')::integer <> 466
+     or not (result->1 ? 'index_change_rate')
+     or jsonb_typeof(result->1->'index_change_rate') <> 'null'
+     or jsonb_typeof(result->1->'advancing_count') <> 'null' then
+    raise exception 'market index fields were not returned as expected: %', result;
+  end if;
   if jsonb_array_length(result) <> 2
      or result->0->>'market' <> 'KOSPI'
      or result->1->>'market' <> 'KOSDAQ'

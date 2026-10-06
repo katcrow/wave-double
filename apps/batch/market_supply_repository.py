@@ -21,6 +21,12 @@ class MarketSupplyRow:
     institution_net: float
     individual_net: float
     program_net: float
+    # t1511 지수 등락률/종목수. 조회 실패 시 수급 행은 유지하고 None으로 저장한다.
+    index_price: float | None = None
+    index_change_rate: float | None = None
+    advancing_count: int | None = None
+    unchanged_count: int | None = None
+    declining_count: int | None = None
 
     def __post_init__(self) -> None:
         if not self.attempt_run_id:
@@ -33,6 +39,16 @@ class MarketSupplyRow:
             value = getattr(self, field)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(float(value)):
                 raise ValueError(f"{field} must be a finite number")
+        for field in ("index_price", "index_change_rate"):
+            value = getattr(self, field)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(float(value))
+            ):
+                raise ValueError(f"{field} must be a finite number")
+        for field in ("advancing_count", "unchanged_count", "declining_count"):
+            value = getattr(self, field)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+                raise ValueError(f"{field} must be a non-negative integer")
 
     def as_db_row(self) -> dict[str, Any]:
         return {
@@ -43,6 +59,11 @@ class MarketSupplyRow:
             "institution_net": self.institution_net,
             "individual_net": self.individual_net,
             "program_net": self.program_net,
+            "index_price": self.index_price,
+            "index_change_rate": self.index_change_rate,
+            "advancing_count": self.advancing_count,
+            "unchanged_count": self.unchanged_count,
+            "declining_count": self.declining_count,
             "collected_at": datetime.now(timezone.utc).isoformat(),
         }
 

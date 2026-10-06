@@ -467,32 +467,47 @@ export type Database = {
         Row: {
           attempt_run_id: string
           collected_at: string
+          advancing_count: number | null
+          declining_count: number | null
           foreign_net: number
+          index_change_rate: number | null
+          index_price: number | null
           individual_net: number
           institution_net: number
           market: string
           program_net: number
           trading_day: string
+          unchanged_count: number | null
         }
         Insert: {
+          advancing_count?: number | null
           attempt_run_id: string
           collected_at?: string
+          declining_count?: number | null
           foreign_net: number
+          index_change_rate?: number | null
+          index_price?: number | null
           individual_net: number
           institution_net: number
           market: string
           program_net: number
           trading_day: string
+          unchanged_count?: number | null
         }
         Update: {
+          advancing_count?: number | null
           attempt_run_id?: string
           collected_at?: string
+          declining_count?: number | null
           foreign_net?: number
+          index_change_rate?: number | null
+          index_price?: number | null
           individual_net?: number
           institution_net?: number
           market?: string
           program_net?: number
           trading_day?: string
+          unchanged_count?: number | null
         }
         Relationships: [
           {

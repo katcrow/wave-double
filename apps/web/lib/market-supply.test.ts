@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildMarketSupplyViewModel,
+  formatMarketIndexChangeRate,
+  formatMarketIndexPrice,
   formatMarketSupplyNumber,
   isMarketSupplyRpcRow,
 } from "./market-supply.ts";
@@ -64,4 +66,47 @@ test("최대값에 비해 작은 유효 수치도 방향 막대가 사라지지 
     row({ foreign_net: 100, institution_net: -0.001, individual_net: 0, program_net: 0 }),
   ], "KOSPI");
   assert.equal(view.metrics[1].barWidth, 1);
+});
+
+test("지수 등락 필드는 누락·null을 허용하되 값이 있으면 유효해야 한다", () => {
+  assert.equal(isMarketSupplyRpcRow({ ...row(), index_price: null, index_change_rate: null }), true);
+  assert.equal(isMarketSupplyRpcRow({ ...row(), index_change_rate: -0.85, advancing_count: 402 }), true);
+  assert.equal(isMarketSupplyRpcRow({ ...row(), index_change_rate: Number.NaN }), false);
+  assert.equal(isMarketSupplyRpcRow({ ...row(), index_price: "6943.90" }), false);
+  assert.equal(isMarketSupplyRpcRow({ ...row(), advancing_count: -1 }), false);
+  assert.equal(isMarketSupplyRpcRow({ ...row(), declining_count: 1.5 }), false);
+});
+
+test("지수와 종목수가 있으면 등락 방향과 비율을 구성한다", () => {
+  const view = buildMarketSupplyViewModel([
+    row({
+      index_price: 6943.9,
+      index_change_rate: -0.85,
+      advancing_count: 402,
+      unchanged_count: 76,
+      declining_count: 466,
+    }),
+  ], "KOSPI");
+  assert.deepEqual(view.index, { price: 6943.9, changeRate: -0.85, direction: "negative" });
+  assert.equal(view.breadth?.advancing, 402);
+  assert.equal(view.breadth?.declining, 466);
+  const shares = view.breadth!;
+  assert.ok(Math.abs(shares.advancingShare + shares.unchangedShare + shares.decliningShare - 100) < 1e-9);
+  assert.equal(formatMarketIndexPrice(6943.9), "6,943.90");
+  assert.equal(formatMarketIndexChangeRate(-0.85), "-0.85%");
+  assert.equal(formatMarketIndexChangeRate(2.4), "+2.40%");
+  assert.equal(formatMarketIndexChangeRate(0), "0.00%");
+});
+
+test("지수 필드가 없거나 일부만 있으면 해당 영역을 숨긴다", () => {
+  const legacy = buildMarketSupplyViewModel([row()], "KOSPI");
+  assert.equal(legacy.available, true);
+  assert.equal(legacy.index, null);
+  assert.equal(legacy.breadth, null);
+
+  const partial = buildMarketSupplyViewModel([
+    row({ index_price: 900, index_change_rate: null, advancing_count: 10, unchanged_count: null, declining_count: 5 }),
+  ], "KOSPI");
+  assert.equal(partial.index, null);
+  assert.equal(partial.breadth, null);
 });
