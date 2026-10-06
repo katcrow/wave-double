@@ -59,6 +59,19 @@ CLOSE_START_DEADLINE = time(19, 50)
 KST = ZoneInfo("Asia/Seoul")
 
 
+def _tracked_outcome_tickers(ohlcv_repository: object) -> list[str]:
+    """추적 종목 조회 실패는 close 배치를 막지 않는다 -- 누락된 관측은 다음 close의
+    publish_attempt가 미관측 거래일을 소급 처리하며 메운다."""
+    lookup = getattr(ohlcv_repository, "tracked_outcome_tickers", None)
+    if lookup is None:
+        return []
+    try:
+        return list(lookup())
+    except Exception as exc:
+        print(f"tracked outcome ticker lookup failed: {exc}")
+        return []
+
+
 def is_scheduled_execution_allowed(batch_kind: BatchKind | str, now_kst: datetime) -> bool:
     """예약 실행이 KST 운영시간 안에 있는지 확인한다.
 
@@ -307,7 +320,16 @@ def run_scheduled_batch(
             )
         tickers = [candidate.ticker for candidate in result.selection.candidates] if result.selection else []
         initialize_new_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day, heartbeat=heartbeat)
-        update_existing_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day, heartbeat=heartbeat)
+        if kind is BatchKind.CLOSE:
+            # close 배치는 성과 추적의 기준이다: 오늘 후보가 아닌 추적 종목의 일봉도 갱신하고,
+            # 장중에 저장된 당일 미완성 일봉을 확정 종가로 덮어쓴다.
+            update_existing_ticker_history(
+                list(dict.fromkeys(tickers + _tracked_outcome_tickers(ohlcv_repository))),
+                ohlcv_provider, ohlcv_repository, key.trading_day,
+                heartbeat=heartbeat, refresh_last_day=True,
+            )
+        else:
+            update_existing_ticker_history(tickers, ohlcv_provider, ohlcv_repository, key.trading_day, heartbeat=heartbeat)
         tags_result = run_tags_stage(
             gateway,
             candidate_fetcher,

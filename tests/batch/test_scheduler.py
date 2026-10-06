@@ -1633,3 +1633,46 @@ def test_intraday_batch_does_not_verify_daily_bar():
     assert result.status != "skipped"
     assert provider.calls == 0
     assert candidate_client.calls
+
+
+class TrackingOhlcvRepository(FakeOhlcvRepository):
+    def __init__(self, tracked):
+        super().__init__()
+        self.tracked = tracked
+
+    def tracked_outcome_tickers(self):
+        return list(self.tracked)
+
+
+@pytest.mark.parametrize(
+    ("kind", "expect_tracked"),
+    [(BatchKind.CLOSE, True), (BatchKind.INTRADAY, False)],
+)
+def test_close_batch_updates_ohlcv_for_tracked_outcome_tickers(kind, expect_tracked):
+    """close 배치는 오늘 후보가 아닌 추적 종목의 일봉도 갱신해 성과 관측이 끊기지 않게 한다."""
+    day = date(2026, 9, 1)
+    repo = FakeRepository(cached={day: TradingCalendarEntry(day, True, time(8, 30), time(19, 30))})
+    key = "close:2026-09-01" if kind is BatchKind.CLOSE else "intraday:2026-09-01:10:10"
+    rpc = FakeRpc(attempt=attempt_payload(key))
+    candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    deps = tags_deps()
+    ohlcv_repository = TrackingOhlcvRepository(["195870"])
+
+    run_scheduled_batch(
+        kind,
+        datetime(2026, 9, 1, 19, 40) if kind is BatchKind.CLOSE else datetime(2026, 9, 1, 10, 10),
+        repo,
+        FakeProvider(),
+        RunStateGateway(rpc),
+        candidate_client,
+        deps["ohlcv_provider"],
+        ohlcv_repository,
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+    )
+
+    assert ohlcv_repository.latest_state_calls
+    assert ("195870" in ohlcv_repository.latest_state_calls[-1]) is expect_tracked

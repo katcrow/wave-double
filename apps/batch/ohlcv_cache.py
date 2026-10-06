@@ -211,6 +211,23 @@ class SupabaseOhlcvCacheRepository:
             )
         return states
 
+    def tracked_outcome_tickers(self) -> list[str]:
+        """성과 추적이 끝나지 않은(OPEN/SUSPENDED) ``candidate_outcome`` 종목을 반환한다.
+
+        close 배치가 오늘 후보가 아닌 추적 종목의 일봉도 갱신해야 관측이 끊기지 않는다.
+        """
+        response = self._http.get(
+            f"{self._base_url}/rest/v1/candidate_outcome",
+            headers=self._headers(),
+            params={"status": "in.(OPEN,SUSPENDED)", "select": "ticker"},
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not isinstance(rows, list):
+            raise RuntimeError("Supabase candidate_outcome response malformed: expected a list")
+        return sorted({str(row["ticker"]) for row in rows})
+
     def upsert_rows(
         self, ticker: str, rows: list[dict[str, Any]], *, adjustment_version: int = 1
     ) -> None:
@@ -324,8 +341,14 @@ def update_existing_ticker_history(
     cutoff: date,
     *,
     heartbeat: HeartbeatPolicy | None = None,
+    refresh_last_day: bool = False,
 ) -> IncrementalUpdateResult:
     """이미 캐시된 각 종목의 마지막 저장 거래일 다음부터 cutoff까지만 증분 조회한다.
+
+    ``refresh_last_day=True``이면 마지막 저장 거래일부터 다시 조회해 그 행을 덮어쓴다.
+    장중 배치가 저장한 당일 미완성 일봉을 close 배치가 확정 종가로 교체하기 위함이다
+    (진입가·성과 관측이 장중 가격으로 남지 않도록). 마지막 저장일 자체는 이미 보정
+    판정을 거친 행이므로 corporate-action/갭 판정 대상에서 제외한다.
 
     ``latest_state``에 없는 티커(이력 없음)는 이 함수의 관심사가 아니므로 결과에서
     제외한다(신규 편입은 ``initialize_new_ticker_history``의 몫). ``pricechk`` 또는
@@ -359,15 +382,22 @@ def update_existing_ticker_history(
         if heartbeat is not None:
             heartbeat.beat()
 
-        if state.last_trading_day >= cutoff:
+        if state.last_trading_day > cutoff or (
+            state.last_trading_day == cutoff and not refresh_last_day
+        ):
             results[ticker] = OhlcvCacheResult(ticker, OhlcvCacheStatus.READY, 0)
             continue
 
+        start = state.last_trading_day if refresh_last_day else state.last_trading_day + timedelta(days=1)
         try:
-            new_rows = provider.fetch_range(ticker, state.last_trading_day + timedelta(days=1), cutoff)
+            new_rows = provider.fetch_range(ticker, start, cutoff)
         except Exception as exc:
             results[ticker] = OhlcvCacheResult(ticker, OhlcvCacheStatus.ERROR, 0, str(exc))
             continue
+        if refresh_last_day:
+            # t8410은 sdate=edate(하루) 요청에도 qrycnt만큼 과거 행을 돌려줄 수 있다 --
+            # 요청 구간 밖 행은 버려 불필요한 대량 덮어쓰기를 막는다.
+            new_rows = [row for row in new_rows if start <= row["trading_day"] <= cutoff]
 
         if not new_rows:
             results[ticker] = OhlcvCacheResult(ticker, OhlcvCacheStatus.READY, 0)
@@ -378,6 +408,9 @@ def update_existing_ticker_history(
         ticker_flags: list[AdjustmentFlag] = []
         try:
             for row in new_rows:
+                if refresh_last_day and row["trading_day"] <= state.last_trading_day:
+                    prev_close = row["close"]
+                    continue
                 pricechk_flagged = _is_pricechk_flagged(row.get("pricechk"))
                 if pricechk_flagged:
                     corporate_action = True

@@ -739,3 +739,48 @@ def test_update_existing_history_beats_per_known_ticker_when_heartbeat_given():
     hb = RecordingHeartbeat()
     update_existing_ticker_history(["005930", "000660"], provider, repository, date(2026, 9, 2), heartbeat=hb)
     assert hb.beats == 2
+
+
+def test_refresh_last_day_refetches_from_last_saved_day_and_overwrites_partial_bar():
+    """close 배치는 장중에 저장된 당일 미완성 일봉을 확정 종가로 덮어쓴다."""
+    states = {"005930": CachedTickerState(date(2026, 9, 2), 100.0, 1)}
+    repository = FakeStateRepository(states)
+    final_bar = {"trading_day": date(2026, 9, 2), "close": 140.0, "pricechk": 0}
+    provider = FakeRangeProvider({("005930", date(2026, 9, 2)): [final_bar]})
+
+    result = update_existing_ticker_history(
+        ["005930"], provider, repository, date(2026, 9, 2), refresh_last_day=True,
+    )
+
+    assert provider.calls == [("005930", date(2026, 9, 2), date(2026, 9, 2))]
+    assert repository.upserted == [("005930", [final_bar], 1)]
+    assert result.results["005930"] == OhlcvCacheResult("005930", OhlcvCacheStatus.READY, 1)
+    # 마지막 저장일 자체는 갭 판정 대상이 아니다(장중 가격 대비 40% 차이여도 플래그 없음).
+    assert result.adjustment_flags == []
+
+
+def test_refresh_last_day_skips_ticker_already_past_cutoff():
+    states = {"005930": CachedTickerState(date(2026, 9, 3), 100.0, 1)}
+    repository = FakeStateRepository(states)
+    provider = FakeRangeProvider({})
+
+    update_existing_ticker_history(
+        ["005930"], provider, repository, date(2026, 9, 2), refresh_last_day=True,
+    )
+
+    assert provider.calls == []
+    assert repository.upserted == []
+
+
+def test_refresh_last_day_drops_rows_outside_requested_range():
+    states = {"005930": CachedTickerState(date(2026, 9, 2), 100.0, 1)}
+    repository = FakeStateRepository(states)
+    older = {"trading_day": date(2026, 9, 1), "close": 99.0, "pricechk": 0}
+    final_bar = {"trading_day": date(2026, 9, 2), "close": 101.0, "pricechk": 0}
+    provider = FakeRangeProvider({("005930", date(2026, 9, 2)): [older, final_bar]})
+
+    update_existing_ticker_history(
+        ["005930"], provider, repository, date(2026, 9, 2), refresh_last_day=True,
+    )
+
+    assert repository.upserted == [("005930", [final_bar], 1)]
