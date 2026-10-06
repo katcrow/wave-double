@@ -1,9 +1,11 @@
-import type { MarketSupplyRpcRow } from "@/lib/dashboard-types";
+import type { MarketMacroRpcRow, MarketSupplyRpcRow } from "@/lib/dashboard-types";
 import {
+  buildMarketMacroViewModels,
   buildMarketSupplyViewModel,
   formatMarketBreadthCount,
   formatMarketIndexChangeRate,
   formatMarketIndexPrice,
+  formatMarketMacroQuoteDate,
   formatMarketSupplyDate,
   formatMarketSupplyNumber,
   MARKET_OPTIONS,
@@ -11,13 +13,15 @@ import {
 
 interface MarketSupplyPanelProps {
   rows: MarketSupplyRpcRow[];
+  macroRows: MarketMacroRpcRow[];
   fetchFailed: boolean;
 }
 
 type MarketBarStyle = React.CSSProperties & { "--market-supply-bar-width": string };
 type BreadthSegmentStyle = React.CSSProperties & { "--market-breadth-share": string };
 
-export default function MarketSupplyPanel({ rows, fetchFailed }: MarketSupplyPanelProps) {
+export default function MarketSupplyPanel({ rows, macroRows, fetchFailed }: MarketSupplyPanelProps) {
+  const macros = buildMarketMacroViewModels(macroRows);
   return (
     <section className="market-supply-panel" aria-labelledby="market-supply-heading">
       <header className="market-supply-panel__header">
@@ -30,6 +34,27 @@ export default function MarketSupplyPanel({ rows, fetchFailed }: MarketSupplyPan
         </div>
         <span className="market-supply-panel__intraday-label">장중 참고</span>
       </header>
+
+      {macros.length > 0 && (
+        <dl className="market-supply-panel__macros" aria-label="매크로 지표">
+          {macros.map((macro) => (
+            <div className="market-supply-panel__macro" key={macro.symbol}>
+              <dt>{macro.label}</dt>
+              <dd>
+                <span className="market-supply-panel__index-price">{formatMarketIndexPrice(macro.price)}</span>
+                <span
+                  className={`market-supply-panel__index-rate market-supply-panel__index-rate--${macro.direction}`}
+                >
+                  {formatMarketIndexChangeRate(macro.changeRate)}
+                </span>
+                {macro.quoteDate && (
+                  <span className="market-supply-panel__macro-date">{formatMarketMacroQuoteDate(macro.quoteDate)}</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       <div className="market-supply-panel__markets">
         {MARKET_OPTIONS.map((market) => {

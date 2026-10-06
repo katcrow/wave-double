@@ -1,4 +1,4 @@
-"""t1601/t1631 시장 전체 수급 + t1511 지수 등락 수집 stage."""
+"""t1601/t1631 시장 전체 수급 + t1511 지수 등락 + t3521 매크로 시세 수집 stage."""
 
 from __future__ import annotations
 
@@ -10,9 +10,15 @@ from uuid import UUID
 from domain.run_state import BatchKind, Stage, StageStatus
 
 from .ls_market_index_provider import MarketIndexBar
+from .ls_market_macro_provider import MACRO_SYMBOLS, MarketMacroQuote
 from .ls_market_program_supply_provider import MarketProgramSupplyBar
 from .ls_market_supply_provider import MarketSupplyBar, MARKETS
-from .market_supply_repository import MarketSupplyRepositoryProtocol, MarketSupplyRow
+from .market_supply_repository import (
+    MarketMacroRepositoryProtocol,
+    MarketMacroRow,
+    MarketSupplyRepositoryProtocol,
+    MarketSupplyRow,
+)
 from .run_state import RunStateGateway
 
 
@@ -26,6 +32,10 @@ class MarketProgramSupplyProviderProtocol(Protocol):
 
 class MarketIndexProviderProtocol(Protocol):
     def fetch(self, market: str) -> MarketIndexBar: ...
+
+
+class MarketMacroProviderProtocol(Protocol):
+    def fetch(self, symbol: str) -> MarketMacroQuote: ...
 
 
 @dataclass(frozen=True)
@@ -49,11 +59,15 @@ def run_market_supply_stage(
     trading_day: date,
     batch_kind: BatchKind | str = BatchKind.INTRADAY,
     market_index_provider: MarketIndexProviderProtocol | None = None,
+    market_macro_provider: MarketMacroProviderProtocol | None = None,
+    market_macro_repo: MarketMacroRepositoryProtocol | None = None,
 ) -> MarketSupplyStageResult:
     """두 시장을 독립 처리하고 성공한 시장의 스냅샷만 저장한다.
 
     지수 등락(t1511)은 보조 정보다. 조회에 실패해도 수급 행은 지수 필드를
     비운 채 저장하고 stage 상태에는 반영하지 않으며 ``index_errors``에만 남긴다.
+    매크로 시세(t3521)도 같은 보조 정보로, 수급 저장이 끝난 뒤 심볼별로
+    조회·저장하고 실패는 ``macro_errors``에만 남긴다.
     """
     run_uuid = run_id if isinstance(run_id, UUID) else UUID(str(run_id))
     lease_uuid = lease_token if isinstance(lease_token, UUID) else UUID(str(lease_token))
@@ -118,12 +132,19 @@ def run_market_supply_stage(
             failed_markets=tuple(MARKETS),
         )
 
+    macro_errors: list[dict[str, str]] = []
+    macro_count = _collect_macro(
+        market_macro_provider, market_macro_repo, run_id_str, trading_day, macro_errors
+    )
+
     common = {
         "row_count": saved_count,
         "market_count": len(MARKETS),
         "failed_markets": failed_markets,
         "errors": errors,
         "index_errors": index_errors,
+        "macro_count": macro_count,
+        "macro_errors": macro_errors,
     }
     if failed_markets:
         result = {"result_code": "PARTIAL_MARKET_SUPPLY", **common}
@@ -161,6 +182,41 @@ def _fetch_index(
     except Exception as exc:
         index_errors.append({"market": market, "message": str(exc)})
         return None
+
+
+def _collect_macro(
+    provider: MarketMacroProviderProtocol | None,
+    repo: MarketMacroRepositoryProtocol | None,
+    run_id_str: str,
+    trading_day: date,
+    macro_errors: list[dict[str, str]],
+) -> int:
+    if provider is None or repo is None:
+        return 0
+    rows: list[MarketMacroRow] = []
+    for symbol, _kind in MACRO_SYMBOLS:
+        try:
+            quote = provider.fetch(symbol)
+            if not isinstance(quote, MarketMacroQuote) or quote.symbol != symbol:
+                raise ValueError(f"macro provider returned an invalid row for {symbol}")
+            rows.append(
+                MarketMacroRow(
+                    attempt_run_id=run_id_str,
+                    trading_day=trading_day,
+                    symbol=symbol,
+                    price=quote.price,
+                    change=quote.change,
+                    change_rate=quote.change_rate,
+                    quote_date=quote.quote_date,
+                )
+            )
+        except Exception as exc:
+            macro_errors.append({"symbol": symbol, "message": str(exc)})
+    try:
+        return repo.upsert_macro_rows(rows)
+    except Exception as exc:
+        macro_errors.append({"symbol": "*", "message": f"persist failed: {exc}"})
+        return 0
 
 
 def _index_investor_bars(bars: list[MarketSupplyBar]) -> dict[str, MarketSupplyBar]:
@@ -207,6 +263,7 @@ def _fail(
 
 __all__ = [
     "MarketIndexProviderProtocol",
+    "MarketMacroProviderProtocol",
     "MarketProgramSupplyProviderProtocol",
     "MarketSupplyProviderProtocol",
     "MarketSupplyStageResult",

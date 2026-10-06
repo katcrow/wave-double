@@ -1,4 +1,4 @@
-import type { Market, MarketSupplyRpcRow } from "./dashboard-types";
+import type { Market, MarketMacroRpcRow, MarketMacroSymbol, MarketSupplyRpcRow } from "./dashboard-types";
 
 export const MARKET_OPTIONS = ["KOSPI", "KOSDAQ"] as const satisfies readonly Market[];
 
@@ -208,4 +208,62 @@ export function formatMarketSupplyDate(iso: string): string {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(timestamp));
+}
+
+/** 표시 순서와 라벨. 가격 소수 자릿수는 시세 원본 단위를 따른다. */
+export const MARKET_MACRO_ITEMS = [
+  { symbol: "CME@NQ", label: "나스닥100 선물" },
+  { symbol: "USDKRWSMBS", label: "원/달러" },
+] as const satisfies readonly { symbol: MarketMacroSymbol; label: string }[];
+
+export interface MarketMacroViewModel {
+  symbol: MarketMacroSymbol;
+  label: string;
+  price: number;
+  changeRate: number;
+  direction: MarketSupplyMetricDirection;
+  quoteDate: string | null;
+}
+
+function isMarketMacroSymbol(value: unknown): value is MarketMacroSymbol {
+  return MARKET_MACRO_ITEMS.some((item) => item.symbol === value);
+}
+
+export function isMarketMacroRpcRow(value: unknown): value is MarketMacroRpcRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    isMarketMacroSymbol(row.symbol) &&
+    isFiniteNumber(row.price) &&
+    row.price > 0 &&
+    isFiniteNumber(row.change) &&
+    isFiniteNumber(row.change_rate) &&
+    (row.quote_date === null || isIsoDate(row.quote_date)) &&
+    isIsoDateTime(row.collected_at)
+  );
+}
+
+/** 표시 순서대로, 행이 있는 심볼만 구성한다(조회 실패 심볼은 숨긴다). */
+export function buildMarketMacroViewModels(
+  rows: readonly MarketMacroRpcRow[] | null | undefined
+): MarketMacroViewModel[] {
+  return MARKET_MACRO_ITEMS.flatMap(({ symbol, label }) => {
+    const row = (rows ?? []).find((candidate) => candidate.symbol === symbol);
+    if (!row) return [];
+    const changeRate = formatZero(row.change_rate);
+    return [{
+      symbol,
+      label,
+      price: row.price,
+      changeRate,
+      direction: metricDirection(changeRate).direction,
+      quoteDate: row.quote_date,
+    }];
+  });
+}
+
+/** 2026-10-05 → 10/05 */
+export function formatMarketMacroQuoteDate(iso: string): string {
+  const [, month, day] = iso.split("-");
+  return `${month}/${day}`;
 }

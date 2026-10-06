@@ -9,7 +9,10 @@ from typing import Any, Protocol
 
 import httpx
 
+from .ls_market_macro_provider import MACRO_SYMBOLS
 from .ls_market_supply_provider import MARKETS
+
+_MACRO_SYMBOL_SET = frozenset(symbol for symbol, _ in MACRO_SYMBOLS)
 
 
 @dataclass(frozen=True)
@@ -68,8 +71,51 @@ class MarketSupplyRow:
         }
 
 
+@dataclass(frozen=True)
+class MarketMacroRow:
+    """t3521 매크로 시세(나스닥 선물·원/달러). 시장별이 아니라 attempt당 심볼별 1행이다."""
+
+    attempt_run_id: str
+    trading_day: date
+    symbol: str
+    price: float
+    change: float
+    change_rate: float
+    quote_date: date | None
+
+    def __post_init__(self) -> None:
+        if not self.attempt_run_id:
+            raise ValueError("attempt_run_id must be non-empty")
+        if self.symbol not in _MACRO_SYMBOL_SET:
+            raise ValueError(f"unsupported macro symbol: {self.symbol}")
+        if type(self.trading_day) is not date:
+            raise TypeError("trading_day must be a date")
+        if self.quote_date is not None and type(self.quote_date) is not date:
+            raise TypeError("quote_date must be a date or None")
+        for field in ("price", "change", "change_rate"):
+            value = getattr(self, field)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(float(value)):
+                raise ValueError(f"{field} must be a finite number")
+
+    def as_db_row(self) -> dict[str, Any]:
+        return {
+            "attempt_run_id": self.attempt_run_id,
+            "trading_day": self.trading_day.isoformat(),
+            "symbol": self.symbol,
+            "price": self.price,
+            "change": self.change,
+            "change_rate": self.change_rate,
+            "quote_date": self.quote_date.isoformat() if self.quote_date else None,
+            "collected_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+
 class MarketSupplyRepositoryProtocol(Protocol):
     def upsert_rows(self, rows: list[MarketSupplyRow]) -> int: ...
+
+
+class MarketMacroRepositoryProtocol(Protocol):
+    def upsert_macro_rows(self, rows: list[MarketMacroRow]) -> int: ...
 
 
 class SupabaseMarketSupplyRepository:
@@ -111,6 +157,20 @@ class SupabaseMarketSupplyRepository:
         response.raise_for_status()
         return len(payload)
 
+    def upsert_macro_rows(self, rows: list[MarketMacroRow]) -> int:
+        if not rows:
+            return 0
+        payload = [row.as_db_row() for row in rows]
+        response = self._http.post(
+            f"{self._base_url}/rest/v1/market_macro",
+            headers={**self._headers(), "Prefer": "resolution=merge-duplicates"},
+            params={"on_conflict": "attempt_run_id,trading_day,symbol"},
+            json=payload,
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        return len(payload)
+
     def _headers(self) -> dict[str, str]:
         return {
             "content-type": "application/json",
@@ -120,6 +180,8 @@ class SupabaseMarketSupplyRepository:
 
 
 __all__ = [
+    "MarketMacroRepositoryProtocol",
+    "MarketMacroRow",
     "MarketSupplyRepositoryProtocol",
     "MarketSupplyRow",
     "SupabaseMarketSupplyRepository",

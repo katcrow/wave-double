@@ -4,9 +4,10 @@ from uuid import uuid4
 import pytest
 
 from apps.batch.ls_market_index_provider import MarketIndexBar
+from apps.batch.ls_market_macro_provider import MarketMacroQuote
 from apps.batch.ls_market_program_supply_provider import MarketProgramSupplyBar
 from apps.batch.ls_market_supply_provider import MarketSupplyBar
-from apps.batch.market_supply_repository import MarketSupplyRow
+from apps.batch.market_supply_repository import MarketMacroRow, MarketSupplyRow
 from apps.batch.market_supply_stage import run_market_supply_stage
 from apps.batch.run_state import RunStateGateway
 from domain.run_state import BatchKind
@@ -47,9 +48,17 @@ class FakeProgramProvider:
 
 
 class FakeRepository:
-    def __init__(self, fail=False):
+    def __init__(self, fail=False, macro_fail=False):
         self.fail = fail
+        self.macro_fail = macro_fail
         self.saved: list[MarketSupplyRow] = []
+        self.macro_saved: list[MarketMacroRow] = []
+
+    def upsert_macro_rows(self, rows):
+        if self.macro_fail:
+            raise RuntimeError("macro upsert failed")
+        self.macro_saved.extend(rows)
+        return len(rows)
 
     def upsert_rows(self, rows):
         if self.fail:
@@ -76,15 +85,25 @@ def _indexes():
     }
 
 
-def _run(investors=None, programs=None, repo=None, kind=BatchKind.INTRADAY, indexes=None):
+def _macros():
+    return {
+        "CME@NQ": MarketMacroQuote("CME@NQ", 31351.5, 33.75, 0.11, date(2026, 8, 31)),
+        "USDKRWSMBS": MarketMacroQuote("USDKRWSMBS", 1343.4, -1.0, -0.07, DAY),
+    }
+
+
+def _run(investors=None, programs=None, repo=None, kind=BatchKind.INTRADAY, indexes=None, macros=None):
     rpc = FakeRpc()
     run_id = uuid4()
+    repo = repo or FakeRepository()
     result = run_market_supply_stage(
         RunStateGateway(rpc),
         FakeInvestorProvider(_investors() if investors is None else investors),
         FakeProgramProvider(_programs() if programs is None else programs),
-        repo or FakeRepository(), run_id, 1, uuid4(), DAY, kind,
+        repo, run_id, 1, uuid4(), DAY, kind,
         market_index_provider=None if indexes is None else FakeProgramProvider(indexes),
+        market_macro_provider=None if macros is None else FakeProgramProvider(macros),
+        market_macro_repo=None if macros is None else repo,
     )
     return result, rpc
 
@@ -216,3 +235,55 @@ def test_market_supply_row_db_payload_includes_nullable_index_fields():
         MarketSupplyRow(str(uuid4()), "KOSPI", DAY, 1, 2, 3, 4, index_change_rate=float("inf"))
     with pytest.raises(ValueError):
         MarketSupplyRow(str(uuid4()), "KOSPI", DAY, 1, 2, 3, 4, advancing_count=-1)
+
+
+def test_macro_provider_saves_one_row_per_symbol():
+    repo = FakeRepository()
+    result, rpc = _run(repo=repo, macros=_macros())
+
+    assert result.status == "success"
+    assert [(row.symbol, row.price, row.change_rate, row.quote_date, row.trading_day) for row in repo.macro_saved] == [
+        ("CME@NQ", 31351.5, 0.11, date(2026, 8, 31), DAY),
+        ("USDKRWSMBS", 1343.4, -0.07, DAY, DAY),
+    ]
+    final = [call for call in rpc.calls if call[0] == "write_stage"][-1]
+    assert final[1]["p_result"]["macro_count"] == 2
+    assert final[1]["p_result"]["macro_errors"] == []
+
+
+def test_macro_failures_never_change_stage_status():
+    repo = FakeRepository()
+    result, rpc = _run(
+        repo=repo,
+        macros={"CME@NQ": RuntimeError("t3521 unavailable"), "USDKRWSMBS": _macros()["CME@NQ"]},
+    )
+
+    assert result.status == "success"
+    assert len(repo.saved) == 2
+    assert repo.macro_saved == []
+    final = [call for call in rpc.calls if call[0] == "write_stage"][-1]
+    assert final[1]["p_status"] == "success"
+    assert [error["symbol"] for error in final[1]["p_result"]["macro_errors"]] == ["CME@NQ", "USDKRWSMBS"]
+
+
+def test_macro_persist_failure_is_recorded_only():
+    repo = FakeRepository(macro_fail=True)
+    result, rpc = _run(repo=repo, macros=_macros())
+
+    assert result.status == "success"
+    final = [call for call in rpc.calls if call[0] == "write_stage"][-1]
+    assert final[1]["p_result"]["macro_count"] == 0
+    assert final[1]["p_result"]["macro_errors"] == [{"symbol": "*", "message": "persist failed: macro upsert failed"}]
+
+
+def test_market_macro_row_validates_and_serializes():
+    row = MarketMacroRow(str(uuid4()), DAY, "CME@NQ", 31351.5, 33.75, 0.11, None)
+    payload = row.as_db_row()
+
+    assert payload["symbol"] == "CME@NQ"
+    assert payload["quote_date"] is None
+    assert payload["trading_day"] == "2026-09-01"
+    with pytest.raises(ValueError):
+        MarketMacroRow(str(uuid4()), DAY, "NYM@CL", 1, 0, 0, None)
+    with pytest.raises(ValueError):
+        MarketMacroRow(str(uuid4()), DAY, "CME@NQ", 1, 0, float("nan"), None)

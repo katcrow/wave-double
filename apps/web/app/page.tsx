@@ -10,10 +10,11 @@ import { isCandidateSupplyHintRpcRow } from "@/lib/supply-hints";
 import type {
   CandidateEvidenceRpcRow,
   CandidateSupplyHintRpcRow,
+  MarketMacroRpcRow,
   MarketSupplyRpcRow,
 } from "@/lib/dashboard-types";
 import { isIntradaySnapshot } from "@/lib/dashboard-types";
-import { isMarketSupplyRpcRow } from "@/lib/market-supply";
+import { isMarketMacroRpcRow, isMarketSupplyRpcRow } from "@/lib/market-supply";
 import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
 import { buildDisappearedCandidateViewModels } from "@/lib/disappeared-candidates";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -56,6 +57,7 @@ export default async function HomePage() {
   let candidateEvidenceFetchFailed = false;
   let marketSupplyRows: MarketSupplyRpcRow[] = [];
   let marketSupplyFetchFailed = false;
+  let marketMacroRows: MarketMacroRpcRow[] = [];
   let candidateSupplyHintRows: CandidateSupplyHintRpcRow[] = [];
   let candidateSupplyHintsFetchFailed = false;
   let excludedTopTradingCandidates: TopTradingCandidateViewModel[] = [];
@@ -160,6 +162,18 @@ export default async function HomePage() {
       marketSupplyFetchFailed = true;
       console.error("unexpected get_market_supply shape", marketSupplyData);
     }
+
+    // 매크로 시세는 보조 정보라 실패해도 패널 상태를 바꾸지 않고 항목만 숨긴다.
+    const { data: marketMacroData, error: marketMacroError } = await supabase.rpc("get_market_macro", {
+      p_run_id: snapshot.complete_snapshot.run_id,
+    });
+    if (marketMacroError) {
+      console.error("get_market_macro failed", marketMacroError);
+    } else if (Array.isArray(marketMacroData) && marketMacroData.every(isMarketMacroRpcRow)) {
+      marketMacroRows = marketMacroData as unknown as MarketMacroRpcRow[];
+    } else {
+      console.error("unexpected get_market_macro shape", marketMacroData);
+    }
   }
 
   // Story 2.8: get_today_candidate_cards와 같은 조건(complete_snapshot 존재 시)으로 호출한다.
@@ -222,7 +236,7 @@ export default async function HomePage() {
       />
 
       <DisappearedCandidatesNotice candidates={disappearedCandidates} />
-      <MarketSupplyPanel rows={marketSupplyRows} fetchFailed={marketSupplyFetchFailed} />
+      <MarketSupplyPanel rows={marketSupplyRows} macroRows={marketMacroRows} fetchFailed={marketSupplyFetchFailed} />
     </section>
   );
 }

@@ -164,6 +164,21 @@ export interface MarketSupplyRpcRow {
   collected_at: string;
 }
 
+/** infra/supabase/migrations/202610060410_create_market_macro.sql get_market_macro 반환 행. */
+export interface MarketMacroRpcRow {
+  symbol: MarketMacroSymbol;
+  price: number;
+  /** 전일대비, 부호 포함. */
+  change: number;
+  /** 등락률(%), 부호 포함. */
+  change_rate: number;
+  /** 시세 기준일. 나스닥 선물은 미국 거래일이다. */
+  quote_date: string | null;
+  collected_at: string;
+}
+
+export type MarketMacroSymbol = "CME@NQ" | "USDKRWSMBS";
+
 /** candidate_supply_hints view 및 get_candidate_supply_hints(p_run_id) 반환 행. */
 export interface CandidateSupplyHintRpcRow {
   candidate_id: string;

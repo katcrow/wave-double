@@ -463,6 +463,47 @@ export type Database = {
           },
         ]
       }
+      market_macro: {
+        Row: {
+          attempt_run_id: string
+          change: number
+          change_rate: number
+          collected_at: string
+          price: number
+          quote_date: string | null
+          symbol: string
+          trading_day: string
+        }
+        Insert: {
+          attempt_run_id: string
+          change: number
+          change_rate: number
+          collected_at?: string
+          price: number
+          quote_date?: string | null
+          symbol: string
+          trading_day: string
+        }
+        Update: {
+          attempt_run_id?: string
+          change?: number
+          change_rate?: number
+          collected_at?: string
+          price?: number
+          quote_date?: string | null
+          symbol?: string
+          trading_day?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_macro_attempt_run_id_fkey"
+            columns: ["attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["run_id"]
+          },
+        ]
+      }
       market_supply: {
         Row: {
           attempt_run_id: string
@@ -1080,6 +1121,7 @@ export type Database = {
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }
+      get_market_macro: { Args: { p_run_id: string }; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
       get_outcome_metric_comparison:
         | { Args: { p_strategy?: string }; Returns: Json }

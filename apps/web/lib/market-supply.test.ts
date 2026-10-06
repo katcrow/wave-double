@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  buildMarketMacroViewModels,
   buildMarketSupplyViewModel,
   formatMarketIndexChangeRate,
   formatMarketIndexPrice,
+  formatMarketMacroQuoteDate,
+  isMarketMacroRpcRow,
   formatMarketSupplyNumber,
   isMarketSupplyRpcRow,
 } from "./market-supply.ts";
-import type { MarketSupplyRpcRow } from "./dashboard-types.ts";
+import type { MarketMacroRpcRow, MarketSupplyRpcRow } from "./dashboard-types.ts";
 
 function row(overrides: Partial<MarketSupplyRpcRow> = {}): MarketSupplyRpcRow {
   return {
@@ -116,4 +119,40 @@ test("금액은 소수점 없이 반올림해 표시하고 -0을 만들지 않�
   assert.equal(formatMarketSupplyNumber(-3215.5), "-3,216");
   assert.equal(formatMarketSupplyNumber(1850.5), "1,851");
   assert.equal(formatMarketSupplyNumber(-0.4), "0");
+});
+
+function macroRow(overrides: Partial<MarketMacroRpcRow> = {}): MarketMacroRpcRow {
+  return {
+    symbol: "CME@NQ",
+    price: 31351.5,
+    change: 33.75,
+    change_rate: 0.11,
+    quote_date: "2026-10-05",
+    collected_at: "2026-10-06T04:00:00.000Z",
+    ...overrides,
+  };
+}
+
+test("매크로 RPC 행은 허용된 심볼과 양수 가격만 통과한다", () => {
+  assert.equal(isMarketMacroRpcRow(macroRow()), true);
+  assert.equal(isMarketMacroRpcRow(macroRow({ quote_date: null })), true);
+  assert.equal(isMarketMacroRpcRow({ ...macroRow(), symbol: "NYM@CL" }), false);
+  assert.equal(isMarketMacroRpcRow(macroRow({ price: 0 })), false);
+  assert.equal(isMarketMacroRpcRow(macroRow({ change_rate: Number.NaN })), false);
+  assert.equal(isMarketMacroRpcRow(macroRow({ quote_date: "20261005" })), false);
+});
+
+test("매크로 뷰모델은 표시 순서를 지키고 없는 심볼은 숨긴다", () => {
+  const rows = [
+    macroRow({ symbol: "USDKRWSMBS", price: 1343.4, change: -1, change_rate: -0.07, quote_date: "2026-10-06" }),
+    macroRow(),
+  ];
+  const models = buildMarketMacroViewModels(rows);
+  assert.deepEqual(models.map((model) => [model.label, model.direction]), [
+    ["나스닥100 선물", "positive"],
+    ["원/달러", "negative"],
+  ]);
+  assert.deepEqual(buildMarketMacroViewModels([macroRow({ change_rate: -0 })]).map((model) => model.changeRate), [0]);
+  assert.deepEqual(buildMarketMacroViewModels([]), []);
+  assert.equal(formatMarketMacroQuoteDate("2026-10-05"), "10/05");
 });

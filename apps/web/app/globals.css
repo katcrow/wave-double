@@ -1956,6 +1956,39 @@ a {
   font-weight: var(--font-weight-label);
 }
 
+.market-supply-panel__macros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-4) 0 0;
+}
+
+.market-supply-panel__macro {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.market-supply-panel__macro dt {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-label);
+}
+
+.market-supply-panel__macro dd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-family-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-supply-panel__macro-date {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+}
+
 .market-supply-panel__markets {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
