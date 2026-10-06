@@ -51,8 +51,9 @@ export interface MarketSupplyViewModel {
   breadth: MarketBreadthViewModel | null;
 }
 
+// 금액(억원)은 소수점 없이 정수로 표시한다. 저장값의 정밀도는 막대 계산에만 쓴다.
 const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", {
-  maximumFractionDigits: 6,
+  maximumFractionDigits: 0,
 });
 
 function isFiniteNumber(value: unknown): value is number {
@@ -190,7 +191,9 @@ export function formatMarketBreadthCount(value: number): string {
 }
 
 export function formatMarketSupplyNumber(value: number): string {
-  return NUMBER_FORMATTER.format(formatZero(value));
+  // 부호와 무관하게 반올림(half away from zero)하고, -0.4 같은 값이 "-0"으로 보이지 않게 한다.
+  const rounded = Math.sign(value) * Math.round(Math.abs(value));
+  return NUMBER_FORMATTER.format(formatZero(rounded));
 }
 
 export function formatMarketSupplyDate(iso: string): string {

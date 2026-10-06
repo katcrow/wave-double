@@ -52,11 +52,11 @@ test("선택 시장의 행이 없거나 중복이면 정상 데이터로 위장�
   assert.equal(buildMarketSupplyViewModel([row(), row()], "KOSPI").available, false);
 });
 
-test("1보다 작은 값도 0으로 뭉개지지 않고 상대 막대가 채워진다", () => {
+test("1억원 미만 값은 0으로 표시되지만 상대 막대는 저장값 기준으로 채워진다", () => {
   const view = buildMarketSupplyViewModel([
     row({ foreign_net: 0.004, institution_net: -0.002, individual_net: 0, program_net: 0.001 }),
   ], "KOSPI");
-  assert.equal(formatMarketSupplyNumber(view.metrics[0].value), "0.004");
+  assert.equal(formatMarketSupplyNumber(view.metrics[0].value), "0");
   assert.equal(view.metrics[0].barWidth, 100);
   assert.equal(view.metrics[1].barWidth, 50);
 });
@@ -109,4 +109,11 @@ test("지수 필드가 없거나 일부만 있으면 해당 영역을 숨긴다"
   ], "KOSPI");
   assert.equal(partial.index, null);
   assert.equal(partial.breadth, null);
+});
+
+test("금액은 소수점 없이 반올림해 표시하고 -0을 만들지 않는다", () => {
+  assert.equal(formatMarketSupplyNumber(-980.1), "-980");
+  assert.equal(formatMarketSupplyNumber(-3215.5), "-3,216");
+  assert.equal(formatMarketSupplyNumber(1850.5), "1,851");
+  assert.equal(formatMarketSupplyNumber(-0.4), "0");
 });
