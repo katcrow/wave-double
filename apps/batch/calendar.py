@@ -8,6 +8,7 @@ from domain.calendar import (
     CalendarDecision,
     CalendarStatus,
     TradingCalendarEntry,
+    decide_from_daily_bar,
     decide_from_weekday,
 )
 
@@ -54,6 +55,36 @@ def resolve_and_cache(
     if decision.entry is not None:
         repository.upsert(decision)
     return decision
+
+
+def confirm_close_session(
+    decision: CalendarDecision,
+    provider: DailyBarProvider,
+    repository: CalendarRepository,
+) -> CalendarDecision:
+    """close 배치 시점에 개장 판정을 실제 일봉으로 재확인한다.
+
+    정적 휴장일 목록에 없는 임시휴장일은 요일 판정으로 개장 처리되지만, close 배치
+    (19:30 이후)에는 개장일이라면 기준 종목 당일 일봉이 반드시 존재한다. 일봉이 없으면
+    휴장으로 캘린더를 정정하고 CLOSED를 반환한다. 이른 시각 조회 오판(2026-09-15)은
+    장 시작 전 호출에서만 생기므로 close 시점에는 해당하지 않는다. 조회 자체가 실패하면
+    판정을 바꾸지 않는다(휴장 오판으로 정상 개장일을 건너뛰지 않기 위함).
+    """
+    if decision.status is not CalendarStatus.OPEN or decision.entry is None:
+        return decision
+    trading_day = decision.entry.trading_day
+    try:
+        has_bar = provider.has_daily_bar(trading_day)
+    except Exception:
+        return decision
+    if has_bar:
+        return decision
+    closed = decide_from_daily_bar(trading_day, False)
+    try:
+        repository.upsert(closed)
+    except Exception:
+        pass
+    return closed
 
 
 def resolver_from_callable(

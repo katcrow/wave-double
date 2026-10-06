@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from domain.calendar import CalendarStatus, floor_to_intraday_slot
 from domain.run_state import BatchKind, LogicalRunKey, Stage, StageStatus, Trigger
 
-from .calendar import CalendarRepository, DailyBarProvider, resolve_for_schedule
+from .calendar import CalendarRepository, DailyBarProvider, confirm_close_session, resolve_for_schedule
 from .bias_repository import BiasRepositoryProtocol
 from .bias_stage import BiasStageResult, run_bias_stage
 from .candidate_stage import CandidateClient, CandidateStageResult, run_candidate_stage
@@ -243,6 +243,8 @@ def run_scheduled_batch(
     key = _resolve_logical_run_key(kind, now_kst, logical_run_key)
 
     decision = resolve_for_schedule(key.trading_day, daily_bar_provider, calendar_repository)
+    if kind is BatchKind.CLOSE:
+        decision = confirm_close_session(decision, daily_bar_provider, calendar_repository)
 
     if decision.status is CalendarStatus.CLOSED:
         started = gateway.start_attempt(key, trigger, lease_seconds=lease_seconds)

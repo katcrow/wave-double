@@ -1561,3 +1561,75 @@ def test_story_5_4_bias_and_its_backfill_are_not_called_on_skipped_paths(monkeyp
         market_supply_repository=FakeMarketSupplyRepository(), bias_repository=object(),
     )
     assert result.bias_status is None
+
+
+def _run_with_provider(kind, now_kst, repo, provider, rpc, candidate_client):
+    deps = tags_deps()
+    return run_scheduled_batch(
+        kind,
+        now_kst,
+        repo,
+        provider,
+        RunStateGateway(rpc),
+        candidate_client,
+        deps["ohlcv_provider"],
+        deps["ohlcv_repository"],
+        deps["candidate_fetcher"],
+        deps["ohlcv_loader"],
+        deps["tags_repository"],
+        deps["tagged_candidate_fetcher"], deps["supply_provider"],
+        deps["program_supply_provider"], deps["supply_repository"],
+    )
+
+
+def test_close_batch_without_daily_bar_is_unannounced_closure_and_corrects_calendar():
+    """요일 판정상 개장이지만 close 시점에 기준 종목 당일 일봉이 없으면 임시휴장으로 보고
+    캘린더를 휴장으로 정정한 뒤 holiday로 skip한다(종가 부재로 publish가 실패하지 않도록)."""
+    day = date(2026, 9, 1)
+    repo = FakeRepository(cached={day: TradingCalendarEntry(day, True, time(8, 30), time(19, 30))})
+    rpc = FakeRpc(attempt=attempt_payload())
+    candidate_client = FakeCandidateClient()
+    provider = FakeProvider(value=False)
+
+    result = _run_with_provider(
+        BatchKind.CLOSE, datetime(2026, 9, 1, 19, 40), repo, provider, rpc, candidate_client,
+    )
+
+    assert result.status == "skipped"
+    assert result.skip_reason == "holiday"
+    assert provider.calls == 1
+    assert candidate_client.calls == []
+    assert repo.get(day) == TradingCalendarEntry(day, False)
+    assert [call[0] for call in rpc.calls] == ["start_attempt", "skip_attempt"]
+
+
+def test_close_batch_daily_bar_lookup_failure_keeps_open_decision():
+    day = date(2026, 9, 1)
+    repo = FakeRepository(cached={day: TradingCalendarEntry(day, True, time(8, 30), time(19, 30))})
+    rpc = FakeRpc(attempt=attempt_payload())
+    candidate_client = FakeCandidateClient(LsResponse(data=[]))
+
+    result = _run_with_provider(
+        BatchKind.CLOSE, datetime(2026, 9, 1, 19, 40), repo, RaisingProvider(), rpc, candidate_client,
+    )
+
+    assert result.status != "skipped"
+    assert candidate_client.calls
+    assert repo.saved == []
+
+
+def test_intraday_batch_does_not_verify_daily_bar():
+    """장중(특히 장 시작 전) 일봉 미반영을 휴장으로 오판하지 않도록 close만 재확인한다."""
+    day = date(2026, 9, 1)
+    repo = FakeRepository(cached={day: TradingCalendarEntry(day, True, time(8, 30), time(19, 30))})
+    rpc = FakeRpc(attempt=attempt_payload("intraday:2026-09-01:08:10"))
+    candidate_client = FakeCandidateClient(LsResponse(data=[]))
+    provider = FakeProvider(value=False)
+
+    result = _run_with_provider(
+        BatchKind.INTRADAY, datetime(2026, 9, 1, 8, 10), repo, provider, rpc, candidate_client,
+    )
+
+    assert result.status != "skipped"
+    assert provider.calls == 0
+    assert candidate_client.calls
