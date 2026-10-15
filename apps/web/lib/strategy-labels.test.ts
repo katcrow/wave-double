@@ -27,6 +27,10 @@ test("전략 L은 정의된 라벨을 반환한다(VWAP 상향 회복)", () => {
   assert.equal(getStrategyLabel("L"), "전략 L · VWAP 상향 회복");
 });
 
+test("전략 M은 정의된 라벨을 반환한다(다바스 박스)", () => {
+  assert.equal(getStrategyLabel("M"), "전략 M · 다바스 박스");
+});
+
 test("정의되지 않은 전략 코드는 undefined를 반환한다", () => {
   assert.equal(getStrategyLabel("Z"), undefined);
 });
