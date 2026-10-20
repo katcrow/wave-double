@@ -13,6 +13,10 @@ G/H는 2026-09-15에 추가됐다(story 없이 직접 적용, docs/양음돌파�
 docs/240이평돌파_120이평우상향필터.md 참고). 원 설계는 분할청산이었으나
 운영 청산 규약(단일 TP%/SL%)에 맞춰 근사한 값이다.
 L은 2026-10-01에 추가됐으며 TP 3%/SL 4%/무기한 보유 규칙이다.
+M(다바스 박스)은 2026-10-06에 추가됐다. TP/SL 대신 박스 하단(entry_floor)과
+ATR(진입봉) 트레일링(trail_atr)로 청산하므로 outcome_strategy_rules의
+tp_pct/sl_pct는 청산 판정에 쓰이지 않는 sentinel 값이다(청산은 candidate_outcome의
+entry_floor/entry_atr/trail_atr 스냅샷으로 판정).
 """
 
 from __future__ import annotations
@@ -31,18 +35,33 @@ SQL_RULES: dict[str, tuple[float, float, int]] = {
     "G": (5.0, 5.0, 20),
     "H": (4.0, 5.0, 999999),
     "L": (3.0, 4.0, 999999),
+    "M": (999999.0, 99.0, 999999),
 }
 
 _SQL_UNBOUNDED_CUTOFF = 999999
+# M처럼 청산을 TP/SL이 아니라 별도 규칙(floor/ATR 트레일)으로 판정하는 전략이
+# outcome_strategy_rules에 기록하는 sentinel 값. candidate_outcome에는 그대로
+# 스냅샷되지만 M의 outcome 판정에는 쓰이지 않는다.
+_SENTINEL_TP_PCT = 999999.0
+_SENTINEL_SL_PCT = 99.0
+
+# 운영 public.outcome_strategy_rules.trail_atr 기대 계약 (strategy -> trail_atr).
+# M의 트레일 멀티플라이어는 이 숫자 하나로 Python 커널과 SQL outcome 판정이 공유한다.
+SQL_TRAIL_ATR: dict[str, float] = {
+    "M": 3.0,
+}
 
 
 def _tp_sl_cutoff(
     params: dict[str, int | float | bool | None],
 ) -> tuple[float, float, int]:
-    tp = float(params["take_profit_pct"])
-    sl = float(params["stop_loss_pct"])
     max_holding = params.get("max_holding_bars")
     cutoff = _SQL_UNBOUNDED_CUTOFF if max_holding is None else int(max_holding)
+    if "take_profit_pct" not in params:
+        # M(다바스)은 take_profit_pct/stop_loss_pct 파라미터가 없다.
+        return _SENTINEL_TP_PCT, _SENTINEL_SL_PCT, cutoff
+    tp = float(params["take_profit_pct"])
+    sl = float(params["stop_loss_pct"])
     return tp, sl, cutoff
 
 
@@ -57,6 +76,13 @@ def test_all_strategies_have_expected_sql_parity() -> None:
         assert _tp == expected[0], f"{strategy} tp 불일치: {_tp} != {expected[0]}"
         assert _sl == expected[1], f"{strategy} sl 불일치: {_sl} != {expected[1]}"
         assert cutoff == expected[2], f"{strategy} cutoff 불일치: {cutoff} != {expected[2]}"
+
+
+def test_trail_atr_matches_sql_rule() -> None:
+    for strategy, expected in SQL_TRAIL_ATR.items():
+        actual = _STRATEGY_PARAMS[strategy].get("trail_atr")
+        assert actual is not None, f"{strategy} trail_atr이 파라미터 메타에 없다"
+        assert float(actual) == expected, f"{strategy} trail_atr 불일치: {actual} != {expected}"
 
 
 def test_d_e_f_params_come_from_their_dataclasses() -> None:

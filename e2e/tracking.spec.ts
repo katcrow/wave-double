@@ -89,7 +89,7 @@ test("tracking 필터는 query string과 결과를 보존한다", async ({ page 
 
 test("tracking은 잘못된 query 필터를 전체 조회로 정규화한다", async ({ page }) => {
   await signIn(page);
-  await page.goto("/tracking?status=UNKNOWN&strategy=G&ticker=%3Cscript%3E");
+  await page.goto("/tracking?status=UNKNOWN&strategy=Z&ticker=%3Cscript%3E");
   await expect(page.getByLabel("상태")).toHaveValue("");
   await expect(page.getByLabel("전략", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Ticker")).toHaveValue("");
@@ -308,7 +308,7 @@ test("tracking 원천 필터는 metric과 bias에 같은 source 범위를 적용
   await page.getByRole("button", { name: "비교 범위 적용" }).click();
 
   await expect(page).toHaveURL(/\/tracking\?status=OPEN&strategy=D&ticker=051910&metric_strategy=B&bias_date=2026-09-08&source=t1852/);
-  await expect(page.getByText("비교 범위: 전략 B · t1852 폴백 원천")).toBeVisible();
+  await expect(page.locator(".metric-comparison__scope")).toHaveText("비교 범위: 전략 B · 쌍바닥+주봉K · t1852 폴백 원천");
   await expect(page.locator(".metric-comparison__source-note")).toHaveText("t1852 폴백 원천 기준의 원천별 결과입니다.");
   await expect(page.locator(".bias-diagnostic__source-note")).toHaveText("t1852 폴백 원천 기준의 원천별 결과입니다.");
   await expect(page.locator(".metric-comparison__counts")).toContainText("종결 32건");

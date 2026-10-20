@@ -50,6 +50,9 @@ test("부분 소멸: 카드가 목록에 남고 소멸된 전략이 함께 표�
   await setScenario(request, "partial-vanish");
   await login(page);
 
+  // 기본 필터는 활성 시그널만 보여주므로, active 태그와 vanished 태그가 섞인 혼합 카드는
+  // "혼합"을 켜야 목록에 나타난다(완전 소멸 시나리오의 "소멸"과 같은 패턴).
+  await page.getByRole("checkbox", { name: "혼합" }).check();
   const card = page.locator(".candidate-card").first();
   await expect(card).toBeVisible();
   await expect(card).toContainText("시그널 혼합");
@@ -144,18 +147,19 @@ test("테마 미수집: 두 카드가 테마 라벨을 유지하고 미확인으
   await expect(page.locator(".top-trading-candidates__metric--themes dd").first()).toHaveText("미확인");
 });
 
-test("전략 G: 정의되지 않은 전략 라우트는 not-found로 떨어진다", async ({ page }) => {
-  // 인증 없이 /strategies/G로 바로 가면 미들웨어가 /login으로 돌려보내므로 not-found에
+test("정의되지 않은 전략 라우트는 not-found로 떨어진다", async ({ page }) => {
+  // G/H/L/M은 실제 라벨이 등록된 전략이라 not-found 대상이 아니다 -- 라벨 맵에 없는 코드를 쓴다.
+  // 인증 없이 /strategies/Z로 바로 가면 미들웨어가 /login으로 돌려보내므로 not-found에
   // 도달하지도 못한다 -- 세션이 있어야 이 회귀를 볼 수 있다.
   await login(page);
 
-  await page.goto("/strategies/G");
+  await page.goto("/strategies/Z");
 
   // 렌더 결과로 판정한다. `notFound()`는 프로덕션 빌드에서 HTTP 404를 내지만 dev 서버는
   // not-found 페이지를 그리면서 상태 코드는 200으로 응답한다 -- 이 스위트는 dev 서버를
   // 대상으로 돌기 때문에 상태 코드로 판정하면 항상 실패한다(실제로 그렇게 실패했다).
   await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "전략 G" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "전략 Z" })).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("설명/성과 준비 중입니다");
 });
 

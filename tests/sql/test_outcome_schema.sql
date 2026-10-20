@@ -49,19 +49,20 @@ begin
   from information_schema.columns
   where table_schema = 'public' and table_name = 'candidate_outcome';
   -- Story 3.8 added version; Story 6.5 appends the immutable exit-rule snapshot.
-  if v_columns <> array['outcome_id','ticker','strategy','entry_date','entry_price','status','exit_date','exit_price','return_pct','cutoff_n','holding_days','version','tp_pct','sl_pct'] then
+  -- Story 2.x adds name; 전략 M(다바스)은 entry_floor/entry_atr/trail_atr 스냅샷을 덧붙인다.
+  if v_columns <> array['outcome_id','ticker','strategy','entry_date','entry_price','status','exit_date','exit_price','return_pct','cutoff_n','holding_days','version','tp_pct','sl_pct','name','entry_floor','entry_atr','trail_atr'] then
     raise exception 'candidate_outcome columns mismatch: %', v_columns;
   end if;
   select array_agg(data_type::text order by ordinal_position)
     into v_column_types
   from information_schema.columns
   where table_schema = 'public' and table_name = 'candidate_outcome';
-  if v_column_types <> array['uuid','text','text','date','numeric','text','date','numeric','numeric','integer','integer','integer','numeric','numeric'] then
+  if v_column_types <> array['uuid','text','text','date','numeric','text','date','numeric','numeric','integer','integer','integer','numeric','numeric','text','numeric','numeric','numeric'] then
     raise exception 'candidate_outcome column types mismatch: %', v_column_types;
   end if;
 
-  if (select count(*) from public.outcome_strategy_rules) <> 6 then
-    raise exception 'outcome_strategy_rules must contain exactly A/B/C/D/E/F';
+  if (select count(*) from public.outcome_strategy_rules) <> 10 then
+    raise exception 'outcome_strategy_rules must contain exactly A/B/C/D/E/F/G/H/L/M';
   end if;
   if exists (
     select 1 from public.outcome_strategy_rules
@@ -69,6 +70,10 @@ begin
        or (strategy = 'D' and (tp_pct, sl_pct, cutoff_n) <> (3.0, 5.0, 20))
        or (strategy = 'E' and (tp_pct, sl_pct, cutoff_n) <> (2.0, 5.0, 30))
        or (strategy = 'F' and (tp_pct, sl_pct, cutoff_n) <> (3.0, 4.0, 999999))
+       or (strategy = 'G' and (tp_pct, sl_pct, cutoff_n) <> (5.0, 5.0, 20))
+       or (strategy = 'H' and (tp_pct, sl_pct, cutoff_n) <> (4.0, 5.0, 999999))
+       or (strategy = 'L' and (tp_pct, sl_pct, cutoff_n) <> (3.0, 4.0, 999999))
+       or (strategy = 'M' and ((tp_pct, sl_pct, cutoff_n) <> (999999, 99, 999999) or trail_atr <> 3.0))
   ) then raise exception 'outcome_strategy_rules values mismatch'; end if;
 
   -- sl_pct의 rule 범위는 candidate_outcome.exit_price가 양수가 되는 범위와 일치해야 한다.
@@ -340,7 +345,7 @@ begin
   v_caught := false;
   begin
     insert into public.outcome_events(ticker, strategy, command_type, logical_run_key)
-    values ('000001', 'G', 'OPEN', 'close:2099-06-01');
+    values ('000001', 'Z', 'OPEN', 'close:2099-06-01');
   exception when check_violation then v_caught := true;
   end;
   if not v_caught then raise exception 'invalid event strategy was accepted'; end if;
@@ -396,7 +401,7 @@ begin
   v_caught := false;
   begin
     insert into public.candidate_outcome(ticker, strategy, entry_date, entry_price, status)
-    values ('000002', 'G', date '2099-06-01', 1, 'OPEN');
+    values ('000002', 'Z', date '2099-06-01', 1, 'OPEN');
   exception when check_violation then v_caught := true;
   end;
   if not v_caught then raise exception 'invalid projection strategy was accepted'; end if;

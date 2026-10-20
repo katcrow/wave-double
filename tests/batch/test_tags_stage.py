@@ -525,6 +525,64 @@ def test_strategy_l_signal_is_persisted_by_tags_stage():
     assert result.tagged_candidates[0].strategies == ["L"]
 
 
+def test_strategy_m_signal_persists_context_in_params_meta():
+    n = 3
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    signals = {key: pd.Series(False, index=idx) for key in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")}
+    signals["M"] = pd.Series([False, False, True], index=idx)
+    result_obj = StrategyResult(
+        ticker="005930",
+        status=OhlcvCacheStatus.READY,
+        signals=signals,
+        error=None,
+        signal_context={"M": {"entry_floor": 10.4, "entry_atr": 0.5, "trail_atr": 3.0, "mode": "combined"}},
+    )
+    frame = _frame(n)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": result_obj})
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    assert result.status == "success"
+    assert {tag.strategy for tag in tags_repo.saved} == {"M"}
+    m_tag = tags_repo.saved[0]
+    assert m_tag.params_meta["strategy_m_context"] == {
+        "entry_floor": 10.4, "entry_atr": 0.5, "trail_atr": 3.0, "mode": "combined",
+    }
+    assert "strategy_m_params" in m_tag.params_meta
+    assert "strategy_l_params" in m_tag.params_meta
+
+
+def test_strategy_m_signal_without_context_is_excluded_from_tags():
+    n = 3
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    signals = {key: pd.Series(False, index=idx) for key in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")}
+    signals["M"] = pd.Series([False, False, True], index=idx)
+    result_obj = StrategyResult(
+        ticker="005930",
+        status=OhlcvCacheStatus.READY,
+        signals=signals,
+        error=None,
+        signal_context={},
+    )
+    frame = _frame(n)
+    fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930")])
+    loader = FakeOhlcvLoader({"005930": frame})
+    strategy = FakeStrategyClient({"005930": result_obj})
+    tags_repo = FakeTagsRepository()
+    rpc = FakeRpc()
+
+    result = _run(rpc, fetcher, loader, tags_repo, strategy)
+
+    # 컨텍스트 없는 M 신호는 태깅·후보 집계 어디에도 남지 않는다(emit TS001 격리 계약).
+    assert result.status == "success"
+    assert tags_repo.saved == []
+    assert result.tagged_candidates == []
+
+
 def test_strategy_f_signal_compute_error_counts_as_error_not_silently_dropped():
     frame = _frame(3)
     fetcher = FakeCandidateFetcher([FakeCandidateRow("c1", "005930"), FakeCandidateRow("c2", "000660")])

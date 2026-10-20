@@ -75,9 +75,9 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(page.locator(".top-trading-candidates__item")).toHaveCount(3);
   await expect(page.locator(".top-trading-candidates__item").nth(1)).toContainText("SK하이닉스");
 
-  await page.getByRole("tab", { name: "KOSDAQ" }).click();
-  await expect(page).toHaveURL(/market=KOSDAQ/);
-  await expect(page.getByRole("tab", { name: "KOSDAQ" })).toHaveAttribute("aria-selected", "true");
+  // 시장 수급 패널은 이제 시장 탭이 아니라 KOSPI/KOSDAQ를 한 화면에 함께 렌더한다.
+  await expect(page.getByRole("heading", { name: "KOSPI", level: 3 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "KOSDAQ", level: 3 })).toBeVisible();
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator(".candidate-evidence-table")).toBeVisible();

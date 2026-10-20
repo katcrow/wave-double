@@ -4,7 +4,24 @@
 -- The database is disposable in CI; production verification uses an equivalent
 -- transaction-scoped SQL assertion through Supabase MCP.
 
+-- The fixture deliberately downgrades the CHECK below and commits. Re-applying the
+-- F-era expansions restores only A..F, which would silently strip every later
+-- strategy (G/H/I/L/M) from the committed constraint for all fixtures that run
+-- after this file in the alphabetical loop. Preserve the migration-achieved
+-- definition up front and restore it after the guard test.
 begin;
+
+create temp table if not exists preserved_strategy_check (def text not null);
+delete from preserved_strategy_check;
+insert into preserved_strategy_check
+select pg_get_constraintdef(c.oid)
+  from pg_constraint c
+  join pg_class r on r.oid = c.conrelid
+  join pg_namespace n on n.oid = r.relnamespace
+ where n.nspname = 'public'
+   and r.relname = 'candidate_tags'
+   and c.conname = 'candidate_tags_strategy_check'
+   and c.contype = 'c';
 
 alter table public.candidate_tags
   drop constraint candidate_tags_strategy_check;
@@ -150,6 +167,20 @@ begin
     and def like '%''C''%' and def like '%''D''%' and def like '%''E''%' and def like '%''F''%') then
     raise exception 'F-migration re-apply guard did not fire cleanly -- constraint no longer covers A|B|C|D|E|F, got: %', def;
   end if;
+end $$;
+
+-- Restore the migration-achieved constraint captured before the N-1 downgrade so
+-- fixtures running after this file see the current strategy set (G/H/I/L/M).
+do $$
+declare
+  preserved text;
+begin
+  select def into preserved from preserved_strategy_check;
+  if preserved is null or preserved = '' then
+    raise exception 'preserved candidate_tags_strategy_check definition is missing';
+  end if;
+  execute 'alter table public.candidate_tags drop constraint candidate_tags_strategy_check, '
+       || 'add constraint candidate_tags_strategy_check ' || preserved;
 end $$;
 
 select jsonb_build_object('status', 'PASS', 'fixture', 'test_candidate_tags_upgrade', 'legacy_rows_preserved', 5,

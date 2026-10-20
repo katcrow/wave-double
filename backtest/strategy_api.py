@@ -12,6 +12,12 @@ from .indicator_opt.strategy_d import (
     STRATEGY_D_PARAMS,
     compute_strategy_d,
 )
+from .indicator_opt.strategy_darvas import (
+    DarvasEntryContext,
+    STRATEGY_M_MODE,
+    STRATEGY_M_PARAMS,
+    compute_strategy_m_with_context,
+)
 from .indicator_opt.strategy_e import (
     STRATEGY_E_PARAMS,
     compute_strategy_e,
@@ -35,7 +41,7 @@ from .indicator_opt.strategy_vwap_recovery import (
 from domain.ohlcv_cache import MIN_HISTORY_TRADING_DAYS, OhlcvCacheStatus
 
 _OHLCV_COLS = ("Open", "High", "Low", "Close", "Volume")
-_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H", "L")
+_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")
 _STRATEGY_PARAMS: dict[str, dict[str, int | float | bool | None]] = {
     "A": {
         "atr_window": 14,
@@ -61,6 +67,7 @@ _STRATEGY_PARAMS: dict[str, dict[str, int | float | bool | None]] = {
     "G": STRATEGY_G_PARAMS.as_dict(),
     "H": STRATEGY_H_PARAMS.as_dict(),
     "L": STRATEGY_L_PARAMS.as_dict(),
+    "M": STRATEGY_M_PARAMS.as_dict(),
 }
 
 # TP/SL SL-우선 규칙: 같은 봉에서 목표가·손절가가 동시에 도달되면
@@ -86,6 +93,7 @@ class StrategyResult:
     signals: dict[str, pd.Series]
     error: StrategyError | None
     params_meta: dict[str, dict[str, int | float]] = field(default_factory=dict)
+    signal_context: dict[str, dict[str, float | str]] = field(default_factory=dict)
 
     @property
     def strategy_params(self) -> dict[str, dict[str, int | float]]:
@@ -221,7 +229,7 @@ def _error_result(
 def compute_abc(
     frame: pd.DataFrame, *, ticker: str = "", exclude_terminal_bar: bool = True
 ) -> StrategyResult:
-    """전략 A-H와 L 시그널을 계산한다.
+    """전략 A-H, L, M 시그널을 계산한다.
 
     ``exclude_terminal_bar``(기본 True)는 각 유효 구간의 마지막 봉 시그널을 버린다
     (백테스트 엔진 원본 규칙 — 그 이후 청산을 시뮬레이션할 봉이 없어서다). 운영
@@ -314,10 +322,31 @@ def compute_abc(
         l_mask.loc[terminal_indices] = False
     signals["L"] = l_mask
 
+    m_mask = pd.Series(False, index=frame.index, dtype=bool)
+    last_m_context: DarvasEntryContext | None = None
+    try:
+        for index, segment in enumerate(segments):
+            seg_mask, seg_context = compute_strategy_m_with_context(segment)
+            _merge_segment_mask(m_mask, segment, seg_mask)
+            if index == len(segments) - 1:
+                last_m_context = seg_context
+    except Exception as exc:
+        return StrategyResult(
+            ticker=ticker,
+            status=OhlcvCacheStatus.ERROR,
+            signals={},
+            error=StrategyError(
+                code=StrategyErrorCode.SIGNAL_COMPUTE_ERROR,
+                strategy="M",
+                message=str(exc),
+            ),
+        )
+    signals["M"] = m_mask
+
     try:
         signals.update(
             _apply_atr_last_bar_filters(
-                signals, frame, segments, ("D", "E", "F", "G", "H"),
+                signals, frame, segments, ("D", "E", "F", "G", "H", "M"),
                 exclude_terminal_bar=exclude_terminal_bar,
             )
         )
@@ -327,10 +356,20 @@ def compute_abc(
     except Exception as exc:
         return _error_result(ticker, None, exc)
 
+    signal_context: dict[str, dict[str, float | str]] = {}
+    if segments and last_m_context is not None and bool(signals["M"].iloc[-1]):
+        signal_context["M"] = {
+            "entry_floor": last_m_context.floor,
+            "entry_atr": last_m_context.atr,
+            "trail_atr": last_m_context.trail_atr,
+            "mode": STRATEGY_M_MODE,
+        }
+
     return StrategyResult(
         ticker=ticker,
         status=OhlcvCacheStatus.READY,
         signals=signals,
         error=None,
         params_meta={key: dict(value) for key, value in _STRATEGY_PARAMS.items()},
+        signal_context=signal_context,
     )

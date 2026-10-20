@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -104,11 +104,14 @@ export type Database = {
       candidate_outcome: {
         Row: {
           cutoff_n: number
+          entry_atr: number | null
           entry_date: string
+          entry_floor: number | null
           entry_price: number
           exit_date: string | null
           exit_price: number | null
           holding_days: number
+          name: string | null
           outcome_id: string
           return_pct: number | null
           sl_pct: number
@@ -116,15 +119,19 @@ export type Database = {
           strategy: string
           ticker: string
           tp_pct: number
+          trail_atr: number | null
           version: number
         }
         Insert: {
           cutoff_n?: number
+          entry_atr?: number | null
           entry_date: string
+          entry_floor?: number | null
           entry_price: number
           exit_date?: string | null
           exit_price?: number | null
           holding_days?: number
+          name?: string | null
           outcome_id?: string
           return_pct?: number | null
           sl_pct?: number
@@ -132,15 +139,19 @@ export type Database = {
           strategy: string
           ticker: string
           tp_pct?: number
+          trail_atr?: number | null
           version?: number
         }
         Update: {
           cutoff_n?: number
+          entry_atr?: number | null
           entry_date?: string
+          entry_floor?: number | null
           entry_price?: number
           exit_date?: string | null
           exit_price?: number | null
           holding_days?: number
+          name?: string | null
           outcome_id?: string
           return_pct?: number | null
           sl_pct?: number
@@ -148,6 +159,7 @@ export type Database = {
           strategy?: string
           ticker?: string
           tp_pct?: number
+          trail_atr?: number | null
           version?: number
         }
         Relationships: []
@@ -243,10 +255,60 @@ export type Database = {
           },
         ]
       }
+      candidate_themes: {
+        Row: {
+          attempt_run_id: string
+          average_change_pct: number
+          candidate_id: string
+          collected_at: string
+          theme_code: string
+          theme_name: string
+        }
+        Insert: {
+          attempt_run_id: string
+          average_change_pct: number
+          candidate_id: string
+          collected_at?: string
+          theme_code: string
+          theme_name: string
+        }
+        Update: {
+          attempt_run_id?: string
+          average_change_pct?: number
+          candidate_id?: string
+          collected_at?: string
+          theme_code?: string
+          theme_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_themes_attempt_run_id_fkey"
+            columns: ["attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["run_id"]
+          },
+          {
+            foreignKeyName: "candidate_themes_candidate_id_attempt_run_id_fkey"
+            columns: ["candidate_id", "attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "candidate_supply_hints"
+            referencedColumns: ["candidate_id", "attempt_run_id"]
+          },
+          {
+            foreignKeyName: "candidate_themes_candidate_id_attempt_run_id_fkey"
+            columns: ["candidate_id", "attempt_run_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["candidate_id", "attempt_run_id"]
+          },
+        ]
+      }
       candidates: {
         Row: {
           attempt_run_id: string
           candidate_id: string
+          major_sector_name: string | null
           name: string | null
           ticker: string
           trading_day: string
@@ -256,6 +318,7 @@ export type Database = {
         Insert: {
           attempt_run_id: string
           candidate_id?: string
+          major_sector_name?: string | null
           name?: string | null
           ticker: string
           trading_day: string
@@ -265,6 +328,7 @@ export type Database = {
         Update: {
           attempt_run_id?: string
           candidate_id?: string
+          major_sector_name?: string | null
           name?: string | null
           ticker?: string
           trading_day?: string
@@ -506,9 +570,9 @@ export type Database = {
       }
       market_supply: {
         Row: {
+          advancing_count: number | null
           attempt_run_id: string
           collected_at: string
-          advancing_count: number | null
           declining_count: number | null
           foreign_net: number
           index_change_rate: number | null
@@ -562,6 +626,7 @@ export type Database = {
       }
       outcome_events: {
         Row: {
+          append_seq: number
           command_type: string
           created_at: string
           event_id: string
@@ -571,6 +636,7 @@ export type Database = {
           ticker: string
         }
         Insert: {
+          append_seq?: never
           command_type: string
           created_at?: string
           event_id?: string
@@ -580,6 +646,7 @@ export type Database = {
           ticker: string
         }
         Update: {
+          append_seq?: never
           command_type?: string
           created_at?: string
           event_id?: string
@@ -677,6 +744,7 @@ export type Database = {
           sl_pct: number
           strategy: string
           tp_pct: number
+          trail_atr: number | null
         }
         Insert: {
           created_at?: string
@@ -684,6 +752,7 @@ export type Database = {
           sl_pct: number
           strategy: string
           tp_pct: number
+          trail_atr?: number | null
         }
         Update: {
           created_at?: string
@@ -691,6 +760,7 @@ export type Database = {
           sl_pct?: number
           strategy?: string
           tp_pct?: number
+          trail_atr?: number | null
         }
         Relationships: []
       }
@@ -1111,6 +1181,7 @@ export type Database = {
         }
         Returns: Json
       }
+      enqueue_scheduled_dispatch: { Args: never; Returns: Json }
       get_bias_diagnostic:
         | { Args: { p_trading_day: string }; Returns: Json }
         | { Args: { p_source: string; p_trading_day: string }; Returns: Json }
@@ -1136,12 +1207,12 @@ export type Database = {
         Returns: Json
       }
       get_today_candidate_cards: { Args: { p_run_id: string }; Returns: Json }
-      get_top_tagged_candidates: {
-        Args: { p_exclude_tickers?: string[]; p_run_id: string }
-        Returns: Json
-      }
       get_today_disappeared_candidates: {
         Args: { p_run_id: string }
+        Returns: Json
+      }
+      get_top_tagged_candidates: {
+        Args: { p_exclude_tickers?: string[]; p_run_id: string }
         Returns: Json
       }
       heartbeat_attempt: {
@@ -1181,6 +1252,10 @@ export type Database = {
           p_outcome_id: string
           p_ticker: string
         }
+        Returns: Json
+      }
+      reject_scheduled_dispatch: {
+        Args: { p_dispatch_request_id: string; p_reason: string }
         Returns: Json
       }
       request_manual_dispatch: {
@@ -1225,6 +1300,10 @@ export type Database = {
         Returns: Json
       }
       sync_vanished_tags: { Args: { p_run_id: string }; Returns: Json }
+      track_outcome_day: {
+        Args: { p_day: string; p_logical_run_key: string; p_outcome_id: string }
+        Returns: Json
+      }
       write_candidates: {
         Args: {
           p_candidates: Json

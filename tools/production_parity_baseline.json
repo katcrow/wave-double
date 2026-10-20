@@ -1,6 +1,6 @@
 {
   "project_ref": "qqhjeumlecaudsiqhhdu",
-  "captured_at": "2026-09-14",
+  "captured_at": "2026-10-20",
   "migrations": [
     "202609021500_create_daily_ohlcv",
     "202609021600_create_candidate_tags",
@@ -72,14 +72,42 @@
     "202609141600_harden_outcome_conflict_guard_entry_date",
     "202609141700_switch_intraday_slots_to_20_minutes",
     "202609141800_add_purge_old_attempt_data",
+    "202609161200_relabel_market_supply_columns_to_amount",
+    "202609211100_fix_dashboard_snapshot_trading_day_order",
+    "202609211200_switch_intraday_start_to_08_10",
+    "202609301000_create_get_top_tagged_candidates",
+    "202609301100_include_all_candidates_in_top_trading",
+    "202610011700_expand_strategy_l",
+    "202610021000_enforce_batch_operating_window",
+    "202610021100_sort_candidate_cards_by_strategy_count",
+    "202610021600_supersede_off_hours_scheduled_closes",
+    "202610021610_tighten_batch_start_deadlines",
+    "202610021700_top_trading_exclude_tickers",
+    "202610061600_strategy_m_review_patches",
+    "add_auto_schedule_dispatch_cron",
+    "add_market_index_to_market_supply",
     "add_outcome_correction_mechanism",
     "add_skip_attempt_rpc",
+    "add_strategy_i_stage_to_write_stage",
+    "add_trading_value_to_candidate_cards",
+    "catch_up_outcome_tracking_days",
+    "connect_strategy_m",
+    "create_market_macro",
     "create_outcome_win_rate_pf",
     "create_outcome_win_rate_pf_by_strategy_source",
     "create_rebuild_outcome_projection",
     "epic1_fix_add_run_lineage_and_dashboard_snapshot",
     "epic4-091300-strict-adjusted-evidence-rate",
-    "fix_outcome_correction_review_patch"
+    "exclude_strategy_i_from_publish_outcome",
+    "expand_candidate_tags_strategy_i",
+    "expand_strategy_gh",
+    "expand_top_trading_candidate_details",
+    "fix_outcome_correction_review_patch",
+    "fix_stale_active_attempt_manual_conflict",
+    "schedule_dispatch_worker_cron",
+    "schedule_purge_old_attempt_data_cron",
+    "skip_open_without_close",
+    "switch_intraday_slots_to_60_minutes"
   ],
   "functions": {
     "advance_dispatch_outbox": {
@@ -145,6 +173,24 @@
         "service_role": true
       }
     },
+    "enforce_scheduled_batch_operating_window": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "enqueue_scheduled_dispatch": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
     "get_bias_diagnostic": {
       "security_definer": true,
       "search_path": "pg_catalog, public",
@@ -190,6 +236,15 @@
         "service_role": true
       }
     },
+    "get_market_macro": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
     "get_market_supply": {
       "security_definer": true,
       "search_path": "pg_catalog, public",
@@ -229,6 +284,15 @@
     "get_today_disappeared_candidates": {
       "security_definer": true,
       "search_path": "public",
+      "grants": {
+        "anon": true,
+        "authenticated": true,
+        "service_role": true
+      }
+    },
+    "get_top_tagged_candidates": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
       "grants": {
         "anon": true,
         "authenticated": true,
@@ -379,6 +443,15 @@
         "service_role": true
       }
     },
+    "reject_scheduled_dispatch": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
     "request_manual_dispatch": {
       "security_definer": true,
       "search_path": "public",
@@ -424,6 +497,24 @@
         "service_role": true
       }
     },
+    "snapshot_candidate_outcome_name": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "snapshot_outcome_open_name": {
+      "security_definer": true,
+      "search_path": "pg_catalog, public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
     "start_attempt": {
       "security_definer": true,
       "search_path": "public",
@@ -434,6 +525,15 @@
       }
     },
     "sync_vanished_tags": {
+      "security_definer": true,
+      "search_path": "public",
+      "grants": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true
+      }
+    },
+    "track_outcome_day": {
       "security_definer": true,
       "search_path": "public",
       "grants": {

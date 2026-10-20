@@ -94,6 +94,24 @@ class DarvasParams:
 
 DARVAS_PARAMS = DarvasParams()
 
+# 전략 M(다바스 박스) 채택후보 파라미터 — docs/후보종목-태깅-조건.md.
+# combined(상단돌파 ∪ 하단반등) · min_box_width=0.20(좁은 박스 제외) · 박스 하단 손절 +
+# ATR(진입봉) 트레일링 스톱(trail_atr=3.0) · 최대보유 없음. ATR 익절/손절은 미사용.
+STRATEGY_M_PARAMS = DarvasParams(
+    confirm_days=10,
+    high_lookback=60,
+    atr_window=14,
+    min_box_width=0.20,
+    exit_floor=True,
+    exit_atr_tp=False,
+    exit_atr_sl=False,
+    trail_atr=3.0,
+    max_holding_bars=None,
+    cost_rate=0.0005,
+    tp_first=False,
+)
+STRATEGY_M_MODE = COMBINED
+
 
 def _validate_finite_real(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
@@ -370,20 +388,16 @@ def darvas_signals(
 ) -> list[SimpleSignal]:
     """모드별 매수 마스크를 종가 진입 신호로 변환한다.
 
-    stop_price/take_profit을 지정하지 않으므로 ``engine.run_backtest``가 ATR
-    기반 TP/SL(entry ± tp_atr/sl_atr * ATR)로 청산을 계산한다.
+    ``min_box_width`` 필터는 ``_m_mask`` 경로로 적용된다. stop_price/take_profit을
+    지정하지 않으므로 ``engine.run_backtest`` 경로와 비교할 때 ATR TP/SL 청산을
+    계산한다. 채택 전략 M(``STRATEGY_M_PARAMS``: ``exit_floor`` + ``trail_atr``)
+    처럼 박스 하단·트레일링 기반 청산은 ``_collect_trades``/``_simulate_segment``로
+    실행한다 — ``darvas_signals``만으로는 M 청산을 재현할 수 없다.
     """
 
     mode = _validate_mode(mode)
     brk, reb, floor, ceiling = darvas_masks_full(frame, params)
-    if mode == BREAKOUT:
-        mask = brk
-    elif mode == REBOUND:
-        mask = reb
-    else:
-        mask = brk | reb
-    floor_arr = floor.to_numpy()
-    ceil_arr = ceiling.to_numpy()
+    mask = _m_mask(brk, reb, floor, ceiling, params, mode)
     close_arr = frame["Close"].to_numpy(dtype=float)
     return [
         SimpleSignal(
@@ -392,7 +406,6 @@ def darvas_signals(
             price=float(close_arr[position]),
         )
         for position in np.flatnonzero(mask.to_numpy())
-        if _box_width_ok(ceil_arr[position], floor_arr[position], params.min_box_width)
     ]
 
 
@@ -416,14 +429,117 @@ def _in_bounds(
     return (start is None or value >= start) and (end is None or value <= end)
 
 
-def _box_width_ok(ceiling: float, floor: float, min_box_width: float) -> bool:
-    """(천장-바닥)/바닥이 min_box_width 이상인지. 0이면 항상 True."""
+@dataclass(frozen=True)
+class DarvasEntryContext:
+    """진입 신호 봉의 청산 컨텍스트(정적 박스 하단 + 진입봉 ATR)."""
 
-    if min_box_width <= 0.0:
-        return True
-    if not (np.isfinite(ceiling) and np.isfinite(floor)) or floor <= 0.0:
-        return False
-    return (ceiling - floor) / floor >= min_box_width
+    floor: float
+    ceiling: float
+    atr: float
+    trail_atr: float
+
+
+def _m_mask(
+    brk: pd.Series,
+    reb: pd.Series,
+    floor: pd.Series,
+    ceiling: pd.Series,
+    params: DarvasParams,
+    mode: str,
+) -> pd.Series:
+    """모드별 진입 마스크에 ``min_box_width`` 필터를 적용한다."""
+
+    if mode == BREAKOUT:
+        mask = brk
+    elif mode == REBOUND:
+        mask = reb
+    else:
+        mask = brk | reb
+    floor_arr = floor.to_numpy(dtype=float)
+    ceil_arr = ceiling.to_numpy(dtype=float)
+    if params.min_box_width <= 0.0:
+        width_ok = np.ones(len(mask), dtype=bool)
+    else:
+        valid = np.isfinite(ceil_arr) & np.isfinite(floor_arr) & (floor_arr > 0.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            width = (ceil_arr - floor_arr) / floor_arr
+        width_ok = valid & (width >= params.min_box_width)
+    return pd.Series(
+        mask.to_numpy(dtype=bool) & width_ok, index=mask.index, dtype=bool
+    )
+
+
+def compute_strategy_m(
+    frame: pd.DataFrame,
+    params: DarvasParams = STRATEGY_M_PARAMS,
+    mode: str = STRATEGY_M_MODE,
+) -> pd.Series:
+    """다바스 박스(전략 M) 진입 마스크 — ``min_box_width`` 필터를 포함한다."""
+
+    mode = _validate_mode(mode)
+    brk, reb, floor, ceiling = darvas_masks_full(frame, params)
+    return _m_mask(brk, reb, floor, ceiling, params, mode)
+
+
+def _entry_context_from(
+    frame: pd.DataFrame,
+    params: DarvasParams,
+    floor_s: pd.Series,
+    ceil_s: pd.Series,
+    mask: pd.Series,
+) -> DarvasEntryContext | None:
+    last = len(frame) - 1
+    if last < 0:
+        return None
+    if not bool(mask.iloc[last]):
+        return None
+    floor = float(floor_s.iloc[last])
+    ceiling = float(ceil_s.iloc[last])
+    atr_series = atr(
+        frame["High"], frame["Low"], frame["Close"], window=params.atr_window
+    )
+    atr_value = float(atr_series.iloc[last])
+    if not (np.isfinite(floor) and floor > 0.0):
+        return None
+    if not (np.isfinite(atr_value) and atr_value > 0.0):
+        return None
+    trail_atr = params.trail_atr
+    if trail_atr is None or not np.isfinite(float(trail_atr)):
+        return None
+    return DarvasEntryContext(
+        floor=floor, ceiling=ceiling, atr=atr_value, trail_atr=float(trail_atr)
+    )
+
+
+def compute_strategy_m_with_context(
+    frame: pd.DataFrame,
+    params: DarvasParams = STRATEGY_M_PARAMS,
+    mode: str = STRATEGY_M_MODE,
+) -> tuple[pd.Series, DarvasEntryContext | None]:
+    """진입 마스크와 마지막 봉 청산 컨텍스트를 ``darvas_masks_full`` 한 번만 계산해 함께 반환한다."""
+
+    mode = _validate_mode(mode)
+    brk, reb, floor_s, ceil_s = darvas_masks_full(frame, params)
+    mask = _m_mask(brk, reb, floor_s, ceil_s, params, mode)
+    return mask, _entry_context_from(frame, params, floor_s, ceil_s, mask)
+
+
+def darvas_entry_context(
+    frame: pd.DataFrame,
+    params: DarvasParams = STRATEGY_M_PARAMS,
+    mode: str = STRATEGY_M_MODE,
+) -> DarvasEntryContext | None:
+    """마지막 봉이 진입 신호면 청산 컨텍스트를, 아니면 None을 반환한다.
+
+    ``floor``는 진입봉의 유효 박스 하단(정적 손절선), ``atr``은 진입봉 ATR
+    (트레일링 기준)이다. 신호인데 floor/ATR이 유한하지 않으면 None(태깅 제외)을
+    반환한다.
+    """
+
+    mode = _validate_mode(mode)
+    brk, reb, floor_s, ceil_s = darvas_masks_full(frame, params)
+    mask = _m_mask(brk, reb, floor_s, ceil_s, params, mode)
+    return _entry_context_from(frame, params, floor_s, ceil_s, mask)
 
 
 def _simulate_segment(
@@ -545,19 +661,13 @@ def _collect_trades(
         valid_rows = _valid_ohlcv_rows(frame)
         for segment in _valid_segments(frame, valid_rows):
             brk, reb, floor, ceiling = darvas_masks_full(segment, params)
-            if mode == BREAKOUT:
-                mask = brk
-            elif mode == REBOUND:
-                mask = reb
-            else:
-                mask = brk | reb
+            mask = _m_mask(brk, reb, floor, ceiling, params, mode)
             floor_arr = floor.to_numpy()
             ceil_arr = ceiling.to_numpy()
             observed = [
                 (p, float(floor_arr[p]))
                 for p in np.flatnonzero(mask.to_numpy())
                 if _in_bounds(segment.index[p], start_ts, end_ts)
-                and _box_width_ok(ceil_arr[p], floor_arr[p], params.min_box_width)
             ]
             signal_count += len(observed)
             signals = [
@@ -622,8 +732,16 @@ def run_darvas_grid(
     start: pd.Timestamp | str | None = BASELINE_START,
     end: pd.Timestamp | str | None = BASELINE_END,
     min_trades: int = 20,
+    exit_atr_tp: bool | None = None,
+    exit_atr_sl: bool | None = None,
+    exit_floor: bool | None = None,
+    trail_atr: float | None = None,
 ) -> pd.DataFrame:
-    """confirm_days를 변주하며 모드별(개별+결합) 성과를 집계한다."""
+    """confirm_days를 변주하며 모드별(개별+결합) 성과를 집계한다.
+
+    exit_* 인자는 채택 M 설정(exit_floor+trail_atr 등)을 그리드에서도 재현할 수
+    있게 한다. None이면 ``DARVAS_PARAMS`` 기본값을 쓴다.
+    """
 
     for mode in modes:
         _validate_mode(mode)
@@ -633,11 +751,22 @@ def run_darvas_grid(
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
         raise ValueError("start는 end보다 늦을 수 없습니다")
 
+    exit_overrides = {
+        key: value
+        for key, value in {
+            "exit_atr_tp": exit_atr_tp,
+            "exit_atr_sl": exit_atr_sl,
+            "exit_floor": exit_floor,
+            "trail_atr": trail_atr,
+        }.items()
+        if value is not None
+    }
+
     rows: list[dict[str, object]] = []
     for cd in confirm_days:
         base = replace(
             DARVAS_PARAMS, confirm_days=cd, high_lookback=high_lookback,
-            min_box_width=min_box_width,
+            min_box_width=min_box_width, **exit_overrides,
         )
         _validate_params(base)
         for mode in modes:
@@ -698,6 +827,22 @@ def main() -> None:
         help="(천장-바닥)/바닥 최소 박스 폭 (기본 0=필터 없음)",
     )
     parser.add_argument("--min-trades", type=int, default=20)
+    parser.add_argument(
+        "--exit-atr-tp", action=argparse.BooleanOptionalAction, default=None,
+        help="ATR 익절 사용 여부 (미지정=기본값 유지)",
+    )
+    parser.add_argument(
+        "--exit-atr-sl", action=argparse.BooleanOptionalAction, default=None,
+        help="ATR 손절 사용 여부 (미지정=기본값 유지)",
+    )
+    parser.add_argument(
+        "--exit-floor", action=argparse.BooleanOptionalAction, default=None,
+        help="박스 하단 손절 사용 여부 (미지정=기본값 유지)",
+    )
+    parser.add_argument(
+        "--trail-atr", type=float, default=None,
+        help="트레일링 스탑 ATR 배수 (미지정=기본값 유지)",
+    )
     parser.add_argument("--start", default=BASELINE_START.date().isoformat())
     parser.add_argument("--end", default=BASELINE_END.date().isoformat())
     parser.add_argument(
@@ -713,6 +858,10 @@ def main() -> None:
         start=args.start,
         end=args.end,
         min_trades=args.min_trades,
+        exit_atr_tp=args.exit_atr_tp,
+        exit_atr_sl=args.exit_atr_sl,
+        exit_floor=args.exit_floor,
+        trail_atr=args.trail_atr,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     grid.to_csv(args.output, index=False)

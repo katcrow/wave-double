@@ -1,11 +1,11 @@
 """Story 2.5/6.6/7.5: 후보 태깅 stage 오케스트레이터.
 
 candidates stage(screen)가 성공/부분성공한 뒤, 후보 모집단 한정으로 전략
- A/B/C/D/E/F/G/H/L 시그널을 계산하고 ``candidate_tags``에 저장한다. F는 각도가속·
+ A/B/C/D/E/F/G/H/L/M 시그널을 계산하고 ``candidate_tags``에 저장한다. F는 각도가속·
 이평선 쌍바닥(slope-acceleration + moving-average double-bottom) 기법이다.
 G는 양음돌파패턴(거래량돌파양봉+음봉풀백+고가돌파), H는 240이평돌파+120이평
 우상향필터다(2026-09-15 추가, docs/양음돌파패턴.md·docs/240이평돌파_120이평우상향필터.md). L은
-VWAP 상향 회복 전략이다.
+VWAP 상향 회복 전략이다. M은 다바스 박스다(docs/후보종목-태깅-조건.md).
 
 ``ineligible``(이력 부족)과 ``error``(로딩 실패/``SIGNAL_COMPUTE_ERROR``)를 명확히
 구분해 집계한다 -- 전자는 정상적으로 태깅 대상에서 제외된 것이고, 후자만 stage
@@ -34,7 +34,7 @@ from .heartbeat import HeartbeatPolicy
 from .ohlcv_cache_loader import OhlcvDbClient
 from .run_state import RunStateGateway
 
-_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H", "L")
+_STRATEGY_KEYS = ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")
 
 
 class TagsClient(Protocol):
@@ -170,6 +170,10 @@ def run_tags_stage(
             key
             for key in _STRATEGY_KEYS
             if (series := result.signals.get(key)) is not None and len(series) >= 1 and bool(series.iloc[-1])
+            # 전략 M은 진입 컨텍스트(strategy_m_context)가 없으면 emit_open_command가
+            # TS001로 거부하므로, 컨텍스트 없는 M 신호는 태깅에서 제외한다
+            # (darvas_entry_context의 "None(태깅 제외)" 계약).
+            and (key != "M" or "M" in result.signal_context)
         ]
         if not strategies:
             continue
@@ -177,13 +181,19 @@ def run_tags_stage(
         signal_date = _extract_signal_date(load_result)
         tagged_candidates.append(TaggedCandidate(cand.ticker, cand.candidate_id, strategies, signal_date))
         for strategy_key in strategies:
+            tag_params = params_meta
+            if strategy_key == "M":
+                tag_params = {
+                    **params_meta,
+                    "strategy_m_context": result.signal_context["M"],
+                }
             all_tags.append(
                 CandidateTag(
                     candidate_id=cand.candidate_id,
                     strategy=strategy_key,
                     signal_date=signal_date or trading_day,
                     attempt_run_id=run_id_str,
-                    params_meta=params_meta,
+                    params_meta=tag_params,
                 )
             )
 
@@ -329,6 +339,7 @@ def _build_params_meta(batch_kind: str) -> dict[str, Any]:
     from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
     from backtest.indicator_opt.strategy_g import STRATEGY_G_PARAMS
     from backtest.indicator_opt.strategy_h import STRATEGY_H_PARAMS
+    from backtest.indicator_opt.strategy_darvas import STRATEGY_M_PARAMS
     from backtest.indicator_opt.strategy_vwap_recovery import STRATEGY_L_PARAMS
     from backtest.indicator_opt.union import TOP3, VOLUME
 
@@ -351,6 +362,7 @@ def _build_params_meta(batch_kind: str) -> dict[str, Any]:
         "strategy_g_params": STRATEGY_G_PARAMS.as_dict(),
         "strategy_h_params": STRATEGY_H_PARAMS.as_dict(),
         "strategy_l_params": STRATEGY_L_PARAMS.as_dict(),
+        "strategy_m_params": STRATEGY_M_PARAMS.as_dict(),
         "min_history_days": MIN_HISTORY_TRADING_DAYS,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

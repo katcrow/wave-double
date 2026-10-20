@@ -8,13 +8,17 @@ import pandas as pd
 import pytest
 
 from backtest.engine import TradeParams, run_backtest
+from backtest.indicators import atr
 from backtest.indicator_opt.strategy_darvas import (
     BREAKOUT,
     COMBINED,
     DARVAS_PARAMS,
     REBOUND,
+    STRATEGY_M_PARAMS,
     DarvasParams,
     _collect_trades,
+    compute_strategy_m,
+    darvas_entry_context,
     darvas_masks,
     darvas_masks_full,
     darvas_signals,
@@ -292,3 +296,81 @@ def test_trailing_stop_exits_after_ratchet() -> None:
     assert trades[0].exit_reason == "trail"
     assert trades[0].entry_date == frame.index[8]
     assert trades[0].exit_date == frame.index[10]
+
+
+def test_adopted_exit_combo_floor_and_trail_simultaneous_hit() -> None:
+    # 채택 M 설정의 청산 형태(floor + trail 동시 활성) 회귀:
+    # 같은 봉에서 박스 하단과 트레일 라인이 동시에 터치되면 더 높은 선(greatest)으로 청산된다.
+    frame = _frame(
+        _BASE_H + [12.5, 14.0, 10.8],
+        _BASE_L + [11.5, 12.2, 10.0],
+        _BASE_C + [12.4, 13.5, 10.1],
+    )
+    start, end = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-12-31")
+    atr_entry = float(
+        atr(frame["High"], frame["Low"], frame["Close"], window=3).iloc[8]
+    )
+
+    # 트레일 라인(14 - 1.0*ATR ≈ 13.26)이 하단(10.4)보다 높게 형성된 동시에 터치 → trail 청산.
+    high_trail = _test_params(
+        exit_atr_tp=False, exit_atr_sl=False, exit_floor=True, trail_atr=1.0,
+    )
+    trades, _ = _collect_trades({"T": frame}, high_trail, BREAKOUT, start, end)
+    assert len(trades) == 1
+    assert trades[0].exit_reason == "trail"
+    assert trades[0].exit_price == pytest.approx(14.0 - 1.0 * atr_entry)
+
+    # 트레일 라인(14 - 5.0*ATR ≈ 10.32)이 하단(10.4)보다 낮게 형성된 동시에 터치 → floor 청산.
+    low_trail = _test_params(
+        exit_atr_tp=False, exit_atr_sl=False, exit_floor=True, trail_atr=5.0,
+    )
+    trades, _ = _collect_trades({"T": frame}, low_trail, BREAKOUT, start, end)
+    assert len(trades) == 1
+    assert trades[0].exit_reason == "floor"
+    assert trades[0].exit_price == pytest.approx(10.4)
+
+
+def test_strategy_m_params_are_valid_and_documented() -> None:
+    validate_darvas_params(STRATEGY_M_PARAMS)
+    assert STRATEGY_M_PARAMS.confirm_days == 10
+    assert STRATEGY_M_PARAMS.high_lookback == 60
+    assert STRATEGY_M_PARAMS.atr_window == 14
+    assert STRATEGY_M_PARAMS.min_box_width == 0.20
+    assert STRATEGY_M_PARAMS.trail_atr == 3.0
+    assert STRATEGY_M_PARAMS.max_holding_bars is None
+    assert STRATEGY_M_PARAMS.exit_floor is True
+    assert STRATEGY_M_PARAMS.exit_atr_tp is False
+    assert STRATEGY_M_PARAMS.exit_atr_sl is False
+
+
+def test_compute_strategy_m_carries_box_width_filter() -> None:
+    # _breakout_frame: 천장 12, 바닥 10.4 → 폭 ≈ 0.1538 (박스 돌파는 idx8).
+    frame = _breakout_frame()
+    kept = compute_strategy_m(frame, params=_test_params(min_box_width=0.10), mode=BREAKOUT)
+    dropped = compute_strategy_m(frame, params=_test_params(min_box_width=0.20), mode=BREAKOUT)
+
+    assert list(np.flatnonzero(kept.to_numpy())) == [8]
+    assert not dropped.any()
+
+
+def test_darvas_entry_context_reads_last_bar_signal() -> None:
+    # 마지막 봉(idx8)이 박스 상단 돌파 → 진입 컨텍스트가 그 봉의 floor/ATR을 담는다.
+    frame = _frame(_BASE_H + [12.5], _BASE_L + [11.5], _BASE_C + [12.4])
+    params = _test_params(min_box_width=0.10, trail_atr=3.0)
+
+    context = darvas_entry_context(frame, params=params, mode=BREAKOUT)
+
+    assert context is not None
+    assert context.floor == pytest.approx(10.4)
+    assert context.ceiling == pytest.approx(12.0)
+    assert context.atr > 0.0
+    assert context.trail_atr == pytest.approx(3.0)
+
+
+def test_darvas_entry_context_none_when_last_bar_not_signal() -> None:
+    # 마지막 봉이 돌파도 반등도 아니면 None.
+    frame = _frame(_BASE_H + [11.5], _BASE_L + [10.8], _BASE_C + [11.0])
+    params = _test_params(min_box_width=0.10, trail_atr=3.0)
+
+    assert darvas_entry_context(frame, params=params, mode=BREAKOUT) is None
+

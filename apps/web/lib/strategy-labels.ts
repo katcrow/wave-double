@@ -5,7 +5,7 @@
  * `docs/240이평돌파_120이평우상향필터.md`(H)의 확정 전략 정의를 따르며,
  * I(음봉수급쌍끌이)는 백테스트 불가(국면 데이터 t1702 미보유)로 운영 수동 확인 전용이다.
  * `outcome_strategy_rules`의 TP%/SL%/최대보유일 조합으로 대응 문서를 식별했다.
- * M(다바스 박스)은 `docs/후보종목-태깅-조건.md` 기준 채택후보(백테스트 검증 완료, 운영 태깅 배선 미완).
+ * M(다바스 박스)은 `docs/후보종목-태깅-조건.md` 기준 운영 태깅·outcome까지 배선됐다.
  */
 export const STRATEGY_LABEL: Record<string, string> = {
   A: "전략 A · OBV 합집합",

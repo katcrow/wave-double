@@ -100,11 +100,11 @@ begin
   end;
   if not caught then raise exception 'duplicate F tag was accepted'; end if;
 
-  -- strategy는 A|B|C|D|E|F만 허용.
+  -- strategy는 A|B|C|D|E|F|G|H|I|L|M만 허용.
   caught := false;
   begin
     insert into public.candidate_tags(candidate_id, attempt_run_id, strategy, signal_date)
-      values (candidate_id, run_id, 'G', date '2099-04-01');
+      values (candidate_id, run_id, 'Z', date '2099-04-01');
   exception when check_violation then caught := true;
   end;
   if not caught then raise exception 'invalid strategy value was accepted'; end if;

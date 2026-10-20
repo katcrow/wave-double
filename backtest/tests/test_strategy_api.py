@@ -17,6 +17,7 @@ from backtest.indicator_opt.strategy_e import STRATEGY_E_PARAMS
 from backtest.indicator_opt.strategy_f import STRATEGY_F_PARAMS
 from backtest.indicator_opt.strategy_g import STRATEGY_G_PARAMS
 from backtest.indicator_opt.strategy_h import STRATEGY_H_PARAMS
+from backtest.indicator_opt.strategy_darvas import STRATEGY_M_PARAMS
 from backtest.indicator_opt.strategy_vwap_recovery import STRATEGY_L_PARAMS
 
 
@@ -249,8 +250,8 @@ class TestNormalCompute:
         assert result.ticker == "T"
         assert result.status == "READY"
         assert result.error is None
-        assert set(result.signals) == {"A", "B", "C", "D", "E", "F", "G", "H", "L"}
-        for key in ("A", "B", "C", "D", "E", "F", "G", "H", "L"):
+        assert set(result.signals) == {"A", "B", "C", "D", "E", "F", "G", "H", "L", "M"}
+        for key in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M"):
             assert result.signals[key].index.equals(df.index)
             assert result.signals[key].dtype == bool
             assert len(result.signals[key]) == 200
@@ -263,7 +264,8 @@ class TestNormalCompute:
         assert result.params_meta["G"] == STRATEGY_G_PARAMS.as_dict()
         assert result.params_meta["H"] == STRATEGY_H_PARAMS.as_dict()
         assert result.params_meta["L"] == STRATEGY_L_PARAMS.as_dict()
-        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F", "G", "H", "L"}
+        assert result.params_meta["M"] == STRATEGY_M_PARAMS.as_dict()
+        assert set(result.params_meta) == {"A", "B", "C", "D", "E", "F", "G", "H", "L", "M"}
         for key in ("A", "B", "C"):
             assert result.params_meta[key] == {
                 "atr_window": 14,
@@ -272,6 +274,71 @@ class TestNormalCompute:
                 "max_holding_bars": 30,
             }
         assert result.strategy_params is result.params_meta
+
+
+class TestStrategyMContext:
+    @staticmethod
+    def _darvas_m_frame() -> pd.DataFrame:
+        # 150봉: 60봉 prefix → 신고가 120(idx125) → 10봉 확정(idx135) → 하단 90(idx136)
+        # → 10봉 확정(idx146) → idx149 마지막 봉에서 상단 돌파. 기본 STRATEGY_M_PARAMS
+        # (confirm_days=10, high_lookback=60, min_box_width=0.20)로 M 신호를 만든다.
+        n = 150
+        high = np.empty(n)
+        low = np.empty(n)
+        close = np.empty(n)
+        for i in range(60):
+            high[i] = 89.5
+            low[i] = 88.5
+            close[i] = 89.0
+        for i in range(60, 126):
+            high[i] = 90.0 + 30.0 * (i - 60) / 65.0
+            low[i] = high[i] - 1.0
+            close[i] = high[i] - 0.5
+        for i in range(126, 136):
+            high[i] = 118.0
+            low[i] = 95.0
+            close[i] = 100.0
+        high[136], low[136], close[136] = 118.0, 90.0, 100.0
+        for i in range(137, 147):
+            high[i] = 115.0
+            low[i] = 92.0 + (i - 137)
+            close[i] = 101.0
+        for i in range(147, 149):
+            high[i] = 119.0
+            low[i] = 100.0
+            close[i] = 110.0
+        high[149], low[149], close[149] = 121.0, 110.0, 120.0
+        dates = pd.date_range("2024-01-02", periods=n, freq="B")
+        return pd.DataFrame(
+            {
+                "Open": close,
+                "High": high,
+                "Low": low,
+                "Close": close,
+                "Volume": np.full(n, 1000.0),
+            },
+            index=dates,
+        )
+
+    def test_last_bar_m_signal_populates_signal_context(self) -> None:
+        frame = self._darvas_m_frame()
+        result = compute_abc(frame, ticker="T", exclude_terminal_bar=False)
+
+        assert result.status == "READY"
+        assert bool(result.signals["M"].iloc[-1]) is True
+        context = result.signal_context["M"]
+        assert context["entry_floor"] == pytest.approx(90.0)
+        assert context["entry_atr"] > 0.0
+        assert context["trail_atr"] == pytest.approx(3.0)
+        assert context["mode"] == "combined"
+
+    def test_terminal_bar_exclusion_drops_m_context(self) -> None:
+        frame = self._darvas_m_frame()
+        result = compute_abc(frame, ticker="T", exclude_terminal_bar=True)
+
+        assert result.status == "READY"
+        assert not bool(result.signals["M"].iloc[-1])
+        assert result.signal_context == {}
 
 
 class TestInvalidOhlcSegments:

@@ -1,5 +1,5 @@
 -- 전략 I(음봉수급쌍끌이)는 outcome 파이프라인 제외 대상으로 설계됐으나
--- (202609161200_expand_candidate_tags_strategy_i.sql 주석 참고) publish_attempt의
+-- (202609161201_expand_candidate_tags_strategy_i.sql 주석 참고) publish_attempt의
 -- emit_open_command 순회 쿼리는 실제로 strategy='I' 태그를 걸러내지 않았다.
 -- emit_open_command는 p_strategy가 A~H가 아니면 예외를 던지므로(202609151700),
 -- close 배치 시점(16:00~20:00 KST와 겹치는 19:30 close)에 전략 I 태그가 하나라도
@@ -219,7 +219,7 @@ end $$;
 comment on function public.publish_attempt(uuid, bigint, uuid) is
   'close 발행 시 candidates/tags/supply_3day/market_supply 완료를 가드하고 OPEN/SUSPENDED/TP/SL을 판정한다.
   전략 I(음봉수급쌍끌이)는 outcome 파이프라인 제외 대상이라 emit_open_command 순회에서 제외한다
-  (2026-09-21 patch: 202609161200 설계 의도를 실제 쿼리에 반영, I 태그 존재 시 emit_open_command가
+  (2026-09-21 patch: 202609161201 설계 의도를 실제 쿼리에 반영, I 태그 존재 시 emit_open_command가
   A-H 외 전략을 거부해 close 발행 전체가 롤백되던 결함 수정).';
 
 revoke execute on function public.publish_attempt(uuid, bigint, uuid) from public, anon, authenticated;

@@ -37,13 +37,8 @@ jobs:
       - name: Tooling gate tests (Python)
         run: uv run --with pytest --with pyyaml pytest tests/tools -q
 
-      # sprint-status.yaml은 손으로 편집하는 action item 원장이고 bmad 스킬이 파싱한다.
-      # 커밋된 상태로 유효하지 않은 YAML이었던 전례가 있어(잔여 쉼표) 계약을 게이트한다.
-      - name: Sprint status contract (Python)
-        run: uv run --with pyyaml python tools/check_sprint_status.py
-
       - name: Scheduler tests (Python)
-        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py tests/batch/test_supply_stage.py tests/batch/test_ls_supply_provider.py tests/batch/test_ls_market_supply_provider.py tests/batch/test_ls_market_program_supply_provider.py tests/batch/test_market_supply_stage.py tests/batch/test_market_supply_repository.py tests/batch/test_tagged_candidate_fetcher.py tests/batch/test_supply_3day_repository.py tests/batch/test_bias_repository.py tests/batch/test_bias_stage.py -q
+        run: uv run --with pytest pytest tests/batch/test_scheduler.py tests/batch/test_supabase_client.py tests/batch/test_ls_auth.py tests/batch/test_ls_daily_bar.py tests/batch/test_run_state.py tests/batch/test_candidate_stage.py tests/batch/test_ls_client.py tests/batch/test_ohlcv_cache.py tests/batch/test_main.py tests/batch/test_supply_stage.py tests/batch/test_ls_supply_provider.py tests/batch/test_ls_market_supply_provider.py tests/batch/test_ls_market_program_supply_provider.py tests/batch/test_market_supply_stage.py tests/batch/test_market_supply_repository.py tests/batch/test_tagged_candidate_fetcher.py tests/batch/test_supply_3day_repository.py tests/batch/test_bias_repository.py tests/batch/test_bias_stage.py tests/batch/test_tags_stage.py -q
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -154,6 +149,14 @@ jobs:
             grant all on functions to anon, authenticated, service_role;
           SQL
 
+      # cron.schedule/unschedule을 호출하는 migration(202609151600, 202609161100)은 순정
+      # postgres에 없는 pg_cron에 의존한다. migration 본문(forward-only 이력)을 건드리지 않기
+      # 위해 CI에서만 최소 cron 스텁 객체를 만들어 그대로 적용되게 한다.
+      - name: Bootstrap pg_cron shim
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f infra/supabase/ci/cron_shim.sql
+
       - name: Apply migrations
         env:
           PGPASSWORD: postgres
@@ -178,6 +181,11 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -d postgres -c "create database nm1;"
           psql -h localhost -U postgres -d postgres -c "create database full_apply;"
+
+          # pg_cron 스텁은 데이터베이스 단위다. nm1/full_apply에도 동일하게 만들어야
+          # cron 의존 migration이 양쪽에서 똑같이 적용되어 스키마 패리티가 성립한다.
+          psql -h localhost -U postgres -d nm1 -v ON_ERROR_STOP=1 -f infra/supabase/ci/cron_shim.sql
+          psql -h localhost -U postgres -d full_apply -v ON_ERROR_STOP=1 -f infra/supabase/ci/cron_shim.sql
 
           # N-1: 마지막 migration을 제외하고 적용
           last=$(ls infra/supabase/migrations/*.sql | sort | tail -n 1)

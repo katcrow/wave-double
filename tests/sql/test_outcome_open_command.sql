@@ -205,11 +205,11 @@ begin
   end;
   if not v_caught then raise exception 'missing daily_ohlcv close was accepted'; end if;
 
-  -- Scenario: 미지원 전략. D/E/F는 Epic 6.5/7.4에서 지원되므로 진짜 미정의 코드('G')만
+  -- Scenario: 미지원 전략. A~H, L, M은 지원되므로 진짜 미정의 코드('Z')만
   -- 거부되어야 한다.
   v_caught := false;
   begin
-    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'G');
+    perform public.emit_open_command('close:2099-07-01', 'ZZTEST1', 'Z');
   exception when others then
     if sqlerrm = 'INVALID_STRATEGY' then v_caught := true; else raise; end if;
   end;
