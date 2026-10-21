@@ -71,28 +71,6 @@ begin
   from generate_series(1, 501) gs;
   if jsonb_array_length(public.get_outcome_tracking_rows(null, null, null, 999)) <> 500 then raise exception 'upper limit clamp failed'; end if;
 
-  -- 신규 OPEN event는 보존된 candidates.name을 payload에 넣고, replay 후 projection에도 복원한다.
-  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
-  values ('close:2098-06-08', '2098-06-08', 'close');
-  insert into public.runs(
-    run_id, logical_run_key, attempt_no, fence_token, lease_expires_at, trigger, status
-  ) values (
-    '00000000-0000-4000-8000-000000000691', 'close:2098-06-08', 1, 1, now() + interval '1 day', 'manual', 'published'
-  );
-  insert into public.candidates(candidate_id, attempt_run_id, ticker, name, trading_day, trading_value)
-  values ('00000000-0000-4000-8000-000000000692', '00000000-0000-4000-8000-000000000691', 'ZZSNAP', '스냅샷 종목', '2098-06-08', 100);
-  insert into public.outcome_events(event_id, ticker, strategy, command_type, logical_run_key, payload)
-  values (
-    '00000000-0000-4000-8000-000000000693', 'ZZSNAP', 'A', 'OPEN', 'close:2098-06-08',
-    jsonb_build_object('entry_date', '2098-06-08', 'entry_price', 100)
-  );
-  if (select payload->>'name' from public.outcome_events where event_id = '00000000-0000-4000-8000-000000000693') <> '스냅샷 종목' then
-    raise exception 'OPEN event name snapshot failed';
-  end if;
-  perform public.rebuild_outcome_projection();
-  if (select name from public.candidate_outcome where ticker = 'ZZSNAP' and strategy = 'A') <> '스냅샷 종목' then
-    raise exception 'rebuild must preserve outcome name';
-  end if;
   raise notice 'story 5-11 row shape/filter/order/limit assertions: pass';
 end $$;
 
@@ -159,5 +137,35 @@ end $$;
 reset role;
 
 do $$ begin raise notice 'story 5-11 ACL assertions: pass'; end $$;
+
+-- 신규 OPEN event는 보존된 candidates.name을 payload에 넣고, replay 후 projection에도 복원한다.
+-- rebuild_outcome_projection()은 candidate_outcome을 비우고 재생하므로, 위 fixture 행에
+-- 의존하는 ACL/RPC 검증이 모두 끝난 뒤 마지막에 실행한다.
+do $$
+begin
+  insert into public.logical_runs(logical_run_key, trading_day, batch_kind)
+  values ('close:2098-06-08', '2098-06-08', 'close');
+  insert into public.runs(
+    run_id, logical_run_key, attempt_no, fence_token, lease_expires_at, trigger, status
+  ) values (
+    '00000000-0000-4000-8000-000000000691', 'close:2098-06-08', 1, 1, now() + interval '1 day', 'manual', 'published'
+  );
+  insert into public.candidates(candidate_id, attempt_run_id, ticker, name, trading_day, trading_value)
+  values ('00000000-0000-4000-8000-000000000692', '00000000-0000-4000-8000-000000000691', 'ZZSNAP', '스냅샷 종목', '2098-06-08', 100);
+  insert into public.outcome_events(event_id, ticker, strategy, command_type, logical_run_key, payload)
+  values (
+    '00000000-0000-4000-8000-000000000693', 'ZZSNAP', 'A', 'OPEN', 'close:2098-06-08',
+    jsonb_build_object('entry_date', '2098-06-08', 'entry_price', 100)
+  );
+  if (select payload->>'name' from public.outcome_events where event_id = '00000000-0000-4000-8000-000000000693') <> '스냅샷 종목' then
+    raise exception 'OPEN event name snapshot failed';
+  end if;
+  perform public.rebuild_outcome_projection();
+  if (select name from public.candidate_outcome where ticker = 'ZZSNAP' and strategy = 'A') <> '스냅샷 종목' then
+    raise exception 'rebuild must preserve outcome name';
+  end if;
+  raise notice 'outcome name snapshot/rebuild assertions: pass';
+end $$;
+
 select 'PASS'::text as story_5_11_verification;
 rollback;
