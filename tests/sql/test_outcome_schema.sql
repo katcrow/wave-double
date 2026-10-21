@@ -18,14 +18,14 @@ begin
     into v_columns
   from information_schema.columns
   where table_schema = 'public' and table_name = 'outcome_events';
-  if v_columns <> array['event_id','ticker','strategy','command_type','logical_run_key','payload','created_at'] then
+  if v_columns <> array['event_id','ticker','strategy','command_type','logical_run_key','payload','created_at','append_seq'] then
     raise exception 'outcome_events columns mismatch: %', v_columns;
   end if;
   select array_agg(data_type::text order by ordinal_position)
     into v_column_types
   from information_schema.columns
   where table_schema = 'public' and table_name = 'outcome_events';
-  if v_column_types <> array['uuid','text','text','text','text','jsonb','timestamp with time zone'] then
+  if v_column_types <> array['uuid','text','text','text','text','jsonb','timestamp with time zone','bigint'] then
     raise exception 'outcome_events column types mismatch: %', v_column_types;
   end if;
 
