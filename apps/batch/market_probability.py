@@ -32,7 +32,7 @@ class LsIndexHistoryProvider:
         response = self._client.request("t8429", {"t8429InBlock": {
             "shcode": code, "gubun": "2", "qrycnt": min(max(count, 2), 500),
             "sdate": " ", "edate": "99999999", "cts_date": " ", "comp_yn": "N",
-        }}, path="/indtp/market-data")
+        }})
         if not response.ok:
             raise RuntimeError(f"LS t8429 lookup failed for {market}: {response.result_code}")
         rows = response.data.get("t8429OutBlock1") if isinstance(response.data, dict) else None

@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from apps.batch.ls_client import LsResponse
+from apps.batch.ls_client import DEFAULT_PATH_BY_TR
 from apps.batch.market_probability import (
     DailyIndexBar,
     LsIndexHistoryProvider,
@@ -13,8 +14,10 @@ from apps.batch.market_probability import (
 class FakeClient:
     def __init__(self, response: LsResponse) -> None:
         self.response = response
+        self.calls = []
 
     def request(self, tr_code, params, *, path=None):
+        self.calls.append((tr_code, params, path))
         return self.response
 
 
@@ -73,3 +76,17 @@ def test_history_provider_fails_closed_on_a_malformed_bar():
 
     with pytest.raises(RuntimeError, match="malformed bar"):
         LsIndexHistoryProvider(client).fetch("KOSPI")
+
+
+def test_history_provider_routes_t8429_to_sector_chart_endpoint():
+    client = FakeClient(LsResponse(data={
+        "t8429OutBlock1": [{"date": "2024-01-02", "high": "101", "close": "100"}],
+    }))
+
+    bars = LsIndexHistoryProvider(client).fetch("KOSPI")
+
+    assert len(bars) == 1
+    assert client.calls[0][0] == "t8429"
+    assert client.calls[0][1]["t8429InBlock"]["shcode"] == "001"
+    assert client.calls[0][2] is None
+    assert DEFAULT_PATH_BY_TR["t8429"] == "/indtp/chart"
