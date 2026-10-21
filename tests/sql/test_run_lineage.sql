@@ -547,6 +547,13 @@ begin
     values ('ZZLIN12', 'B', date '2099-01-11', 52, 'OPEN')
     returning outcome_id into outcome_no_prev;
 
+  -- 202610060200 이후 publish_attempt는 미관측 거래일을 소급 처리한다. 전일(01-10) 봉은 갭 계산의
+  -- 기준일일 뿐 이 시나리오의 판정 대상이 아니므로 이미 관측된 것으로 심어 오늘(01-11)만 판정하게 한다.
+  insert into public.outcome_observations(outcome_id, evaluation_trading_day, high, low, close, result_code)
+    values (outcome_pricechk, date '2099-01-10', 105, 99, 100, 'OK'),
+           (outcome_gap, date '2099-01-10', 105, 99, 100, 'OK'),
+           (outcome_normal, date '2099-01-10', 105, 99, 100, 'OK');
+
   started := public.start_attempt(key, date '2099-01-11', 'close', 'manual', 300);
   attempt_id := (started->>'run_id')::uuid; fence := (started->>'fence_token')::bigint; lease := (started->>'lease_token')::uuid;
   perform public.write_stage(attempt_id, 'candidates', fence, lease, 'pending', 'running');
