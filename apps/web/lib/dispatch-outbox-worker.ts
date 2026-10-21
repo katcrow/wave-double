@@ -79,6 +79,11 @@ export function isScheduledBatchInOperatingWindow(logicalRunKey: string, now = n
   if (batchKind === "market_probability") {
     const match = /^market_probability:\d{4}-\d{2}-\d{2}:(15:(00|20|40)|16:(00|20|40)|17:(00|20|40)|18:(00|20|40)|19:00)$/.exec(logicalRunKey);
     if (!match) return false;
+    const dateParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(now);
+    const kstDate = ["year", "month", "day"].map((type) => dateParts.find((part) => part.type === type)?.value).join("-");
+    if (logicalRunKey.split(":")[1] !== kstDate) return false;
     const [slotHour, slotMinute] = logicalRunKey.slice(-5).split(":").map(Number);
     const intended = slotHour * 60 + slotMinute;
     return totalMinutes >= intended && totalMinutes < intended + 20;

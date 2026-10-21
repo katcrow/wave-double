@@ -43,7 +43,7 @@ class LsIndexHistoryProvider:
             try:
                 bars.append(DailyIndexBar(date.fromisoformat(str(row["date"])), _number(row["high"]), _number(row["close"])))
             except (KeyError, TypeError, ValueError):
-                continue
+                raise RuntimeError(f"LS t8429 response contains malformed bar for {market}")
         return sorted(bars, key=lambda bar: bar.trading_day)
 
 
@@ -58,23 +58,30 @@ def empirical_probability(bars: list[DailyIndexBar], today_change_pct: float, to
     """과거의 같은 방향/비슷한 일간 변동 구간에서 다음날 고가 돌파율을 Laplace 보정한다.
 
     label(d)는 high(next day) > close(d). 오늘 데이터는 학습 표본에서 제외한다.
-    표본 20개 미만이면 전체 과거 빈도로 폴백한다.
+    유효한 전체 표본이 30개 미만이면 계산을 중단한다. 조건 구간 표본이 20개
+    미만이면 전체 과거 빈도로 폴백한다.
     """
     ordered = [bar for bar in bars if bar.trading_day < today]
     samples: list[tuple[date, float, int]] = []
     for previous, current, following in zip(ordered, ordered[1:], ordered[2:]):
+        # Do not let a missing daily bar turn a multi-session move into a one-day
+        # feature or label. This keeps both return and target aligned to joint sessions.
+        if next_joint_trading_day(previous.trading_day) != current.trading_day:
+            continue
+        if next_joint_trading_day(current.trading_day) != following.trading_day:
+            continue
         if previous.close <= 0 or current.close <= 0:
             continue
         change = (current.close / previous.close - 1) * 100
         samples.append((current.trading_day, change, int(following.high > current.close)))
     if len(samples) < 30:
         raise RuntimeError("INSUFFICIENT_HISTORY")
-    # 구간 폭은 과거 표본의 20% 분위수 간격으로 정하고, 전체 자료에서 계산한다.
-    rates = sorted(rate for _, rate, _ in samples)
-    quintile = rates[min(len(rates) - 1, int(len(rates) * .2))]
-    band = "down" if today_change_pct < -abs(quintile) else "up" if today_change_pct > abs(quintile) else "flat"
+    # 절대 등락률의 20% 분위수를 공통 경계로 사용해 방향별 대칭 구간을 만든다.
+    magnitudes = sorted(abs(rate) for _, rate, _ in samples)
+    threshold = magnitudes[min(len(magnitudes) - 1, int(len(magnitudes) * .2))]
+    band = "down" if today_change_pct < -threshold else "up" if today_change_pct > threshold else "flat"
     selected = [(sample_day, rate, label) for sample_day, rate, label in samples
-                if ("down" if rate < -abs(quintile) else "up" if rate > abs(quintile) else "flat") == band]
+                if ("down" if rate < -threshold else "up" if rate > threshold else "flat") == band]
     if len(selected) < 20:
         selected = samples
         band = "base_rate_fallback"

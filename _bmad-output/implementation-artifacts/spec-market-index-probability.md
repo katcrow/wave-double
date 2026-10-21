@@ -2,7 +2,8 @@
 title: '코스피·코스닥 다음 거래일 고가 돌파 확률'
 type: 'feature'
 created: '2026-10-21'
-status: 'done'
+status: 'in-review'
+followup_review_recommended: true
 review_loop_iteration: 0
 baseline_commit: 'cda8a36ba8da35a298be1411682b169a7e7e0766'
 context:
@@ -129,3 +130,52 @@ context:
   [run_state.py:18](../../packages/domain/domain/run_state.py#L18)
 - Supabase RPC 타입과 workflow 입력을 맞춘다.
   [database.types.ts:1194](../../packages/read-model/src/database.types.ts#L1194)
+
+
+### 2026-10-21 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 6: (high 0, medium 4, low 2)
+- defer: 2: (high 0, medium 2, low 0)
+- dismissed:
+  - 원천 관측시각 보존 누락 — LS 응답에 원천 관측시각이 없다는 점을 `input_quality`가 `collection_time_only`로 명시하고 상태도 experimental이어서 관측시각을 알고 있다고 표시하지 않는다.
+  - 원시 지수봉 미보존 — snapshot에 매 계산에 실제 사용된 거래일별 등락률과 라벨이 있어 산출 결과와 구간을 재현할 수 있다. 원시 OHLC 재수집·감사 기능은 현재 사용자 의도에 별도 계약이 없다.
+  - fallback 조건을 화면에 표시하지 않음 — 진단 정보에는 fallback 구간이 기록되고 화면은 실험값/검증 중으로 표시한다. 화면이 조건부 표본 수를 보장한다는 계약은 없다.
+  - 예상 밖 휴장일에 거래일을 오판할 수 있음 — 현재 분기에는 두 지수의 실시간 조회가 성공해야 저장에 도달한다. 운영 캘린더 확장성은 feature 계산 오류와 구분되는 별도 운영 개선이며, 현재 검증 전에 experimental로 제한한다.
+  - 지수 확률 숫자 범위를 화면에서 검사하지 않음 — `isMarketIndexProbabilityRpcRow`가 RPC 행을 화면에 전달하기 전에 두 확률 모두 0~1 범위인지 검사한다.
+  - 수동 dispatch 계약이 미정임 — manual 입력도 도메인 key 날짜/kind와 batch 슬롯 유효구간 검사를 통과해야 한다. 자동 슬롯 외 수동 실행은 현재 의도에 요구되지 않는다.
+  - 구현 스펙 완료 상태와 외부검증 미완료 — 이 지적을 고치려면 해당 스펙 상태/작업을 수정해야 하므로 현재 스펙의 사용자 소유 요구사항을 리뷰 중 변경하지 않는다. 화면은 계속 experimental이다.
+  - CAP-3 통계가 미구현 — 수정 대상이 이 작업의 사용자 소유 스펙이므로 이 리뷰에서 변경하지 않는다. 구현 artifact도 미구현 상태를 명시한다.
+  - 시점 정합·관측시각 계약 미충족 — 원천시각 부재와 순차 외부검증 미완료가 기존 data-and-validation 문서 및 화면 상태에 제한으로 드러나 있다. 이를 완료된 검증으로 주장하지 않는다.
+  - strict `>` 라벨과 stale-slot fence의 자동 검증이 없음 — 검토 대상 동작은 strict 비교와 SQL conflict fence로 구현되어 있으나 관련 자동 테스트가 없다. 이 실행에서는 테스트 추가/실행을 하지 않아 구현 동작을 바꾸지 못하는 검증 공백으로 기록한다.
+- addressed_findings:
+  - `[medium][patch]` 누락된 지수 일봉이 여러 거래일을 하나의 다음 거래일 표본으로 오인 — 연속 공동거래일이 아니면 수익률/라벨 표본에서 제외하도록 수정.
+  - `[medium][patch]` 잘못된 지수봉을 조용히 버려 불완전 이력으로 계산할 수 있음 — malformed bar가 있으면 수집을 실패시켜 기존 성공값을 보존.
+  - `[low][patch]` signed-return 분위수 절댓값으로 방향 구간 경계가 비대칭 — 절대 등락률 분포의 20% 분위수로 대칭 경계를 계산.
+  - `[medium][patch]` DB operating-window guard가 논리 슬롯/날짜와 현재시각을 대조하지 않음 — KST 당일과 20분 슬롯 유효구간 일치 여부를 검증.
+  - `[medium][patch]` worker가 오래된 날짜의 같은 시각 슬롯을 허용 — logical key 날짜가 현재 KST 날짜와 같은지 확인.
+  - `[low][patch]` 표본 30개 미만 처리 동작과 docstring이 불일치 — 전체 30개 미만은 중단하고 조건 표본 20개 미만은 base-rate fallback임을 명시.
+  - `[medium][defer]` strict `>` 라벨 계약을 회귀 테스트가 고정하지 않음 — comparator는 코드에서 확인했으나 테스트는 추가하지 않음.
+  - `[medium][defer]` 저장 RPC의 이전 슬롯 덮어쓰기 방지 계약을 회귀 테스트가 고정하지 않음 — migration의 conflict 조건은 확인했으나 DB 검증은 실행하지 않음.
+
+## Auto Run Result
+
+Status: in-review
+Summary: 확률 계산이 누락 거래일을 건너뛰어 잘못 라벨링하지 않도록 하고, 손상된 이력 수집은 실패 처리하며, 등락 구간 경계를 대칭화했다. dispatch worker와 DB guard에 KST 날짜 및 슬롯 유효 구간 검증을 추가했다.
+Files changed:
+- `_bmad-output/implementation-artifacts/spec-market-index-probability.md` — review 결과·잔여 검증 제한·최종 처리 기록.
+- `apps/batch/market_probability.py` — 거래일 연속성, malformed row fail-closed, 대칭 구간, 표본 정책 설명 수정.
+- `apps/web/lib/dispatch-outbox-worker.ts` — market probability logical key 날짜 검증.
+- `infra/supabase/migrations/202610211000_add_market_probability.sql` — KST 날짜/슬롯과 DB dispatch 시각 일치 검증.
+Review findings: 6개 수정(중간 4, 낮음 2), 2개 검증 공백 보류(중간 2), 나머지는 개별 사유로 기각.
+Follow-up review recommendation: true; 수정된 항목 high 0, medium 4, low 2, 점수 14.
+Verification: 후속 완료 확인에서 batch 테스트 577개, web 테스트 163개, web typecheck, Next.js production build가 통과했다. Playwright MCP로 로그인된 로컬 dashboard를 확인했고 확률 패널·기존 후보·시장 흐름이 함께 표시되며 브라우저 console error는 0건이었다. Supabase Management API(세션에 Supabase MCP 연결이 없어 공식 API fallback)를 사용해 운영 프로젝트 `qqhjeumlecaudsiqhhdu`에 migration을 적용했다. migration version `20261021021641` 및 이름 `add_market_probability`, 테이블/RPC/권한/dispatch trigger를 확인했다. 임시 DB fixture로 최신 슬롯 저장 후 이전 슬롯 overwrite 거부를 검증하고 fixture 행 0건을 확인했다. 실제 LS 15:00~19:00 수집은 운영 슬롯이 아니어서 실행하지 않았다.
+Residual risks: 원천 quote 관측시각 및 시간순 Brier/log-loss/calibration은 아직 검증되지 않았고 확률은 `experimental`이다. stale-slot fence의 production fixture는 확인했지만 반복 가능한 DB migration regression test는 저장소에 없다. 코드 변경은 커밋·배포를 진행 중이며, 2026-10-21 15:00 KST 첫 운영 배치 성공 여부를 확인해야 한다.
+
+### 2026-10-21 — 적용·검증 후속
+- 구현 코드를 저장소에서 다시 빌드하고 검증했다. batch 577개와 web 163개 테스트, typecheck/build가 통과했다.
+- strict `>` 라벨, 누락 일봉 제외, malformed response fail-closed, worker 슬롯·날짜 검증의 회귀 테스트를 추가했다.
+- Supabase 운영 migration 적용 및 실제 DB stale-slot fixture 확인을 완료했다. 임시 행은 정리되어 남은 fixture가 없다.
+- 마지막으로 남은 자동 검증 항목은 production RPC stale-slot 동작을 재현하는 체크인 DB regression test다. 실시간 LS 시간대별 신선도와 외부확률 검증은 별도 관찰 데이터가 쌓여야 한다.
+
+- 커밋 직전 상태: 코드 및 로컬 회귀 검증 완료, 운영 Supabase migration/fixture 검증 완료. 남은 단계는 GitHub CI·웹 배포 확인과 15:00 KST 첫 운영 배치 결과 확인이다.

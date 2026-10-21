@@ -87,3 +87,15 @@ test("자동 close는 KST 19:30 이상 19:50 미만만 허용한다", () => {
   assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T10:50:00Z")), false);
   assert.equal(isScheduledBatchInOperatingWindow("close:2026-10-02", new Date("2026-10-02T11:00:00Z")), false);
 });
+
+test("시장 확률 슬롯은 당일 논리시각부터 20분 동안만 허용한다", () => {
+  assert.equal(isScheduledBatchInOperatingWindow("market_probability:2026-10-02:15:00", new Date("2026-10-02T06:19:59Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("market_probability:2026-10-02:15:00", new Date("2026-10-02T06:20:00Z")), false);
+  assert.equal(isScheduledBatchInOperatingWindow("market_probability:2026-10-02:19:00", new Date("2026-10-02T10:19:59Z")), true);
+  assert.equal(isScheduledBatchInOperatingWindow("market_probability:2026-10-02:19:00", new Date("2026-10-02T10:20:00Z")), false);
+});
+
+test("시장 확률 worker는 전일 논리키와 허용되지 않은 슬롯을 거부한다", () => {
+  assert.equal(isScheduledBatchInOperatingWindow("market_probability:2026-10-01:15:00", new Date("2026-10-02T06:05:00Z")), false);
+  assert.equal(isScheduledBatchInOperatingWindow("market_probability:2026-10-02:19:20", new Date("2026-10-02T10:25:00Z")), false);
+});
