@@ -527,6 +527,54 @@ export type Database = {
           },
         ]
       }
+      market_index_probability: {
+        Row: {
+          created_at: string
+          feature_as_of: string
+          feature_snapshot: Json
+          input_quality: Json
+          kosdaq_probability: number
+          kospi_probability: number
+          last_success_at: string
+          model_version: string
+          slot: string
+          target_trading_day: string
+          trading_day: string
+          updated_at: string
+          validation_status: string
+        }
+        Insert: {
+          created_at?: string
+          feature_as_of: string
+          feature_snapshot?: Json
+          input_quality?: Json
+          kosdaq_probability: number
+          kospi_probability: number
+          last_success_at: string
+          model_version: string
+          slot: string
+          target_trading_day: string
+          trading_day: string
+          updated_at?: string
+          validation_status?: string
+        }
+        Update: {
+          created_at?: string
+          feature_as_of?: string
+          feature_snapshot?: Json
+          input_quality?: Json
+          kosdaq_probability?: number
+          kospi_probability?: number
+          last_success_at?: string
+          model_version?: string
+          slot?: string
+          target_trading_day?: string
+          trading_day?: string
+          updated_at?: string
+          validation_status?: string
+        }
+        Relationships: []
+      }
       market_macro: {
         Row: {
           attempt_run_id: string
@@ -1173,6 +1221,10 @@ export type Database = {
         Args: { p_limit?: number; p_worker_lease_seconds?: number }
         Returns: Json
       }
+      complete_market_probability_dispatch: {
+        Args: { p_dispatch_request_id: string }
+        Returns: Json
+      }
       emit_open_command: {
         Args: {
           p_logical_run_key: string
@@ -1192,11 +1244,21 @@ export type Database = {
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }
-      get_latest_market_index_probability: { Args: never; Returns: Json }
+      get_latest_market_index_probability: {
+        Args: never
+        Returns: {
+          feature_as_of: string
+          kosdaq_probability: number
+          kospi_probability: number
+          last_success_at: string
+          model_version: string
+          target_trading_day: string
+          trading_day: string
+          validation_status: string
+        }[]
+      }
       get_market_macro: { Args: { p_run_id: string }; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
-      upsert_market_index_probability: { Args: { p_payload: Json }; Returns: Json }
-      complete_market_probability_dispatch: { Args: { p_dispatch_request_id: string }; Returns: Json }
       get_outcome_metric_comparison:
         | { Args: { p_strategy?: string }; Returns: Json }
         | { Args: { p_source: string; p_strategy: string }; Returns: Json }
@@ -1305,6 +1367,10 @@ export type Database = {
       sync_vanished_tags: { Args: { p_run_id: string }; Returns: Json }
       track_outcome_day: {
         Args: { p_day: string; p_logical_run_key: string; p_outcome_id: string }
+        Returns: Json
+      }
+      upsert_market_index_probability: {
+        Args: { p_payload: Json }
         Returns: Json
       }
       write_candidates: {
