@@ -1,83 +1,131 @@
+{% if workflow.route != "full" %}
+{% if workflow.review == "auto" %}
+{% set review = "quick" %}
+{% else %}
+{% set review = workflow.review %}
+{% endif %}
 # Step One-Shot: Implement, Review, Present
+
+You reach this step from step 2, or from step 1 when resuming a plan whose `route` is `oneshot`. `{plan_file}` already exists.
 
 ## RULES
 
-- **Language** — Speak in `{{.communication_language}}`. Write any file output in `{{.document_output_language}}`.
-- NEVER auto-push.
-- All review subagents must run at the same model capability as the current session.
-- Run subagents synchronously: launch them together as blocking calls awaited in this turn — never backgrounded or detached, never ending the turn to await results.
+- Do not push to a remote unless the user asks.
+- Do not edit anything inside `<frozen-after-approval>` in `{plan_file}`.
+- Review subagents must use the same model level as this session.
+- Start all review subagents in this turn and wait for all of them to finish. Do not run them in the background or end your turn before they return.
 
 ## INSTRUCTIONS
 
 ### Implement
 
-Follow `[[bmad-snapshot:sync-sprint-status.md]]` with `target_status` = `in-progress`.
+If intent gaps remain, present each as a numbered question with its options and what each option means, HALT for the human's answers, and fold the answers into the Intent.
 
-Implement the clarified intent directly.
+Capture `baseline_revision` (current HEAD, or `NO_VCS` if version control is unavailable) into `{plan_file}` frontmatter before making any changes. If `baseline_revision` already holds a value (resumed run), preserve it.
+
+Build the change from `{plan_file}`. The Intent section is what you implement. As you work, add notes to `## Implementation Notes`: decisions you made, files you changed, surprises.
+
+{% if workflow.route == "oneshot" %}
+**When to stop.** Stop coding if the request left out something the user would notice in the result. Write the gap in `## Implementation Notes`, then ask the human — do not guess.
+{% else %}
+**When to stop and replan.** Stop coding if the request left out something the user would notice in the result. Write the gap in `## Implementation Notes`. Then update `{plan_file}`: add back `## Code Map` (filled in from what you learned while implementing) and `## Open Questions` (one question per gap), set `route: 'full'` and `status: 'draft'`. Go back to `{{ rendered("step-02-plan.md") }}` step 6.
+{% endif %}
 
 ### Review
 
-Announce skipped layers first, then launch every active layer before handling any layer's result. Try running all active layers simultaneously. After substituting runtime placeholders, when an instruction launches a reviewer subagent, launch that child with the prompt text; do not load the reviewer instruction file yourself. For any other customized instruction, execute it as written:
+{% if workflow.review == "none" %}
+Write `review: 'none'`, `review_source: 'pinned'`, and `lenses_ran: []` to `{plan_file}` frontmatter.
+{% elif workflow.review == "auto" %}
+Write `review: 'quick'` and `review_source: 'auto'` to `{plan_file}` frontmatter.
+{% else %}
+Write `review: '{{ workflow.review }}'` and `review_source: 'pinned'` to `{plan_file}` frontmatter.
+{% endif %}
+{% if review != "none" %}
 
-{workflow.oneshot_review_layers}
+Read `{baseline_revision}` from `{plan_file}` frontmatter. If it is `NO_VCS`, use best effort to determine what changed. Otherwise use the repository's version-control tooling to write a unified diff of all changes since `{baseline_revision}`, untracked files included, to a uniquely-named file in the system temp directory; set `{diff_file}` to its absolute path. Set `{claims_file}` = `{plan_file}`.
 
-If a layer's instruction requires subagents and none are available, for each such layer write under `{{.implementation_artifacts}}` the exact child prompt from that layer's instruction after placeholder substitution (not a path-only pointer), then HALT. Ask the human to run each in a separate session and paste back the findings.
+Runtime placeholders: `{diff_file}`, `{claims_file}`, and `{plan_file}` are paths, substituted absolute so a lens can read them; a launch prompt never carries diff text. `{verbatim_intent}` is the `## Intent` section of `{plan_file}` (inside `<frozen-after-approval>`), substituted inline as text. Before launching a lens, expand its skill-root placeholder to this skill's absolute installed directory; never leave that placeholder unresolved in a child prompt.
+
+Say which review lenses you are skipping, then start every active lens before reading any results. Run them at the same time when you can. Fill in runtime placeholders first. When a lens tells you to launch a reviewer subagent, launch it with that prompt text. Do not read the reviewer's instruction file yourself. For any other customized instruction, do what it says:
+
+{% if review == "thorough" %}
+{{ workflow.thorough_lenses }}
+{% else %}
+{{ workflow.quick_lenses }}
+{% endif %}
+
+If a lens needs subagents and you cannot launch them, write the full prompt for each lens beside `{plan_file}`, named after it with the lens id appended (with placeholders filled in, not just file paths). Stop and ask the user to run each prompt in a separate session and paste back the findings.
+
+Write `lenses_ran` — the ids launched, in launch order — to `{plan_file}` frontmatter.
 
 ### Classify
 
-Once every layer has reported — and not before — render a verdict on each finding on its own, ahead of any deduplication or grouping:
+Wait until every review lens has reported. Then judge each finding. Ignore severity labels from reviewers — you decide.
 
-- **Verify its own claimed consequence** at the location it names. Read past the changed lines — into the callers, the guards upstream, whatever else the site depends on — far enough to tell whether that consequence actually occurs. Another finding's outcome, however adjacent, never settles this one.
-- **Assign severity** from the verified consequence for the software's user: `low` (none or cosmetic), `medium` (tolerable), `high` (intolerable).
-- **Keep or dismiss.** Keep a finding only where verification confirmed its consequence. Dismiss noise, claims the verification refuted, and claims it could not substantiate — no path to the claimed consequence at the named site is a valid disposal. Whatever the reason, it must dispose of the finding's own claim: a true fact about neighboring code that leaves the claim standing is not a dismissal, and the finding stays kept. Record each dismissal with its reason; never drop a finding silently.
-- A finding whose fix edits an agent-context document (e.g. CLAUDE.md, AGENTS.md, rules files, specs): defer, never patch.
+For each finding:
 
-Group the survivors by shared root cause — two findings belong in one entry only when the same underlying defect produced both. Same location alone is not a shared root cause, and neither is a shared fix. An entry carries every member's verified consequence and the highest severity among them. Then route each entry in this order:
+- **Check the claim.** Go to the cited file and line. Does the problem the reviewer describes actually happen? Read surrounding code and callers until you can say yes or no. A nearby issue does not answer this one. Judge whether the bug is real, not whether the suggested fix sounds good. Code that fails loudly on a state you have not shown the program can reach is correct, not a bug.
 
-- **patch** — Patch every entry caused or exposed by this change that shows a defect that actually occurs, missing coverage for a specific case, or a broken gate or convention — not a state nothing reaches — and whose smallest fix is trivial, adds no public surface, and guards no state the finding did not demonstrate. Apply that smallest fix immediately.
-- **HALT** — HALT on every entry caused or exposed by this change that shows the same evidence but whose smallest fix fails any of those conditions. Present it to the human for decision before proceeding.
-- **defer** — Defer every other entry, including pre-existing issues and improvement ideas. Append one new entry to `{{.implementation_artifacts}}/deferred-work.md` using this format. Do not modify existing entries or look for duplicates.
+- **Pick one verdict:**
+  - `high` (intolerable), `medium` (tolerable), or `low` (cosmetic or negligible) — the problem is real. Rate it by harm to users or developers. For developer-only issues, say where it will hurt. Vague complaints like "this is messy" are not `high`/`medium`/`low` — use `false` or `maybe-false`. When unsure how bad, pick the higher grade.
+  - `false` — you checked and the problem does not happen. Say what you found that disproves it.
+  - `maybe-false` — you could not tell. Say what you would need to check. Use this only when the code and diff are not enough to decide.
+
+- Write down every finding with its verdict and evidence. Do not drop any.
+
+Reject `false` findings.
+
+Reject `low` findings when users or developers would rarely hit the problem in normal use and the fix would add more than a simple correction or deletion.
+
+Group what remains by root cause — two findings go together only if the same bug caused both. Same file or same fix is not enough. For each group, keep the worst verdict (`high` > `medium` > `low` > `maybe-false`). If a group has verified `high`, `medium`, or `low` members, route by the worst of those — not `defer` just because one member is `maybe-false`.
+
+For each group:
+
+- **patch** — This change caused or exposed the problem. The smallest fix is simple, adds no new public API, and does not guard code paths you did not show are reachable. Fix it now.
+- **HALT** — Same as patch, but the smallest fix is not that simple. Stop and ask the user before continuing.
+- **defer** — Everything else: old bugs not caused by this change, ideas for later, groups where every member is `maybe-false` and would be `medium` or `high` if true (record that severity marked unverified, and what would prove it; if it would only be `low`, reject it), or fixes that would edit CLAUDE.md, AGENTS.md, rules, or specs. Add one entry to `{{ initiative_folder }}/deferred-work.md`:
+
   ```markdown
-  - source_spec: `{spec_file}`
+  - source_plan: `{plan_file}`
     summary: <one sentence>
-    evidence: <why this is real>
+    evidence: <why this is real; for maybe-false, what would prove it>
   ```
 
-### Generate Spec Trace
+  Do not edit old entries or check for duplicates.
+{% endif %}
 
-Set `title` = a concise title derived from the clarified intent.
+### Finalize Plan
 
-Write `{spec_file}` using `[[bmad-snapshot:spec-template.md]]`. Fill only these sections — delete all others:
+Update `{plan_file}`:
 
-1. **Frontmatter** — set `title: '{title}'`, `type`, `created`, `status: 'done'`. Add `route: 'one-shot'`.
-2. **Title and Intent** — `# {title}` heading and `## Intent` with **Problem** and **Approach** lines. Reuse the summary you already generated for the terminal.
-3. **Suggested Review Order** — append after Intent. Build using the same convention as `[[bmad-snapshot:step-05-present.md]]` § "Generate Suggested Review Order" (spec-file-relative links, concern-based ordering, ultra-concise framing).
-4. **Review Triage Log** — only when findings were dismissed: one line per dismissal, the finding and the reason that disposed of its claim.
-
-Follow `[[bmad-snapshot:sync-sprint-status.md]]` with `target_status` = `review`.
+1. Set `status: 'built'` in the frontmatter.
+2. If review found anything, add `## Review Triage Log` with one line per finding: verdict and evidence. For `false`, the disproof. For `maybe-false`, what would settle it. For rejected `low`, why it was not worth fixing.
 
 ### Commit
 
-If version control is available and the tree is dirty, create a local commit with a conventional message derived from the intent. If VCS is unavailable, skip.
+If git is available and there are uncommitted changes, commit with a conventional message based on the Intent. If git is not available, skip.
 
 ### Present
 
-{workflow.open_spec}
+{{ workflow.open_plan }}
 
-Display a summary in conversation output, including:
+Give the user a short summary — one or two sentences:
 
-- The commit hash (if one was created).
-- List of files changed with one-line descriptions. Any file paths shown in conversation/terminal output must use CWD-relative format (no leading `/`) with `:line` notation (e.g., `src/path/file.ts:42`) for terminal clickability — this differs from spec-file links which use spec-file-relative paths.
-- Review findings breakdown: patches applied, items deferred, and the dismissed count — dismissal reasons are recorded in the spec trace. If every finding was dismissed, say so.
+- What changed.
+- Review result, including anything deferred.
+- Commit hash, if you made one.
 
-Offer to push and/or create a pull request.
+Do not list files, repeat the plan, or walk through what you did unless asked.
 
-HALT and wait for human input.
+Offer next steps in one line: create a PR (push first if needed) when git and a remote exist; use `bmad-walkthrough`; or make another change.
+
+Stop and wait for the user.
 
 Workflow complete.
 
 ## On Complete
 
-If anything appears below, follow it as the final terminal instruction before exiting; otherwise exit normally.
+If anything appears below, do it before exiting. Otherwise exit.
 
-{workflow.on_complete}
+{{ workflow.on_complete }}
+{% endif %}
