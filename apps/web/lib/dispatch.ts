@@ -47,6 +47,7 @@ const LOGICAL_RUN_KEY_PATTERNS: Record<string, RegExp> = {
   intraday: /^intraday:\d{4}-\d{2}-\d{2}:([01]\d|2[0-3]):(00|10|20|30|40)$/,
   premarket: /^premarket:\d{4}-\d{2}-\d{2}$/,
   close: /^close:\d{4}-\d{2}-\d{2}$/,
+  market_probability: /^market_probability:\d{4}-\d{2}-\d{2}:(15:(00|20|40)|16:(00|20|40)|17:(00|20|40)|18:(00|20|40)|19:00)$/,
 };
 
 /** SQL의 `start_attempt`/`request_manual_dispatch`와 같은 shape 검증(RPC 이전 조기 거부용). */

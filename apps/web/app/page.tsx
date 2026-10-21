@@ -4,6 +4,7 @@ import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
 import MarketSupplyPanel from "@/components/dashboard/MarketSupplyPanel";
+import MarketProbabilityPanel from "@/components/dashboard/MarketProbabilityPanel";
 import { buildCandidateCardViewModels, isTodayCandidateCardRow } from "@/lib/candidate-cards";
 import { isCandidateEvidenceRpcRow } from "@/lib/candidate-evidence";
 import { isCandidateSupplyHintRpcRow } from "@/lib/supply-hints";
@@ -13,7 +14,7 @@ import type {
   MarketMacroRpcRow,
   MarketSupplyRpcRow,
 } from "@/lib/dashboard-types";
-import { isIntradaySnapshot } from "@/lib/dashboard-types";
+import { isIntradaySnapshot, isMarketIndexProbabilityRpcRow } from "@/lib/dashboard-types";
 import { isMarketMacroRpcRow, isMarketSupplyRpcRow } from "@/lib/market-supply";
 import type { DashboardSnapshot, DisappearedCandidateRow, TodayCandidateCardRow } from "@/lib/dashboard-types";
 import { buildDisappearedCandidateViewModels } from "@/lib/disappeared-candidates";
@@ -32,13 +33,19 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const supabase = getSupabaseBrowserClient();
+  const { data: probabilityData, error: probabilityError } = await supabase.rpc("get_latest_market_index_probability");
+  const probabilityRow = Array.isArray(probabilityData) && probabilityData.length > 0 &&
+    isMarketIndexProbabilityRpcRow(probabilityData[0]) ? probabilityData[0] : null;
+  const probabilityFetchFailed = Boolean(probabilityError) || (probabilityData !== null &&
+    (!Array.isArray(probabilityData) || (probabilityData.length > 0 && !isMarketIndexProbabilityRpcRow(probabilityData[0]))));
   const { data, error } = await supabase.rpc("get_dashboard_snapshot");
 
   if (error) {
     return (
-      <section aria-labelledby="today-candidates-heading">
-        <h1 id="today-candidates-heading">오늘의 후보</h1>
-        <p role="alert">대시보드 데이터를 불러오지 못했습니다: {error.message}</p>
+        <section aria-labelledby="today-candidates-heading">
+          <h1 id="today-candidates-heading">오늘의 후보</h1>
+          <p role="alert">대시보드 데이터를 불러오지 못했습니다: {error.message}</p>
+          <MarketProbabilityPanel row={probabilityRow} fetchFailed={probabilityFetchFailed} />
       </section>
     );
   }
@@ -237,6 +244,7 @@ export default async function HomePage() {
 
       <DisappearedCandidatesNotice candidates={disappearedCandidates} />
       <MarketSupplyPanel rows={marketSupplyRows} macroRows={marketMacroRows} fetchFailed={marketSupplyFetchFailed} />
+      <MarketProbabilityPanel row={probabilityRow} fetchFailed={probabilityFetchFailed} />
     </section>
   );
 }

@@ -1192,8 +1192,11 @@ export type Database = {
       get_candidate_evidence: { Args: { p_run_id: string }; Returns: Json }
       get_candidate_supply_hints: { Args: { p_run_id: string }; Returns: Json }
       get_dashboard_snapshot: { Args: never; Returns: Json }
+      get_latest_market_index_probability: { Args: never; Returns: Json }
       get_market_macro: { Args: { p_run_id: string }; Returns: Json }
       get_market_supply: { Args: { p_run_id: string }; Returns: Json }
+      upsert_market_index_probability: { Args: { p_payload: Json }; Returns: Json }
+      complete_market_probability_dispatch: { Args: { p_dispatch_request_id: string }; Returns: Json }
       get_outcome_metric_comparison:
         | { Args: { p_strategy?: string }; Returns: Json }
         | { Args: { p_source: string; p_strategy: string }; Returns: Json }

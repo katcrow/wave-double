@@ -8,13 +8,36 @@ export type RunStatus =
   | "superseded"
   | "cancelled";
 
-export type BatchKind = "premarket" | "intraday" | "close";
+export type BatchKind = "premarket" | "intraday" | "close" | "market_probability";
 export type RunTrigger = "schedule" | "manual";
 export type Market = "KOSPI" | "KOSDAQ";
 export type SupplyHintStatus = "good" | "not_met" | "undetermined";
 export type OutcomeStatus = "TP" | "SL" | "TIMEOUT" | "OPEN" | "SUSPENDED" | "DELISTED";
 export type OutcomeStrategy = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "L" | "M";
 export type TrackingSource = "t1859" | "t1852" | "t1856";
+
+export interface MarketIndexProbabilityRpcRow {
+  trading_day: string;
+  target_trading_day: string;
+  kospi_probability: number;
+  kosdaq_probability: number;
+  last_success_at: string;
+  feature_as_of: string;
+  model_version: string;
+  validation_status: "experimental" | "validated";
+}
+
+export function isMarketIndexProbabilityRpcRow(value: unknown): value is MarketIndexProbabilityRpcRow {
+  if (!isRecord(value)) return false;
+  return typeof value.trading_day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trading_day) &&
+    typeof value.target_trading_day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.target_trading_day) &&
+    typeof value.kospi_probability === "number" && Number.isFinite(value.kospi_probability) && value.kospi_probability >= 0 && value.kospi_probability <= 1 &&
+    typeof value.kosdaq_probability === "number" && Number.isFinite(value.kosdaq_probability) && value.kosdaq_probability >= 0 && value.kosdaq_probability <= 1 &&
+    typeof value.last_success_at === "string" && Number.isFinite(Date.parse(value.last_success_at)) &&
+    typeof value.feature_as_of === "string" && Number.isFinite(Date.parse(value.feature_as_of)) &&
+    typeof value.model_version === "string" &&
+    (value.validation_status === "experimental" || value.validation_status === "validated");
+}
 
 /** get_outcome_tracking_rows()가 브라우저에 반환하는 제한된 행과 nullable 종목명 스냅샷. */
 export interface OutcomeTrackingRpcRow {

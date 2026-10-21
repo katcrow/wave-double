@@ -67,7 +67,6 @@ export function resolveWorkflowRef(ref: string | undefined): string {
 
 export function isScheduledBatchInOperatingWindow(logicalRunKey: string, now = new Date()): boolean {
   const batchKind = logicalRunKey.split(":", 1)[0];
-  if (batchKind !== "intraday" && batchKind !== "close") return false;
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Seoul",
     hour: "2-digit",
@@ -77,6 +76,14 @@ export function isScheduledBatchInOperatingWindow(logicalRunKey: string, now = n
   const hour = Number(parts.find((part) => part.type === "hour")?.value);
   const minute = Number(parts.find((part) => part.type === "minute")?.value);
   const totalMinutes = hour * 60 + minute;
+  if (batchKind === "market_probability") {
+    const match = /^market_probability:\d{4}-\d{2}-\d{2}:(15:(00|20|40)|16:(00|20|40)|17:(00|20|40)|18:(00|20|40)|19:00)$/.exec(logicalRunKey);
+    if (!match) return false;
+    const [slotHour, slotMinute] = logicalRunKey.slice(-5).split(":").map(Number);
+    const intended = slotHour * 60 + slotMinute;
+    return totalMinutes >= intended && totalMinutes < intended + 20;
+  }
+  if (batchKind !== "intraday" && batchKind !== "close") return false;
   return batchKind === "intraday"
     ? totalMinutes >= 8 * 60 && totalMinutes < 19 * 60 + 30
     : totalMinutes >= 19 * 60 + 30 && totalMinutes < 19 * 60 + 50;

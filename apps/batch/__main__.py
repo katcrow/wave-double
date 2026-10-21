@@ -11,7 +11,7 @@ import argparse
 import contextlib
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from domain.run_state import Trigger
@@ -28,6 +28,7 @@ from .ls_market_index_provider import LsMarketIndexProvider
 from .ls_market_macro_provider import LsMarketMacroProvider
 from .ls_market_program_supply_provider import LsMarketProgramSupplyProvider
 from .ls_market_supply_provider import LsMarketSupplyProvider
+from .market_probability import LsIndexHistoryProvider, SupabaseProbabilityRepository, build_payload, next_joint_trading_day
 from .market_supply_repository import SupabaseMarketSupplyRepository
 from .ohlcv_cache import LsOhlcvCacheProvider, SupabaseOhlcvCacheRepository
 from .ohlcv_cache_loader import SupabaseOhlcvCacheLoader
@@ -50,7 +51,7 @@ def _require_env(name: str) -> str:
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m apps.batch")
-    parser.add_argument("--batch-kind", required=True, choices=["premarket", "intraday", "close"])
+    parser.add_argument("--batch-kind", required=True, choices=["premarket", "intraday", "close", "market_probability"])
     parser.add_argument("--trigger", default="schedule", choices=["schedule", "manual"])
     parser.add_argument("--dispatch-request-id", default=None)
     parser.add_argument("--logical-run-key", default=None)
@@ -81,7 +82,6 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
     service_role_key = _require_env("SUPABASE_SERVICE_ROLE_KEY")
     ls_app_key = _require_env("LS_APP_KEY")
     ls_app_secret = _require_env("LS_APP_SECRET")
-    condition_search_user_id = _require_env("LS_CONDITION_SEARCH_USER_ID")
 
     with contextlib.ExitStack() as stack:
         rpc_client = stack.enter_context(contextlib.closing(SupabaseRpcClient(supabase_url, service_role_key)))
@@ -92,6 +92,48 @@ def run(args: argparse.Namespace, *, now_kst: datetime | None = None) -> Schedul
         ls_client = stack.enter_context(
             contextlib.closing(LsClient(token_provider, config=LsClientConfig(mac_address=mac_address)))
         )
+        if args.batch_kind == "market_probability":
+            from domain.run_state import LogicalRunKey
+            from domain.calendar import KRX_HOLIDAYS
+            if args.logical_run_key:
+                parsed_key = LogicalRunKey.parse(args.logical_run_key)
+                if parsed_key.trading_day != moment.date() or parsed_key.batch_kind.value != args.batch_kind:
+                    raise ValueError("logical_run_key does not match probability batch date/kind")
+            else:
+                parsed_key = LogicalRunKey(moment.date(), args.batch_kind, moment.time().replace(second=0, microsecond=0))
+            slot = parsed_key.slot
+            assert slot is not None
+            slot_start = moment.replace(hour=slot.hour, minute=slot.minute, second=0, microsecond=0)
+            if moment < slot_start or moment >= slot_start + timedelta(minutes=20):
+                if args.dispatch_request_id:
+                    completion = rpc_client.rpc("complete_market_probability_dispatch", {
+                        "p_dispatch_request_id": args.dispatch_request_id,
+                    })
+                    if completion.get("error"):
+                        raise RuntimeError("PROBABILITY_DISPATCH_COMPLETION_FAILED")
+                return SchedulerResult("skipped", "PROBABILITY_SLOT_EXPIRED", skip_reason="slot_expired")
+            if moment.weekday() >= 5 or moment.date() in KRX_HOLIDAYS:
+                if args.dispatch_request_id:
+                    completion = rpc_client.rpc("complete_market_probability_dispatch", {
+                        "p_dispatch_request_id": args.dispatch_request_id,
+                    })
+                    if completion.get("error"):
+                        raise RuntimeError("PROBABILITY_DISPATCH_COMPLETION_FAILED")
+                return SchedulerResult("skipped", "CLOSED_DAY", skip_reason="closed_day")
+            index_provider = LsMarketIndexProvider(ls_client)
+            changes = {market: index_provider.fetch(market).index_change_rate for market in ("KOSPI", "KOSDAQ")}
+            payload = build_payload(moment.date(), next_joint_trading_day(moment.date()), slot,
+                                    changes, LsIndexHistoryProvider(ls_client))
+            SupabaseProbabilityRepository(rpc_client).save(payload)
+            if args.dispatch_request_id:
+                completion = rpc_client.rpc("complete_market_probability_dispatch", {
+                    "p_dispatch_request_id": args.dispatch_request_id,
+                })
+                if completion.get("error"):
+                    raise RuntimeError("PROBABILITY_DISPATCH_COMPLETION_FAILED")
+            return SchedulerResult("success", "MARKET_PROBABILITY_STORED", logical_run_key=str(parsed_key))
+
+        condition_search_user_id = _require_env("LS_CONDITION_SEARCH_USER_ID")
         daily_bar_provider = LsDailyBarProvider(ls_client)
         gateway = RunStateGateway(rpc_client)
         bias_repository = SupabaseBiasRepository(rpc_client)

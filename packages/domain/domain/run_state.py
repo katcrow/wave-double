@@ -15,6 +15,7 @@ class BatchKind(StrEnum):
     PREMARKET = "premarket"
     INTRADAY = "intraday"
     CLOSE = "close"
+    MARKET_PROBABILITY = "market_probability"
 
 
 class Trigger(StrEnum):
@@ -68,10 +69,14 @@ class LogicalRunKey:
     def __post_init__(self) -> None:
         if not isinstance(self.batch_kind, BatchKind):
             object.__setattr__(self, "batch_kind", BatchKind(self.batch_kind))
-        if self.batch_kind is BatchKind.INTRADAY and self.slot is None:
+        if self.batch_kind in (BatchKind.INTRADAY, BatchKind.MARKET_PROBABILITY) and self.slot is None:
             raise ValueError("intraday logical keys require a KST slot")
-        if self.batch_kind is not BatchKind.INTRADAY and self.slot is not None:
-            raise ValueError("only intraday logical keys may have a slot")
+        if self.batch_kind not in (BatchKind.INTRADAY, BatchKind.MARKET_PROBABILITY) and self.slot is not None:
+            raise ValueError("only slotted batch kinds may have a slot")
+        if self.batch_kind is BatchKind.MARKET_PROBABILITY and self.slot and (
+            self.slot < time(15, 0) or self.slot > time(19, 0) or self.slot.minute not in (0, 20, 40)
+        ):
+            raise ValueError("market probability slot must be a 20-minute KST boundary from 15:00 to 19:00")
         if self.slot and (
             self.slot.second or self.slot.microsecond or self.slot.minute not in (0, 10, 20, 30, 40)
         ):
@@ -100,8 +105,8 @@ class LogicalRunKey:
             raise ValueError("invalid logical run key") from exc
         if len(parts) == 2:
             return cls(day, kind)
-        if kind is not BatchKind.INTRADAY or not _SLOT_RE.fullmatch(parts[2]):
-            raise ValueError("intraday logical key requires an HH:MM KST slot")
+        if kind not in (BatchKind.INTRADAY, BatchKind.MARKET_PROBABILITY) or not _SLOT_RE.fullmatch(parts[2]):
+            raise ValueError("slotted logical key requires an HH:MM KST slot")
         hour, minute = map(int, parts[2].split(":"))
         return cls(day, kind, time(hour, minute))
 

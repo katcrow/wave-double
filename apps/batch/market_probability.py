@@ -1,0 +1,128 @@
+"""실시간 지수 등락률과 과거 일봉 결과로 계산하는 실험용 기준 확률."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
+from math import isfinite
+from typing import Any, Protocol
+
+from .ls_client import LsResponse
+
+INDEX_CODES = {"KOSPI": "001", "KOSDAQ": "301"}
+
+
+class IndexChartClient(Protocol):
+    def request(self, tr_code: str, params: dict[str, Any], *, path: str | None = None) -> LsResponse: ...
+
+
+@dataclass(frozen=True)
+class DailyIndexBar:
+    trading_day: date
+    high: float
+    close: float
+
+
+class LsIndexHistoryProvider:
+    def __init__(self, client: IndexChartClient) -> None:
+        self._client = client
+
+    def fetch(self, market: str, count: int = 500) -> list[DailyIndexBar]:
+        code = INDEX_CODES[market]
+        response = self._client.request("t8429", {"t8429InBlock": {
+            "shcode": code, "gubun": "2", "qrycnt": min(max(count, 2), 500),
+            "sdate": " ", "edate": "99999999", "cts_date": " ", "comp_yn": "N",
+        }}, path="/indtp/market-data")
+        if not response.ok:
+            raise RuntimeError(f"LS t8429 lookup failed for {market}: {response.result_code}")
+        rows = response.data.get("t8429OutBlock1") if isinstance(response.data, dict) else None
+        if not isinstance(rows, list):
+            raise RuntimeError(f"LS t8429 response malformed for {market}")
+        bars = []
+        for row in rows:
+            try:
+                bars.append(DailyIndexBar(date.fromisoformat(str(row["date"])), _number(row["high"]), _number(row["close"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return sorted(bars, key=lambda bar: bar.trading_day)
+
+
+def _number(value: Any) -> float:
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise ValueError("non-finite index price")
+    return parsed
+
+
+def empirical_probability(bars: list[DailyIndexBar], today_change_pct: float, today: date) -> tuple[float, dict[str, Any], list[dict[str, Any]]]:
+    """과거의 같은 방향/비슷한 일간 변동 구간에서 다음날 고가 돌파율을 Laplace 보정한다.
+
+    label(d)는 high(next day) > close(d). 오늘 데이터는 학습 표본에서 제외한다.
+    표본 20개 미만이면 전체 과거 빈도로 폴백한다.
+    """
+    ordered = [bar for bar in bars if bar.trading_day < today]
+    samples: list[tuple[date, float, int]] = []
+    for previous, current, following in zip(ordered, ordered[1:], ordered[2:]):
+        if previous.close <= 0 or current.close <= 0:
+            continue
+        change = (current.close / previous.close - 1) * 100
+        samples.append((current.trading_day, change, int(following.high > current.close)))
+    if len(samples) < 30:
+        raise RuntimeError("INSUFFICIENT_HISTORY")
+    # 구간 폭은 과거 표본의 20% 분위수 간격으로 정하고, 전체 자료에서 계산한다.
+    rates = sorted(rate for _, rate, _ in samples)
+    quintile = rates[min(len(rates) - 1, int(len(rates) * .2))]
+    band = "down" if today_change_pct < -abs(quintile) else "up" if today_change_pct > abs(quintile) else "flat"
+    selected = [(sample_day, rate, label) for sample_day, rate, label in samples
+                if ("down" if rate < -abs(quintile) else "up" if rate > abs(quintile) else "flat") == band]
+    if len(selected) < 20:
+        selected = samples
+        band = "base_rate_fallback"
+    wins = sum(label for _, _, label in selected)
+    probability = (wins + 1) / (len(selected) + 2)
+    history_snapshot = [{"trading_day": sample_day.isoformat(), "close_change_pct": rate, "next_high_break": label}
+                        for sample_day, rate, label in samples]
+    return probability, {"sample_count": len(selected), "success_count": wins, "condition": band, "smoothing": "laplace_1_1"}, history_snapshot
+
+
+def build_payload(trading_day: date, target_day: date, slot: time, index_changes: dict[str, float], history_provider: LsIndexHistoryProvider) -> dict[str, Any]:
+    probabilities = {}
+    diagnostics = {}
+    histories = {}
+    for market, field in (("KOSPI", "kospi_probability"), ("KOSDAQ", "kosdaq_probability")):
+        probability, meta, history = empirical_probability(history_provider.fetch(market), index_changes[market], trading_day)
+        probabilities[field] = probability
+        diagnostics[market] = meta
+        histories[market] = history
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "trading_day": trading_day.isoformat(), "target_trading_day": target_day.isoformat(),
+        "slot": slot.strftime("%H:%M:%S"), **probabilities, "last_success_at": now, "feature_as_of": now,
+        "model_version": "historical_conditional_rate_v1", "validation_status": "experimental",
+        "input_quality": {"history": "sufficient", "intraday_quote_timestamp": "collection_time_only",
+                          "feature_alignment": "intraday_quote_vs_daily_close_proxy_unvalidated"},
+        "feature_snapshot": {"index_change_pct": index_changes, "diagnostics": diagnostics, "history": histories},
+    }
+
+
+class ProbabilityRepository(Protocol):
+    def save(self, payload: dict[str, Any]) -> None: ...
+
+
+class SupabaseProbabilityRepository:
+    def __init__(self, rpc_client: Any) -> None:
+        self._rpc = rpc_client
+
+    def save(self, payload: dict[str, Any]) -> None:
+        result = self._rpc.rpc("upsert_market_index_probability", {"p_payload": payload})
+        if result.get("error"):
+            raise RuntimeError(f"PROBABILITY_SAVE_FAILED: {result['error'].get('code', 'unknown')}")
+
+
+def next_joint_trading_day(day: date) -> date:
+    from domain.calendar import KRX_HOLIDAYS
+    candidate = day + timedelta(days=1)
+    while candidate.weekday() >= 5 or candidate in KRX_HOLIDAYS:
+        candidate += timedelta(days=1)
+    return candidate
+

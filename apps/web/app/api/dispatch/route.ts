@@ -14,7 +14,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase-service";
  */
 export const dynamic = "force-dynamic";
 
-const BATCH_KINDS: readonly BatchKind[] = ["premarket", "intraday", "close"];
+const BATCH_KINDS: readonly BatchKind[] = ["premarket", "intraday", "close", "market_probability"];
 // 단일 운영자 전제(Never: 새 의존성 금지) 하의 in-memory rate limit. 분당 최대 5회.
 const rateLimiter = new RateLimiter(5, 60_000);
 

@@ -87,6 +87,10 @@ def is_scheduled_execution_allowed(batch_kind: BatchKind | str, now_kst: datetim
         return OPERATING_WINDOW_START <= current < INTRADAY_START_DEADLINE
     if kind is BatchKind.CLOSE:
         return CLOSE_WINDOW_START <= current < CLOSE_START_DEADLINE
+    if kind is BatchKind.MARKET_PROBABILITY:
+        # workflow_dispatch can begin a little after its enqueue minute. The logical key
+        # preserves the intended slot and the database rejects an older slot arriving late.
+        return time(15, 0) <= current < time(19, 20)
     return False
 
 
