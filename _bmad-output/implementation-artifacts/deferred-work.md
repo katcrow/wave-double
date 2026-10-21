@@ -37,3 +37,10 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-multi-strategy-candidate-card-sorting.md`
   summary: 운영 Supabase에 후보 카드 정렬 migration과 SQL fixture를 적용하고 실제 RPC/catalog/grant 결과를 확인한다.
   evidence: 현재 세션에는 Supabase MCP와 psql/Docker가 노출되지 않아 로컬 웹 검증만 완료했으며 운영 DB 실행 결과를 확보하지 못했다.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-market-probability-compact-chip.md`
+  summary: 종가배팅 참고확률의 "직전값" 판정이 달력 날짜 기준이라 주말·휴장일·당일 첫 슬롯 전에도 표시되고, 며칠 묵은 값도 같은 배지로만 구분된다.
+  evidence: `deriveMarketProbabilityChipState`가 `row.trading_day !== todayKst`만 비교(기존 패널 로직 승계). 거래일 캘린더/슬롯 시각 기반 판정과 경과일 표시가 필요.
+- source_spec: `_bmad-output/implementation-artifacts/spec-market-probability-compact-chip.md`
+  summary: 상단 행에서 확률 칩의 ⓘ를 펼치거나 메타가 줄바꿈되면 `align-items: stretch` 때문에 데이터 신뢰도 바 높이도 함께 늘어난다.
+  evidence: `.dashboard-top-row { align-items: stretch }` + 칩 내부 `<details>` 펼침(외형상 낮은 심각도).

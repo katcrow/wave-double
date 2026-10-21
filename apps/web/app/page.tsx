@@ -4,7 +4,7 @@ import DataTrustBar from "@/components/dashboard/DataTrustBar";
 import DisappearedCandidatesNotice from "@/components/dashboard/DisappearedCandidatesNotice";
 import NoticeBanner from "@/components/dashboard/NoticeBanner";
 import MarketSupplyPanel from "@/components/dashboard/MarketSupplyPanel";
-import MarketProbabilityPanel from "@/components/dashboard/MarketProbabilityPanel";
+import MarketProbabilityChip from "@/components/dashboard/MarketProbabilityChip";
 import { buildCandidateCardViewModels, isTodayCandidateCardRow } from "@/lib/candidate-cards";
 import { isCandidateEvidenceRpcRow } from "@/lib/candidate-evidence";
 import { isCandidateSupplyHintRpcRow } from "@/lib/supply-hints";
@@ -42,10 +42,12 @@ export default async function HomePage() {
 
   if (error) {
     return (
-        <section aria-labelledby="today-candidates-heading">
-          <h1 id="today-candidates-heading">오늘의 후보</h1>
-          <p role="alert">대시보드 데이터를 불러오지 못했습니다: {error.message}</p>
-          <MarketProbabilityPanel row={probabilityRow} fetchFailed={probabilityFetchFailed} />
+      <section aria-labelledby="today-candidates-heading">
+        <h1 id="today-candidates-heading">오늘의 후보</h1>
+        <p role="alert">대시보드 데이터를 불러오지 못했습니다: {error.message}</p>
+        <div className="dashboard-top-row">
+          <MarketProbabilityChip row={probabilityRow} fetchFailed={probabilityFetchFailed} />
+        </div>
       </section>
     );
   }
@@ -213,7 +215,10 @@ export default async function HomePage() {
         <h1 id="today-candidates-heading">오늘의 후보</h1>
       </header>
 
-      <DataTrustBar snapshot={snapshot} />
+      <div className="dashboard-top-row">
+        <DataTrustBar snapshot={snapshot} />
+        <MarketProbabilityChip row={probabilityRow} fetchFailed={probabilityFetchFailed} />
+      </div>
       {isIntraday && (
         <p className="intraday-label" role="status">
           장중 참고 · 최종 추천 미확정
@@ -244,7 +249,6 @@ export default async function HomePage() {
 
       <DisappearedCandidatesNotice candidates={disappearedCandidates} />
       <MarketSupplyPanel rows={marketSupplyRows} macroRows={marketMacroRows} fetchFailed={marketSupplyFetchFailed} />
-      <MarketProbabilityPanel row={probabilityRow} fetchFailed={probabilityFetchFailed} />
     </section>
   );
 }

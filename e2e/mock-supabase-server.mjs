@@ -115,6 +115,20 @@ function rpcPayload(name, body = {}) {
     if (idempotencyKey) dispatchByIdempotency.set(idempotencyKey, created);
     return created;
   }
+  if (name === "get_latest_market_index_probability") {
+    // 종가배팅 참고확률 칩: 오늘(KST) 행을 돌려줘 "직전값"이 아닌 정상 상태로 렌더되게 한다.
+    const todayKst = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
+    return [{
+      trading_day: todayKst,
+      target_trading_day: todayKst,
+      kospi_probability: 0.6234,
+      kosdaq_probability: 0.4812,
+      last_success_at: new Date().toISOString(),
+      feature_as_of: new Date().toISOString(),
+      model_version: "e2e-fixture",
+      validation_status: "experimental",
+    }];
+  }
   if (name === "get_dashboard_snapshot") {
     // 장중 시나리오는 complete_snapshot과 latest_attempt의 batch_kind만 바꾼다
     // (isIntradaySnapshot이 그 값으로 "장중 참고 · 최종 추천 미확정" 라벨을 고정 표시한다).

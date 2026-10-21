@@ -33,6 +33,12 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(page.getByRole("heading", { name: "조정후보" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "조정후보" })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "거래대금 상위 후보" })).toBeVisible();
+  // 종가배팅 참고확률 칩: 상단 행에 코스피/코스닥 확률(소수 1자리)이 표시된다.
+  const probabilityChip = page.locator('aside[aria-label="종가배팅 참고 확률"]');
+  await expect(probabilityChip).toBeVisible();
+  await expect(probabilityChip.locator("dt", { hasText: "코스피" }).locator("+ dd")).toHaveText("62.3%");
+  await expect(probabilityChip.locator("dt", { hasText: "코스닥" }).locator("+ dd")).toHaveText("48.1%");
+  await expect(probabilityChip.getByText("직전값")).toHaveCount(0);
   const topTradingSection = page.locator(".top-trading-candidates");
   const excludeToggle = topTradingSection.getByRole("button", { name: "삼성전자·SK하이닉스 제외" });
   const allToggle = topTradingSection.getByRole("button", { name: "전체", exact: true });
