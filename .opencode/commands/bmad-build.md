@@ -1,5 +1,6 @@
 ---
-description: Turns a work item — feature, story, bug fix, change request — into working code, reviewed and verified. Use when the user hands over an outcome and leaves the edits to you; a bare story or issue link counts. Also use whenever the user asks BMAD by name — then any change qualifies, even a tiny fully-specified edit. Do not volunteer for interactive edits the user directs and reviews themselves, or for version-control operations that record existing work without changing it.
+description: "Turns implementation work into working code, reviewed and verified. Use when the user delegates a feature, story, bug fix, or meaningful change; a bare story or issue link counts. Skip obvious, low-risk mechanical maintenance such as small ignore-file, typo-only, formatting-only, or configuration-hygiene edits. Explicit BMAD requests always qualify. Do not volunteer for user-directed interactive edits or version-control operations that only record existing work."
 ---
+Load the BMad skill `bmad-build` with the skill tool (skill tool, name exactly `bmad-build`) and follow its instructions exactly. Do not improvise a substitute workflow.
 
-@skills/bmad-build
+User request: $ARGUMENTS

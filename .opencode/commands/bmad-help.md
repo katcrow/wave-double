@@ -1,5 +1,6 @@
 ---
-description: Analyzes current state and user query to answer BMad questions or recommend the next skill(s) to use. Use when user asks for help, bmad help, what to do next, or what to start with in BMad
+description: "Answers BMad questions and recommends the next skill from what is installed. Use when the user asks bmad for help, what to do next or where to start."
 ---
+Load the BMad skill `bmad` with the skill tool (skill tool, name exactly `bmad`) and follow its instructions exactly. Do not improvise a substitute workflow.
 
-@skills/bmad-help
+User request: $ARGUMENTS

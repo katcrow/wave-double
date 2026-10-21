@@ -1,5 +1,6 @@
 ---
-description: "Sets up BMad Builder module in a project. Use when the user requests to 'install bmb module', 'configure BMad Builder', or 'setup BMad Builder'."
+description: "Sets up, updates, repairs or checks the BMad installation and adds modules. Use when the user asks to install, update, repair, doctor or configure BMad."
 ---
+Load the BMad skill `bmad` with the skill tool (skill tool, name exactly `bmad`) and follow its instructions exactly. Do not improvise a substitute workflow.
 
-@skills/bmad-bmb-setup
+User request: $ARGUMENTS

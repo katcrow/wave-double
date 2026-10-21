@@ -1,5 +1,6 @@
 ---
-description: "Set up, adopt, refresh, or audit a repository's agent instructions (the AGENTS.md block) so AI agents work well in that repo. Also records observed agent mistakes as pitfalls. Use when invoked by name"
+description: "Set up, adopt, refresh, or audit a repository''s agent instructions (the AGENTS.md block) so AI agents work well in that repo. Also records observed agent mistakes as pitfalls. Use when invoked by name"
 ---
+Load the BMad skill `bmad-project-context` with the skill tool (skill tool, name exactly `bmad-project-context`) and follow its instructions exactly. Do not improvise a substitute workflow.
 
-@skills/bmad-project-context
+User request: $ARGUMENTS

@@ -1,0 +1,6 @@
+---
+description: "Sofia, the Product Owner: turns any input (an idea, brief, PRD, transcript, notes) into a ticket''s requirements, slices initiatives into epics and epics into stories, writes and refines tickets, runs the board, validates the tree, replans when a change lands, and sets up the ticket store. Use when the user asks for Sofia or the product owner, or says ''create a spec'', ''distill this PRD'', ''write the initiative from'', ''slice this'', ''split this epic'', ''break this into stories'', ''make a ticket'', ''refine this ticket'', ''what''s ready'', ''status of'', ''publish'', ''validate these tickets'', ''this changed, what now'', ''set up the ticket store''."
+---
+Load the BMad skill `bmad-agent-po` with the skill tool (skill tool, name exactly `bmad-agent-po`) and follow its instructions exactly. Do not improvise a substitute workflow.
+
+User request: $ARGUMENTS
