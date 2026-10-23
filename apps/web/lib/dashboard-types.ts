@@ -21,10 +21,18 @@ export interface MarketIndexProbabilityRpcRow {
   target_trading_day: string;
   kospi_probability: number;
   kosdaq_probability: number;
+  /** 같은 목표 기준의 기본 성공률(0~1). v1 행은 null, 구버전 RPC 응답에서 누락되면 null로 취급한다. */
+  kospi_base_rate?: number | null;
+  kosdaq_base_rate?: number | null;
   last_success_at: string;
   feature_as_of: string;
   model_version: string;
   validation_status: "experimental" | "validated";
+}
+
+function isOptionalProbability(value: unknown): boolean {
+  return value === undefined || value === null ||
+    (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
 }
 
 export function isMarketIndexProbabilityRpcRow(value: unknown): value is MarketIndexProbabilityRpcRow {
@@ -33,6 +41,7 @@ export function isMarketIndexProbabilityRpcRow(value: unknown): value is MarketI
     typeof value.target_trading_day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.target_trading_day) &&
     typeof value.kospi_probability === "number" && Number.isFinite(value.kospi_probability) && value.kospi_probability >= 0 && value.kospi_probability <= 1 &&
     typeof value.kosdaq_probability === "number" && Number.isFinite(value.kosdaq_probability) && value.kosdaq_probability >= 0 && value.kosdaq_probability <= 1 &&
+    isOptionalProbability(value.kospi_base_rate) && isOptionalProbability(value.kosdaq_base_rate) &&
     typeof value.last_success_at === "string" && Number.isFinite(Date.parse(value.last_success_at)) &&
     typeof value.feature_as_of === "string" && Number.isFinite(Date.parse(value.feature_as_of)) &&
     typeof value.model_version === "string" &&

@@ -123,6 +123,8 @@ function rpcPayload(name, body = {}) {
       target_trading_day: todayKst,
       kospi_probability: 0.6234,
       kosdaq_probability: 0.4812,
+      kospi_base_rate: 0.6154,
+      kosdaq_base_rate: 0.4999,
       last_success_at: new Date().toISOString(),
       feature_as_of: new Date().toISOString(),
       model_version: "e2e-fixture",

@@ -342,8 +342,9 @@ a {
 
 .market-probability-chip__values > div {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-2);
+  column-gap: var(--space-2);
 }
 
 .market-probability-chip__values dt {
@@ -357,6 +358,14 @@ a {
   font-size: var(--font-size-data);
   font-weight: var(--font-weight-data);
   font-variant-numeric: tabular-nums;
+}
+
+/* 값 아래 줄: 같은 기준의 평소 성공률과 평소 대비 차이. */
+.market-probability-chip__values dd.market-probability-chip__base {
+  flex-basis: 100%;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-label);
+  font-weight: normal;
 }
 
 .market-probability-chip__meta,

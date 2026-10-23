@@ -94,6 +94,7 @@ LOCAL_ONLY_MIGRATIONS = {
     "202610211200_restore_terminal_attempt_dispatch": "prod는 restore_terminal_attempt_dispatch라는 timestamp 접두사 없는 이름으로 적용(운영 반영 확인됨)",
     "202610211300_fix_market_probability_slot_time_parsing": "prod는 fix_market_probability_slot_time_parsing라는 timestamp 접두사 없는 이름으로 적용(운영 반영 확인됨)",
     "202610211400_retry_probability_slot_enqueue": "prod는 retry_probability_slot_enqueue라는 timestamp 접두사 없는 이름으로 적용(운영 반영 확인됨)",
+    "202610231000_add_market_probability_base_rate": "prod는 add_market_probability_base_rate라는 timestamp 접두사 없는 이름으로 적용(운영 반영 확인됨)",
 }
 
 # prod에는 있고 로컬 파일이 없는 migration. 다른 이름/스쿼시로 적용된 것.
@@ -127,6 +128,7 @@ PROD_ONLY_MIGRATIONS = {
     "restore_terminal_attempt_dispatch": "로컬 202610211200_restore_terminal_attempt_dispatch의 운영명",
     "fix_market_probability_slot_time_parsing": "로컬 202610211300_fix_market_probability_slot_time_parsing의 운영명",
     "retry_probability_slot_enqueue": "로컬 202610211400_retry_probability_slot_enqueue의 운영명",
+    "add_market_probability_base_rate": "로컬 202610231000_add_market_probability_base_rate의 운영명",
     "schedule_dispatch_worker_cron": "로컬 202609021100_schedule_dispatch_worker_cron의 운영명",
 }
 

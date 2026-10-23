@@ -533,7 +533,9 @@ export type Database = {
           feature_as_of: string
           feature_snapshot: Json
           input_quality: Json
+          kosdaq_base_rate: number | null
           kosdaq_probability: number
+          kospi_base_rate: number | null
           kospi_probability: number
           last_success_at: string
           model_version: string
@@ -548,7 +550,9 @@ export type Database = {
           feature_as_of: string
           feature_snapshot?: Json
           input_quality?: Json
+          kosdaq_base_rate?: number | null
           kosdaq_probability: number
+          kospi_base_rate?: number | null
           kospi_probability: number
           last_success_at: string
           model_version: string
@@ -563,7 +567,9 @@ export type Database = {
           feature_as_of?: string
           feature_snapshot?: Json
           input_quality?: Json
+          kosdaq_base_rate?: number | null
           kosdaq_probability?: number
+          kospi_base_rate?: number | null
           kospi_probability?: number
           last_success_at?: string
           model_version?: string
@@ -1248,7 +1254,9 @@ export type Database = {
         Args: never
         Returns: {
           feature_as_of: string
+          kosdaq_base_rate: number | null
           kosdaq_probability: number
+          kospi_base_rate: number | null
           kospi_probability: number
           last_success_at: string
           model_version: string

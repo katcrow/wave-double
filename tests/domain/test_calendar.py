@@ -60,6 +60,21 @@ def test_decide_from_weekday_marks_krx_holidays_closed():
         assert decision.entry == TradingCalendarEntry(holiday, False)
 
 
+def test_decide_from_weekday_marks_2025_chuseok_and_2026_constitution_day_closed():
+    # 2025 추석 연휴(10/3 개천절~10/9 한글날)와 2026-07-17 제헌절(금).
+    for holiday in (
+        date(2025, 10, 3),
+        date(2025, 10, 6),
+        date(2025, 10, 7),
+        date(2025, 10, 8),
+        date(2025, 10, 9),
+        date(2026, 7, 17),
+    ):
+        assert decide_from_weekday(holiday).status is CalendarStatus.CLOSED
+    assert decide_from_weekday(date(2025, 10, 2)).status is CalendarStatus.OPEN
+    assert decide_from_weekday(date(2025, 10, 10)).status is CalendarStatus.OPEN
+
+
 def test_krx_holidays_are_all_weekdays():
     assert all(day.weekday() < 5 for day in KRX_HOLIDAYS)
 

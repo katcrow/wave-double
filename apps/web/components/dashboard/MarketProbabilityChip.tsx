@@ -13,7 +13,7 @@ export default function MarketProbabilityChip({ row, fetchFailed }: Props) {
   return (
     <aside className="market-probability-chip" aria-label="종가배팅 참고 확률">
       <div className="market-probability-chip__head">
-        <span className="market-probability-chip__label">종가배팅 참고 · 익일 고가 돌파</span>
+        <span className="market-probability-chip__label">종가배팅 참고 · 익일 고가 +0.5%</span>
         <span className="market-probability-chip__badge">참고용</span>
         {state.status === "ready" && state.stale && (
           <span className="market-probability-chip__badge market-probability-chip__badge--stale">직전값</span>
@@ -21,7 +21,9 @@ export default function MarketProbabilityChip({ row, fetchFailed }: Props) {
         <details className="market-probability-chip__info">
           <summary aria-label="종가배팅 참고 확률 설명">ⓘ</summary>
           <p>
-            오늘 종가보다 다음 거래일 고가가 높을 확률 · 장중 등락률과 과거 일봉을 비교한 실험값 · 후보 판단 참고
+            다음 거래일 고가가 오늘 종가보다 0.5% 넘게 오를 확률 · 장중 등락률이 비슷했던 과거 일봉에서 계산한 실험값 ·
+            &quot;평소&quot;는 등락률 구간을 가리지 않은 전체 과거 표본의 같은 기준 성공률 · 두 값 모두 최근 표본일수록
+            가중 · %p는 평소 대비 차이 · 후보 판단 참고
           </p>
         </details>
       </div>
@@ -32,8 +34,18 @@ export default function MarketProbabilityChip({ row, fetchFailed }: Props) {
       ) : (
         <>
           <dl className="market-probability-chip__values">
-            <div><dt>코스피</dt><dd>{state.kospiPercent}</dd></div>
-            <div><dt>코스닥</dt><dd>{state.kosdaqPercent}</dd></div>
+            <div>
+              <dt>코스피</dt><dd>{state.kospiPercent}</dd>
+              {state.kospiBasePercent !== null && state.kospiDelta !== null && (
+                <dd className="market-probability-chip__base">평소 {state.kospiBasePercent} · {state.kospiDelta}</dd>
+              )}
+            </div>
+            <div>
+              <dt>코스닥</dt><dd>{state.kosdaqPercent}</dd>
+              {state.kosdaqBasePercent !== null && state.kosdaqDelta !== null && (
+                <dd className="market-probability-chip__base">평소 {state.kosdaqBasePercent} · {state.kosdaqDelta}</dd>
+              )}
+            </div>
           </dl>
           <p className="market-probability-chip__meta">
             {state.row.trading_day} 기준 · 목표 {state.row.target_trading_day} · 계산{" "}

@@ -38,6 +38,10 @@ test("인증된 후보·근거·시장·필터 표면은 반응형 fixture에서
   await expect(probabilityChip).toBeVisible();
   await expect(probabilityChip.locator("dt", { hasText: "코스피" }).locator("+ dd")).toHaveText("62.3%");
   await expect(probabilityChip.locator("dt", { hasText: "코스닥" }).locator("+ dd")).toHaveText("48.1%");
+  await expect(probabilityChip.getByText("익일 고가 +0.5%")).toBeVisible();
+  // 각 시장 값 아래에 같은 기준의 평소 성공률과 평소 대비 차이가 표시된다.
+  await expect(probabilityChip.locator("dt", { hasText: "코스피" }).locator("~ dd.market-probability-chip__base")).toHaveText("평소 61.5% · +0.8%p");
+  await expect(probabilityChip.locator("dt", { hasText: "코스닥" }).locator("~ dd.market-probability-chip__base")).toHaveText("평소 50.0% · -1.9%p");
   await expect(probabilityChip.getByText("직전값")).toHaveCount(0);
   const topTradingSection = page.locator(".top-trading-candidates");
   const excludeToggle = topTradingSection.getByRole("button", { name: "삼성전자·SK하이닉스 제외" });
