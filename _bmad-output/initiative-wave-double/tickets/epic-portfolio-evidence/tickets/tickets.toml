@@ -1,0 +1,35 @@
+[[entry]]
+id = 1
+type = "bug"
+title = "포트폴리오의 가용 현금 초과 진입을 차단한다"
+description = "현금 검사 없는 기존 계좌 시뮬레이션을 합성 사례로 재현하고 가용 현금·진입수/제외수 회계를 수정한다. 종목별 날짜 불일치로 이벤트가 멈추는 가능성도 재현해 확인된 결함만 해결한다."
+verify = "초기자본 100·종목비중 25%·동일일 5종목·청산 전 사례에서 다섯째 진입을 거부하고 현금이 음수가 되지 않는다. 날짜 불일치·중복종목·청산일 진입 정책도 명시·검증한다."
+covers = ["R1"]
+after = []
+hitl = false
+risk = "medium"
+severity = "P2"
+refine = true
+
+[[entry]]
+id = 2
+type = "story"
+title = "M 전용 청산 거래를 계좌 평가에 연결한다"
+description = "4.1의 회계 경계와 3.3의 계약으로 M 전용 거래를 재계산 없이 소비한다. 날짜·평가·비용·한도·미청산 처리와 results_dir 격리를 연결한다."
+verify = "M 원본 거래의 진입·청산·비용을 보존하고 합성 계좌가 수작업 계산과 일치한다. WAVE_BACKTEST_RESULTS_DIR 지정 시 커밋 baseline은 바뀌지 않는다."
+covers = ["R2"]
+after = [1,"3.3"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 3
+type = "spike"
+title = "전체 유니버스에서 M의 자본곡선과 MDD를 측정한다"
+description = "사용자가 초기자본·종목비중·동시보유 한도를 확정하면 4.2에 적용해 전체 유니버스의 계좌 곡선·현금·미체결·MDD를 기록하고 거래 시퀀스 성과와 분리한다."
+verify = "데이터/기간/파라미터/비용/자금조건/명령/산출물로 재실행 가능하며 중복보유·현금음수·한도위반 없이 MDD를 산출한다. 운영 채택 결정은 별도다."
+covers = ["R3"]
+after = [2]
+hitl = true
+risk = "medium"
+unknown = "측정할 초기자본·종목비중·동시보유 한도를 사용자와 확정해야 한다."

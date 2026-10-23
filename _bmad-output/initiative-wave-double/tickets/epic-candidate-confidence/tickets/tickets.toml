@@ -1,0 +1,32 @@
+[[entry]]
+id = 1
+type = "spike"
+title = "후보 스냅샷·카드·근거의 연결을 검증한다"
+description = "1.1의 run/day로 배치 산출물→RPC→화면 경로와 다중전략 순서·필터·0건·조회실패·소멸 후보를 기존 시나리오로 검증한다."
+verify = "Playwright MCP에서 정상/빈 결과/실패/부분 상태를 확인하고 SQL 결과와 카드 순서·근거·기준시각이 일치하는 기록을 남긴다."
+covers = ["R1"]
+after = ["1.1"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "spike"
+title = "수급·시장확률의 기준시각과 실패 표시를 검증한다"
+description = "2.1의 화면에서 수급 힌트·시장 수급·매크로·시장확률을 대조한다. 후보 보조정보의 run/day와 독립 확률 슬롯의 시각을 각각 확인한다."
+verify = "Playwright MCP로 정상/지연/누락/실패를 확인한다. 시장확률에 후보와 같은 run을 강제하지 않고 각 정보의 상태·시각을 구별한다."
+covers = ["R2"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "spike"
+title = "로그인과 수동 실행 후 갱신 경계를 검증한다"
+description = "2.1의 후보 화면과 1.2가 제공한 실행 증거·검증창으로 미인증·허용 사용자·수동 실행·로그아웃·갱신 경계를 대조한다. 운영 실행은 1.2와 겹치지 않게 수행한다."
+verify = "Playwright MCP로 허용/거부 접근과 수동 실행 응답·갱신을 확인한다. 운영 실행이 필요하면 통상 운영창의 단일 실행으로 제한한다."
+covers = ["R3"]
+after = [1,"1.2"]
+hitl = false
+risk = "high"

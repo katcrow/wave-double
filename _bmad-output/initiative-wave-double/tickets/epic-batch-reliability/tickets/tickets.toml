@@ -1,0 +1,32 @@
+[[entry]]
+id = 1
+type = "spike"
+title = "배포·CI·운영 스키마의 현재 기준을 확보한다"
+description = "현재 SHA·배포 SHA·최신 CI와 운영 migration/RPC/권한을 대조하고 이후 검증이 사용할 run/day 및 증거 위치를 남긴다. 기존 정상 배치 한 건을 dispatch→run→publish→후보 화면으로 읽기 추적해 얇은 전체 경로를 확보한다."
+verify = "동일 배포 기준의 CI 결과와 운영 대조표에서 통과·실패·미확인을 구분할 수 있다. 기존 정상 배치 한 건의 dispatch→run→publish→후보 화면 경로를 읽기 조회와 Playwright MCP로 연결한다."
+covers = ["R1"]
+after = []
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "spike"
+title = "자동 배치부터 화면 발행까지 수명주기를 검증한다"
+description = "1.1의 기준으로 cron→outbox→worker→GitHub dispatch→배치→publish를 추적한다. 정상·휴장·부분실패·중복 재시도·운영창 경계를 기존 계약과 대조한다. 운영 실행·재시도 검증창과 결과는 이 항목이 소유하며 2.3에 전달한다."
+verify = "run_id·logical_run_key·거래일로 배치와 발행 화면을 연결하고 중복 발행·실패 숨김 여부를 판정한 증거가 있다."
+covers = ["R2"]
+after = [1]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 3
+type = "spike"
+title = "최신 백업과 격리 복구 드릴의 증거를 확인한다"
+description = "1.1의 기준에서 최신 백업 artifact·복구 드릴 로그를 확인한다. 증거가 없거나 기존 주기보다 오래되었으면 운영 원본을 바꾸지 않는 격리 드릴로 검증한다."
+verify = "암호화 백업 식별자·격리 복원 결과·기존 workflow 기준 대비 실측 RPO/RTO와 미해결 항목이 기록되어 있다."
+covers = ["R3"]
+after = [1]
+hitl = false
+risk = "medium"
